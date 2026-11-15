@@ -74,3 +74,17 @@ test('La aceptación rechaza duplicaciones y no muta el original',()=>{
   ],()=> 'voc.x',at),/duplicada/);
   assert.equal(JSON.stringify(e),before);
 });
+
+
+test('Una forma desconocida aceptada sin significado permanece pendiente',()=>{
+  const e=fixture(),candidates=suggestVocabulary(e.placements[0]!,bank());
+  const choices=candidates.map(x=>({surface:x.surface,selected:x.surface==='ignota',
+    headword:x.lemma??x.surface,meaning:''}));
+  const next=acceptVocabulary(e,'place.1',candidates,choices,()=> 'voc.pending',at);
+  const entry=next.placements[0]!.vocabulary[0]!;
+  assert.equal(entry.headword,'ignota');
+  assert.equal(entry.meaning,null);
+  assert.equal(entry.reviewState,'needs-review');
+  assert.equal(entry.origin,'generated');
+  assert.equal(entry.provenance,null);
+});
