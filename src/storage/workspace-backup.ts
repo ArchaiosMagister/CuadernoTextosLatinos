@@ -66,7 +66,7 @@ export async function createWorkspaceBackup(workspace: WorkspaceRepository, at =
     format:WORKSPACE_BACKUP_FORMAT,backupVersion:WORKSPACE_BACKUP_VERSION,
     exportedAt,sha256,snapshot,
   },null,2);
-  if(json.length > WORKSPACE_BACKUP_MAX_CHARACTERS){
+  if (new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
     throw new WorkspaceBackupError('La copia editorial supera 64 MiB. No se ha creado una copia parcial.');
   }
   return json;
@@ -74,7 +74,8 @@ export async function createWorkspaceBackup(workspace: WorkspaceRepository, at =
 
 /** Importar nunca escribe por sí solo: primero se valida forma, versión y SHA-256. */
 export async function readWorkspaceBackup(json: string): Promise<WorkspaceBackupVerifiedV2> {
-  if(json.length > WORKSPACE_BACKUP_MAX_CHARACTERS){
+  if (json.length > WORKSPACE_BACKUP_MAX_CHARACTERS
+    || new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
     throw new WorkspaceBackupError('Archivo demasiado grande para la versión editorial 2.');
   }
   let raw: unknown;
@@ -133,7 +134,8 @@ export async function restoreWorkspaceBackup(workspace:WorkspaceRepository,json:
   }
   await workspace.replaceFromVerifiedSnapshot(target.snapshot,approval.expectedWorkspaceRevision,true);
   const restored=await workspace.snapshot();
-  const expected=validateWorkspaceSnapshot({...target.snapshot,workspaceRevision:approval.expectedWorkspaceRevision+1});
+  const expected=validateWorkspaceSnapshot({...target.snapshot,
+    workspaceRevision:Math.max(approval.expectedWorkspaceRevision,target.snapshot.workspaceRevision)+1});
   if(canonical(restored)!==canonical(expected)){
     throw new WorkspaceBackupError('La restauración se escribió pero no coincide tras la verificación. Conserva la copia previa.');
   }

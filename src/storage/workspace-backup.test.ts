@@ -151,3 +151,28 @@ test('el contrato de backup rechaza relaciones inconsistentes incluso con hash n
   invalid.editions[0]!.edition.placements[0]!.questions[0]!.id=invalid.editions[0]!.edition.placements[0]!.id;
   assert.throws(()=>validateWorkspaceSnapshot(invalid),/ID duplicado/);
 });
+
+test('restaurar una copia de otro dispositivo conserva un epoch global superior al del origen',async()=>{
+  const source=repo();
+  await fill(source); // epoch 3, edición 2
+  const exported=await createWorkspaceBackup(source,date);
+  const destination=repo(); // epoch 0, sin cuadernos
+  const planned=await prepareWorkspaceRestore(destination,exported,date);
+  assert.equal(planned.expectedWorkspaceRevision,0);
+  const restored=await restoreWorkspaceBackup(destination,exported,{
+    confirmReplace:true,safetyBackupExported:true,
+    currentSafetyBackupJson:planned.currentSafetyBackupJson,
+    expectedWorkspaceRevision:planned.expectedWorkspaceRevision,
+  });
+  assert.equal(restored.workspaceRevision,4);
+  assert.equal(restored.editions[0]!.revision,2);
+  assert.equal(restored.history.length,2);
+  assert.equal(restored.editions[0]!.edition.placements[0]!.text.title,'Cambiado');
+});
+
+test('rechaza un backup cuya revisión editorial sobrepasa la revisión global',async()=>{
+  const ws=repo();await fill(ws);
+  const damaged=structuredClone(await ws.snapshot());
+  damaged.workspaceRevision=1;
+  assert.throws(()=>validateWorkspaceSnapshot(damaged),/revisión global/);
+});

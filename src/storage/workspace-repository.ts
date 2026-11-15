@@ -530,7 +530,8 @@ export class WorkspaceRepository {
         try {
           const current = epoch(epochQ.result);
           if (current !== expectedWorkspaceRevision) throw new WorkspaceConflictError(expectedWorkspaceRevision,current);
-          if (current >= MAX_REVISION) throw new WorkspaceStorageError('Revisiones agotadas.');
+          const nextEpoch = Math.max(current, data.workspaceRevision) + 1;
+          if (nextEpoch > MAX_REVISION) throw new WorkspaceStorageError('Revisiones agotadas.');
           for (const store of WORKSPACE_STORES) tx.objectStore(store).clear();
           if (data.corpus) tx.objectStore('corpus').add({key:'current',...data.corpus});
           for (const row of data.editions) tx.objectStore('editions').add({key:row.edition.id,...row});
@@ -538,7 +539,7 @@ export class WorkspaceRepository {
             tx.objectStore('history').add({key:[event.editionId,event.sequence],event});
           }
           if (data.migration) tx.objectStore('meta').add({key:LEGACY_KEY,value:data.migration});
-          tx.objectStore('meta').put({key:EPOCH_KEY,value:current+1});
+          tx.objectStore('meta').put({key:EPOCH_KEY,value:nextEpoch});
           finish(undefined);
         } catch (error) { abort(error); }
       };
@@ -566,6 +567,12 @@ export function validateWorkspaceSnapshot(input: unknown): WorkspaceSnapshotV1 {
     return historyRow({key:[event.editionId,event.sequence],event}).event;
   });
   const migration = d.migration === null ? null : migrationRecord(d.migration);
+  if (cr && cr.revision > workspaceRevision) {
+    throw new WorkspaceStorageError('Revisión del corpus superior a la revisión global.');
+  }
+  if (editions.some(x => x.revision > workspaceRevision)) {
+    throw new WorkspaceStorageError('Revisión de cuaderno superior a la revisión global.');
+  }
   const byId = new Map(editions.map(x => [x.edition.id,x.revision]));
   if (byId.size !== editions.length) throw new WorkspaceStorageError('IDs de edición duplicados.');
   const seenEvents = new Set<string>();
