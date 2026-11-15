@@ -144,6 +144,9 @@ test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de
   await page.goto('/');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
+  // showWork carga el JSON de forma asíncrona: esperar al lector, no asumir
+  // que estará listo tras pulsar una obra.
+  await expect(page.locator('.reader-latin').nth(3)).toHaveCount(1);
   const index = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-latin'))
     .findIndex((node,i,arr) => node.textContent.length > 60
       && i + 3 < arr.length && arr[i+3].textContent.length > 30));
