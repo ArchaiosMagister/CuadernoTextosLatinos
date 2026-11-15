@@ -35,6 +35,12 @@ El snapshot offline `src/data/teacher-academic-snapshot.ts` deriva exclusivament
 
 **Trazabilidad:** `EvidenceV1.provider` contiene el repositorio y el fichero; `EvidenceV1.recordId` identifica fila y elemento; `EvidenceV1.bankRevision` fija los cinco SHAs de la importación; `decisionId` identifica la política de aprobación de origen. `teacherAuditRecord` permite recuperar la glosa o resultado docente sin incorporarlo a la hoja del alumnado ni generar respuestas.
 
+## Selección morfológica de ocurrencias exactas (fase inicial)
+
+La clase `AcademicMorphTokenSelectorV1` permite escoger un rango UTF-16 de **una sola palabra latina completa** y consultar únicamente `singleForms` individualmente verificadas. Si hay varias lecturas (p. ej. `dux`), requiere escoger el ID concreto antes de crear un `TextMarkV1` y su `MorphWordV1` en una operación CAS con historial. No traslada el subrayado a otro homógrafo ni sobrescribe preguntas o textos ajenos. Si la forma textual no existe en esas 55 lecturas (p. ej. `instruxit`), se indica `no-candidates`: no se inventa un lema. Se ha añadido una prueba de integración WebKit con dos apariciones de `dux` y deshacer tras reabrir el cuaderno.
+
+**Este selector no equivale a lematización general**: la ampliación progresiva a otras formas necesita un proveedor de lematización con sus propias verificaciones individuales y reglas de ambigüedad.
+
 ## Restricciones curriculares y casos reales del modelo
 
 El PDF docente propone `instruxit` y `successerunt` como formas de partida, y `fabam`, `sermonem`, `stelam` y `transgressionem` para fonética. **No se reescribe el PDF ni se corrigen esas grafías silenciosamente.** En el banco general, `fabam` aparece como `EVF-0104`, pero `stelam`, `sermonem` y `transgressionem` no aparecen como entradas idénticas. Hay una ficha distinta `stellam` (`EVF-0613`), que no debe sustituirse por `stelam` sin revisión docente. Además, el banco las marca `APTO_PROPUESTO`: no se habilitan automáticamente como fonética verificada.
