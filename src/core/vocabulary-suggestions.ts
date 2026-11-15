@@ -98,15 +98,17 @@ export function acceptVocabulary(
       throw new VocabularySuggestionError('Ya existe esta entrada de vocabulario: '+headword);
     existing.add(normalize(headword));
     const id=nextId();
-    const exact=source.status==='lemma-documented'
-      && source.lemma===headword && meaning===''; // Sin edición docente de la candidatura
+    const documented=source.status==='lemma-documented' && source.lemma===headword;
+    const edited=headword!==(source.lemma??source.surface)||meaning.length>0;
     created.push({
       id,lemma:headword,headword,meaning:meaning||null,note:null,
       included:true,order:order++,
-      provenance:exact?source.evidence:null,
-      reviewState:exact?'needs-review':(meaning||source.status!=='lemma-documented'?'manual':'needs-review'),
-      origin:exact?'generated':'manual',
-      locked:!exact,
+      // Solo se conserva evidencia del lema sin que se haya escrito una acepción ajena a esa evidencia.
+      provenance:documented&&!edited?source.evidence:null,
+      // Una entrada sin significado NUNCA se declara revisada, tampoco si el token es desconocido.
+      reviewState:meaning?'manual':'needs-review',
+      origin:edited?'manual':'generated',
+      locked:edited,
     });
   }
   return validateEdition({...original,updatedAt:at,placements:original.placements.map(p=>p.id===placementId
