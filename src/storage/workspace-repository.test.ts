@@ -238,3 +238,57 @@ test('el validador del snapshot rechaza referencias históricas ajenas',async()=
   }],migration:null};
   assert.throws(()=>validateWorkspaceSnapshot(invalid),/otro cuaderno|inexistente/);
 });
+
+test('si history.add falla después de editions.put, IndexedDB revierte ambas escrituras y el epoch',async()=>{
+  const {name,repo}=setup();
+  const initial=await create(repo);
+  const history=await repo.history('edition.1');
+  const collision=structuredClone(history[0]!);
+  collision.id='evt.colliding';
+  collision.command='edit-title';
+  collision.revisionBefore=1;
+  collision.revisionAfter=2;
+  collision.sequence=2;
+  collision.before=initial.edition;
+  collision.after=initial.edition;
+  const db=await new Promise<IDBDatabase>((resolve,reject)=>{
+    const req=factory.open(name,WORKSPACE_DATABASE_VERSION);
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+  await new Promise<void>((resolve,reject)=>{
+    const tx=db.transaction('history','readwrite');
+    tx.objectStore('history').add({key:['edition.1',2],event:collision});
+    tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
+  });
+  db.close();
+  await assert.rejects(edit(repo,1,'Cambio que colisiona'));
+  assert.deepEqual(await repo.loadEdition('edition.1'),initial);
+  // La escritura previa no debe haberse completado, aunque history.add lanzó ConstraintError.
+  const db2=await new Promise<IDBDatabase>((resolve,reject)=>{
+    const req=factory.open(name,WORKSPACE_DATABASE_VERSION);
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+  const ep=await new Promise<unknown>((resolve,reject)=>{
+    const tx=db2.transaction('meta','readonly');
+    const req=tx.objectStore('meta').get('workspace-revision');
+    tx.oncomplete=()=>resolve(req.result?.value);tx.onabort=()=>reject(tx.error);
+  });
+  db2.close();
+  assert.equal(ep,1);
+});
+
+test('un metadata global eliminado impide nuevas escrituras en vez de reabrir epoch=1',async()=>{
+  const {name,repo}=setup();
+  const initial=await create(repo);
+  const db=await new Promise<IDBDatabase>((resolve,reject)=>{
+    const req=factory.open(name,1);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+  await new Promise<void>((resolve,reject)=>{
+    const tx=db.transaction('meta','readwrite');
+    tx.objectStore('meta').delete('workspace-revision');
+    tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);
+  });
+  db.close();
+  await assert.rejects(edit(repo,1,'No debe guardarse'),/Falta la revisión global/);
+  assert.deepEqual(await repo.loadEdition('edition.1'),initial);
+});

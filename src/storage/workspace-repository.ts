@@ -365,6 +365,7 @@ export class WorkspaceRepository {
           const previous = current?.revision ?? 0;
           const ep = epoch(er.result);
           if (previous !== expectedRevision) throw new WorkspaceConflictError(expectedRevision, previous);
+          if (previous > 0 && ep === 0) throw new WorkspaceStorageError('Falta la revisión global del workspace.');
           if (previous >= MAX_REVISION || ep >= MAX_REVISION) throw new WorkspaceStorageError('Límite de revisiones alcanzado.');
           const next: CorpusRow = {key:'current',revision:previous+1,corpus:valid};
           tx.objectStore('corpus').put(next);
@@ -400,6 +401,7 @@ export class WorkspaceRepository {
           const previous = old?.revision ?? 0;
           const ep = epoch(epQuery.result);
           if (previous !== expectedRevision) throw new WorkspaceConflictError(expectedRevision, previous);
+          if (previous > 0 && ep === 0) throw new WorkspaceStorageError('Falta la revisión global del workspace.');
           if (previous >= MAX_REVISION || ep >= MAX_REVISION) throw new WorkspaceStorageError('Revisiones agotadas.');
           // Si la última escritura del cuaderno se ha corrompido, no apilar
           // otra operación encima de una cadena de historial incoherente.
@@ -444,6 +446,7 @@ export class WorkspaceRepository {
           const ep = epoch(epQuery.result);
           if (previous !== expectedRevision) throw new WorkspaceConflictError(expectedRevision, previous);
           if (!old) throw new WorkspaceHistoryError('No existe el cuaderno que quieres deshacer.');
+          if (ep === 0) throw new WorkspaceStorageError('Falta la revisión global del workspace.');
           if (previous >= MAX_REVISION || ep >= MAX_REVISION) throw new WorkspaceStorageError('Revisiones agotadas.');
           const items = (events.result as unknown[]).map(historyRow).map(x => x.event)
             .filter(e => e.editionId === id).sort((a,b) => a.sequence - b.sequence);
@@ -625,6 +628,14 @@ export function validateWorkspaceSnapshot(input: unknown): WorkspaceSnapshotV1 {
     }
   }
   if (migration && !cr) throw new WorkspaceStorageError('Migración sin copia de CorpusV1.');
+  if (migration) {
+    const editionMap = new Map(editions.map(x=>[x.edition.id,x.edition.legacyNotebookId]));
+    for (const [legacyId,editionId] of Object.entries(migration.notebookIdMap)) {
+      if (editionMap.get(editionId) !== legacyId) {
+        throw new WorkspaceStorageError('Mapa histórico de migración sin edición correspondiente.');
+      }
+    }
+  }
   if (!workspaceRevision && (cr || editions.length || history.length || migration)) {
     throw new WorkspaceStorageError('Datos de workspace sin revisión global.');
   }
