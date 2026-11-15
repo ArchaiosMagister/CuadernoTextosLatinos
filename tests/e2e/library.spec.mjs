@@ -127,9 +127,12 @@ test('selecciona exactamente parte de una frase sin copiar la referencia', async
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
   const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
   await expect(add).toBeDisabled();
-  const expected = await page.locator('.reader-latin').first().evaluate(node => node.textContent.slice(7, 35));
-  const cite = await page.locator('.reader-ref').first().textContent();
-  await selectText(page, 0, 7, 0, 35);
+  const index = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-latin'))
+    .findIndex(node => node.textContent.length > 60));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const expected = await page.locator('.reader-latin').nth(index).evaluate(node => node.textContent.slice(7, 35).trim());
+  const cite = await page.locator('.reader-ref').nth(index).textContent();
+  await selectText(page, index, 7, index, 35);
   await expect(add).toBeEnabled();
   await expect(page.locator('.selection-description')).toContainText(cite);
   await add.click();
@@ -141,20 +144,24 @@ test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de
   await page.goto('/');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
-  const expected = await page.evaluate(() => {
-    const spans = Array.from(document.querySelectorAll('.reader-latin')).slice(0, 4);
-    const contents = spans.map(s=>s.textContent);
+  const index = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-latin'))
+    .findIndex((node,i,arr) => node.textContent.length > 60
+      && i + 3 < arr.length && arr[i+3].textContent.length > 30));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const expected = await page.evaluate((first) => {
+    const spans = Array.from(document.querySelectorAll('.reader-latin')).slice(first, first + 4);
+    const contents = spans.map(node=>node.textContent);
     return [contents[0].slice(15),contents[1],contents[2],contents[3].slice(0,18)]
-      .map(s=>s.trim()).filter(Boolean).join(' ').replace(/[ \\t\\r\\n]+/g,' ').trim();
-  });
+      .map(part=>part.trim()).filter(Boolean).join(' ').replace(/\\s+/g,' ').trim();
+  }, index);
   const refs = await page.locator('.reader-ref').allTextContents();
-  await selectText(page, 0, 15, 3, 18);
+  await selectText(page, index, 15, index + 3, 18);
   const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
   await expect(add).toBeEnabled();
-  await expect(page.locator('.selection-description')).toContainText(refs[0]+'–'+refs[3]);
+  await expect(page.locator('.selection-description')).toContainText(refs[index]+'–'+refs[index+3]);
   await add.click();
   await expect(page.locator('.editor-form textarea')).toHaveValue(expected);
-  for (const ref of refs.slice(0,4)) {
+  for (const ref of refs.slice(index,index+4)) {
     expect(expected.includes(ref+' ')).toBe(false);
   }
 });
