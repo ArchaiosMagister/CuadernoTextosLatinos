@@ -449,3 +449,40 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .edition-menu-content { max-height:none; }
   .edition-paper-pages { overflow-x:auto; justify-items:start; -webkit-overflow-scrolling:touch; }
 }
+
+/* Propuestas académicas: revisión obligatoria antes de mutar el workspace. */
+.edition-academic-review {
+  margin:.7rem 0 1rem; padding:1rem;
+  border:1px solid var(--edge); border-radius:.7rem; background:var(--surface);
+  display:grid; gap:.75rem;
+}
+.edition-academic-review h3 { margin:0; font-size:1rem; }
+.edition-academic-review p { margin:0; }
+.edition-academic-review select { max-width:100%; }
+.edition-academic-diff { margin:0; padding-left:1.5rem; max-height:16rem; overflow:auto; }
+.edition-academic-diff li { padding:.2rem .1rem; font-size:.9rem; }
+.edition-academic-option,.edition-academic-question,.edition-academic-morph {
+  display:grid; gap:.55rem; padding:.7rem .5rem; margin:.55rem 0 0;
+  border:1px solid var(--edge); border-radius:.6rem;
+  background:light-dark(#f7fafc,#202630);
+}
+.edition-academic-option>.btn,.edition-academic-question>.btn { justify-self:start; }
+.edition-academic-morph h4 { margin:.2rem 0; }
+.edition-academic-morph-row { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; padding:.4rem 0; border-bottom:1px solid var(--edge); }
+.edition-academic-morph-row>span { flex:1 1 9rem; overflow-wrap:anywhere; }
+.edition-academic-morph-row>.btn { font-size:.87rem; }
+.edition-source-forms {
+  display:grid; gap:.5rem; padding:.65rem; border:1px solid var(--edge); border-radius:.4rem; min-width:0;
+}
+.edition-source-forms legend { font-size:.86rem; font-weight:650; }
+.edition-rules { border:1px solid var(--edge); border-radius:.4rem; padding:.55rem; }
+.edition-rules summary { cursor:pointer; font-weight:650; }
+.edition-rules>.edition-option-head { margin:.7rem 0; }
+.edition-rule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.4rem; }
+.edition-rule-grid .edition-option-head { font-size:.79rem; }
+.edition-academic-select { align-items:center; }
+.edition-preview-bar { flex-wrap:wrap; }
+.edition-preview-bar .btn { font-size:.82rem; }
+@media(max-width:420px) {
+  .edition-rule-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
