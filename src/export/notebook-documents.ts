@@ -75,10 +75,14 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
   body+=run(source.slice(cursor),{italic:true});
   return '<w:p>'+paraProps({align:'both',after:18,linePt:f.lineSpacingPt})+body+'</w:p>';
 }
-function vocabulary(p:TextPlacementV1):string{
+function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
   const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.order-b.order);
   if(!rows.length)return '';
-  const cell=(inside:string)=>'<w:tr><w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>'+inside+'</w:tc></w:tr>';
+  // El ancho auto sin tblGrid dejaba la tabla fuera del A4 y LibreOffice
+  // incluso omitía su primera fila ("Vocabulario"). Anchura fija entre márgenes.
+  const availableTwips=11906-twips(f.marginsPt.left)-twips(f.marginsPt.right);
+  const cell=(inside:string)=>'<w:tr><w:tc><w:tcPr><w:tcW w:w="'+availableTwips+
+    '" w:type="dxa"/></w:tcPr>'+inside+'</w:tc></w:tr>';
   let body=cell(paragraph('Vocabulario',paraProps({align:'center',after:5,keepNext:true}),{bold:true}));
   for(const entry of rows){
     const meaning=entry.meaning?': '+entry.meaning:': [significado pendiente]';
@@ -86,13 +90,15 @@ function vocabulary(p:TextPlacementV1):string{
       run(meaning)+(entry.note?run(' ('+entry.note+')'):'')+'</w:p>';
     body+=cell(text);
   }
-  return '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>'+
+  return '<w:tbl><w:tblPr><w:tblW w:w="'+availableTwips+'" w:type="dxa"/>'+
     '<w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/>'+
     '<w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/>'+
     '<w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'+
     '<w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/>'+
     '<w:left w:w="85" w:type="dxa"/><w:right w:w="85" w:type="dxa"/></w:tblCellMar>'+
-    '</w:tblPr>'+body+'</w:tbl>'+paragraph('',paraProps({after:4}));
+    '<w:tblLayout w:type="fixed"/></w:tblPr>'+
+    '<w:tblGrid><w:gridCol w:w="'+availableTwips+'"/></w:tblGrid>'+
+    body+'</w:tbl>'+paragraph('',paraProps({after:4}));
 }
 export function exportQuestionHeading(q:QuestionV1,showPoints:boolean):string {
   const text=questionDisplayText(q);
@@ -141,7 +147,7 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
     paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),{bold:true});
   const source='<w:p>'+paraProps({align:'center',after:16,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
-  return heading+source+latin(p,f)+vocabulary(p)+questions(p,f);
+  return heading+source+latin(p,f)+vocabulary(p,f)+questions(p,f);
 }
 function footerField(field:'PAGE'|'NUMPAGES'):string{
   return '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'+
