@@ -250,9 +250,8 @@ export function regenerateQuestion(e:NotebookEditionV1,placementId:string,questi
       const existingSlots=new Map(old.options.flatMap(o=>o.slots).map(w=>[w.id,w]));
       for(const proposed of replacement.options.flatMap(o=>o.slots)){
         if(proposed.origin==='generated')assertCandidate(proposed);
-        else if(lockedPolicy==='preserve'
-          && JSON.stringify(existingSlots.get(proposed.id))!==JSON.stringify(proposed)){
-          fail('Una regeneración sin confirmación no puede crear o modificar una palabra manual');
+        else if(JSON.stringify(existingSlots.get(proposed.id))!==JSON.stringify(proposed)){
+          fail('Una regeneración no puede crear o modificar una palabra manual');
         }
       }
     }
