@@ -1,40 +1,48 @@
 # Cuaderno de textos latinos
 
-**Fase 1 — almacenamiento local y recuperación.**
+**Fase 2 — banco, lector y editor de textos.**
 
-Esta aplicación es todavía un **comprobador técnico**, no el editor definitivo de cuadernos. El objetivo de esta versión es verificar la persistencia en el navegador, la creación de copias de seguridad y su recuperación segura.
+Webapp independiente para seleccionar pasajes de autores latinos, conservar textos propios y preparar cuadernos con varios textos. El selector se inspira directamente en la **biblioteca de [Examinator2](https://github.com/ArchaiosMagister/examinator2)** del docente: listado lateral, búsqueda por autor u obra, lector con citas, navegación por referencia y selección de pasajes.
 
-## Ejecutar comprobaciones
+## Biblioteca incluida sin conexión
 
-Requisitos: Node.js 22 o posterior.
+La compilación distribuye en archivos estáticos **dos obras de Julio César, el Breviarium de Eutropio y veinticinco vidas de Cornelio Nepote**. Se parte de los textos que el docente ya había integrado en Examinator2 (César y Eutropio) y de la edición TEI de Perseus (Nepote). Se conservan la referencia editorial y la procedencia.
 
-- `npm install` — instalar dependencias de desarrollo.
-- `npm run check` — validar tipos, pruebas automatizadas y compilación.
-- `npm run build` — generar `dist/`.
-- Publicar `dist/` como contenido estático sobre HTTPS para probar almacenamiento y descarga.
+Para usarla sin conexión hay que abrir la web **una primera vez con internet**, esperar la indicación «Biblioteca preparada sin conexión» y mantener los datos del sitio. El Service Worker guarda la aplicación y todas las obras. **Safari puede eliminar caché o datos locales**: exporta copias JSON de tus textos personales y cuadernos.
 
-## Funcionalidad estrictamente de fase 1
+Se podrá ampliar el catálogo de otros autores mediante consulta online en otra fase. No se usa una API de IA.
 
-- Persistencia **local** de un corpus completo mediante IndexedDB (una escritura transaccional).
-- Control de revisiones para impedir la sobrescritura silenciosa desde varias pestañas.
-- Validación del corpus al leer y guardar, preservando referencias y macrones.
-- Copias JSON portables con versión explícita, fecha UTC y huella SHA-256.
-- Restauración previa validación y confirmación consciente del reemplazo.
-- Página sencilla para guardar un texto de prueba, releerlo y probar copias.
+## Qué funciona
 
-**No incluye** editor de textos completo, banco curricular, generación de cuadernos, exportación Word/PDF, cuentas, sincronización, PWA ni API de IA.
+- Buscar por autor u obra desde la columna lateral.
+- Filtrar autores y abrir una obra en el lector.
+- Ir a un pasaje por referencia (p. ej. 1.1, 1.1.2).
+- Tocar el inicio y el final de una selección en el iPad, conservando la cita.
+- Incorporar un fragmento en «Mis textos».
+- Crear, editar, guardar, buscar y eliminar textos propios.
+- Crear y renombrar cuadernos, añadir y quitar textos, ordenar su contenido.
+- Persistencia IndexedDB versionada y transaccional, con protección de conflictos.
+- Copias JSON verificables con SHA-256 y restauración con vista previa.
+- Comprobaciones unitarias y pruebas de navegador WebKit.
 
-## Avisos sobre los datos
+**No implementado todavía:** etiquetado gramatical, generación Word/PDF, preguntas, sincronización entre dispositivos ni edición colaborativa.
 
-- Los datos pertenecen al **origen del sitio** en este navegador y dispositivo. Los datos en Safari, otro navegador y una web instalada no deben suponerse sincronizados ni siempre compartidos.
-- IndexedDB no garantiza una copia perpetua: el navegador puede eliminar datos del sitio. **Exporta copias JSON periódicamente y consérvalas fuera del navegador.**
-- Restaurar una copia sustituye el corpus local. Exporta primero la versión actual.
-- El hash SHA-256 detecta modificaciones accidentales, **no autentica** a quien generó el archivo.
-- Versiones futuras o desconocidas se rechazan antes de guardar: nunca se borra automáticamente la base.
-- No se transfieren textos a un servidor: GitHub Pages sirve solamente los archivos estáticos.
+## Compilar y probar
+
+Requisitos: Node.js 22 o superior, conexión a internet **en la compilación**.
+
+1. `npm install`
+2. `npm run check` (pruebas y compilación).
+3. `npx playwright install --with-deps webkit` si se desean ejecutar E2E localmente.
+4. `npm run test:e2e`
+
+La compilación extrae obras de revisiones fijadas en `scripts/build-library.mjs` y genera `dist/library/`, además de la caché precargable `dist/service-worker.js`. GitHub Pages publica exclusivamente `dist/` después de pasar las pruebas.
 
 ## Documentación
 
-- [Arquitectura y decisiones](docs/ARQUITECTURA.md)
-- [Esquema de corpus v1](docs/ESQUEMA-v1.md)
-- [Persistencia, riesgos y comprobación manual](docs/PERSISTENCIA.md)
+- [Procedencia y condiciones de uso](docs/FUENTES-CORPUS.md)
+- [Arquitectura](docs/ARQUITECTURA.md)
+- [Persistencia y copias](docs/PERSISTENCIA.md)
+- [Contrato del corpus v1](docs/ESQUEMA-v1.md)
+
+Los documentos privados y los datos creados en el editor **no se envían a GitHub ni a servidores**; permanecen en el navegador. Las fuentes del catálogo ya son públicas.
