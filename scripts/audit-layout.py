@@ -71,6 +71,16 @@ for case in ['breve','largo','varios']:
           'first_question':locate('Traducción'), 'choice':locate('Elige'),
           'last_page_tail':pages[-1][-180:].strip().replace('\n',' '),
           'first_page_chars':len(pages[0])}
+        if case=='breve':
+            # Coordenadas y de la página original proporcionada por el docente.
+            # Tolerancia explícita por sustituciones tipográficas Word/Chromium.
+            reference={'latin':124.3,'vocabulary':220.3,
+                       'first_question':299.3,'choice':356.3}
+            for key,expected in reference.items():
+                value=metrics[key]
+                if value is None or abs(value[1]-expected)>20:
+                    raise RuntimeError(
+                        f'{case} {engine}: {key} en {value}, referencia {expected} pt')
         REPORT[case+'_'+engine]=metrics
         # Render real bitmap; compatible con inspección visual humana.
         subprocess.run(['pdftoppm','-f','1','-l','1','-scale-to','1300',
