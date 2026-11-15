@@ -16,6 +16,9 @@ import { WorkspaceConflictError, WorkspaceRepository, type EditionSnapshotV1 } f
 import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPlanV1 } from '../storage/workspace-migration.js';
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
 import { createAcademicControls } from './academic-controls.js';
+import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
+import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
+import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 
 const workspace = new WorkspaceRepository();
 const legacy = new IndexedDbCorpusRepository();
@@ -98,7 +101,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
     for(const v of included){
       const item=node('p','edition-vocabulary-line');
       item.append(node('em','',v.headword));
-      if(v.meaning)item.append(document.createTextNode(': '+v.meaning));
+      item.append(document.createTextNode(v.meaning?': '+v.meaning:': [significado pendiente]'));
       if(v.note)item.append(document.createTextNode(' ('+v.note+')'));
       box.append(item);
     }
@@ -110,12 +113,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
     const li=node('li','edition-question');
     const style=q.styleOverride;
     if(style){li.style.marginTop=style.beforePt+'pt';li.style.marginBottom=style.afterPt+'pt';}
-    const strong=node('strong','',questionDisplayText(q));
-    li.append(strong);
-    if(f.showPoints){
-      const points=node('strong','edition-question-points',' ('+(q.pointsHundredths/100).toLocaleString('es-ES')+'p.)');
-      li.append(points);
-    }
+    li.append(node('strong','',exportQuestionHeading(q,f.showPoints)));
     if(q.kind==='choice'){
       const list=node('ol','edition-choice-options');
       list.style.rowGap=(style?.subquestionGapPt??3)+'pt';
@@ -159,12 +157,17 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   let migrationConfirmed=false;
   let saving:Promise<boolean>|null=null;
   let saveTimer:ReturnType<typeof setTimeout>|null=null;
+  let vocabularyBank:ReturnType<typeof createOfflineTeacherBankV1>|null=null;
+  let vocabPreview:{placementId:string;baseline:string;proposals:VocabularyProposalV1[];
+    choices:VocabularyDecisionV1[]}|null=null;
+  let exportReview:{kind:'word'|'pdf';warnings:string[];baseline:string}|null=null;
   const academics=createAcademicControls(workspace,{
     snapshot:()=>current,flush,
     saved:next=>{
       current=next;
       editions=editions.map(e=>e.edition.id===next.edition.id?next:e);
       draft=structuredClone(next.edition);
+      vocabPreview=null;exportReview=null;
       paint();
     },
     status:setMessage,repaint:paint,
@@ -192,6 +195,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     if(!draft)return;
     try{
       draft=operation(draft,now());
+      vocabPreview=null;exportReview=null;
       academics.clear();
       element.querySelector('.edition-academic-review')?.remove();
       markDirty();
@@ -237,6 +241,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
         if(force && !await flush())return;
         const items=await workspace.listEditions();
         editions=items;
+        vocabPreview=null;exportReview=null;
         academics.clear();
         active=items.some(x=>x.edition.id===active)?active:items[0]?.edition.id??null;
         current=items.find(x=>x.edition.id===active)??null;
@@ -257,7 +262,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     return (async()=>{
       if(!await flush())return;
       const snapshot=editions.find(x=>x.edition.id===id);if(!snapshot)return;
-      academics.clear();active=id;current=snapshot;draft=structuredClone(snapshot.edition);
+      academics.clear();vocabPreview=null;exportReview=null;
+      active=id;current=snapshot;draft=structuredClone(snapshot.edition);
       session={activeEditionId:id,activePlacementId:draft.placements[0]?.id??null,
         mode:'text',activeMenu:menu,previewZoom:zoom,scrollByPlacementId:{}};
       paint();
@@ -266,7 +272,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   function navigate(command:'previous'|'next'|'whole'|{placementId:string}):Promise<void>{
     return (async()=>{
       if(!draft||!session||!await flush())return;
-      academics.clear();session=moveSession(draft,session,command);
+      academics.clear();vocabPreview=null;exportReview=null;
+      session=moveSession(draft,session,command);
       paint();
     })();
   }
@@ -287,6 +294,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       const restored=await workspace.undoLast(current.edition.id,current.revision,now());
       current=restored;editions=editions.map(e=>e.edition.id===restored.edition.id?restored:e);
       draft=structuredClone(restored.edition);
+      vocabPreview=null;exportReview=null;
       academics.clear();
       if(session && !draft.placements.some(p=>p.id===session?.activePlacementId))
         session={...session,activePlacementId:draft.placements[0]?.id??null};
@@ -331,7 +339,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     for(const p of placements)target.append(paperFor(draft,p,draft.placements.indexOf(p),draft.placements.length));
     target.style.zoom=String(zoom/100);
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
-    if(review)review.textContent='Vista en pantalla · paginación y exportación Word/PDF todavía pendientes de verificación.';
+    if(review)review.textContent='La exportación Word utiliza campos reales de página. El PDF se guarda desde la impresión A4 del navegador; comprueba los saltos en textos largos.';
   }
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
@@ -420,7 +428,66 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     panel.append(node('p',total===800?'edition-score':'edition-error',
       'Total activo: '+formatPoints(p)+(total===800?'':' · revisión necesaria')));
   }
+  function prepareVocabulary(p:TextPlacementV1):void{
+    if(!draft)return;
+    try{
+      vocabularyBank??=createOfflineTeacherBankV1();
+      const proposals=suggestVocabulary(p,vocabularyBank.bank);
+      vocabPreview={placementId:p.id,baseline:JSON.stringify(draft),
+        proposals,choices:proposals.map(item=>({
+          surface:item.surface,selected:item.selected,
+          headword:item.lemma??item.surface,meaning:'',
+        }))};
+      if(!proposals.length)setMessage('Todas las formas únicas ya tienen una entrada o no hay texto que analizar.');
+      else setMessage('Propuestas preparadas: '+proposals.length+
+        ' formas. Revisa los lemas y completa manualmente los significados antes de confirmar.');
+      paint();
+    }catch(e){setMessage('No se pudieron preparar las candidaturas: '+(e instanceof Error?e.message:String(e)),true);}
+  }
+  function renderVocabularySuggestions(panel:HTMLElement,p:TextPlacementV1):void{
+    const view=vocabPreview;
+    if(!view||view.placementId!==p.id)return;
+    const section=node('section','edition-vocab-preview');
+    section.setAttribute('aria-label','Propuestas de vocabulario');
+    section.append(node('h3','','Candidaturas del texto'));
+    section.append(node('p','hint',
+      'La identificación de una forma no implica un significado certificado. Sin información documental se presenta la forma como provisional. Nada se añade hasta confirmar.'));
+    for(const [index,item] of view.proposals.entries()){
+      const decision=view.choices[index]!;
+      const row=node('div','edition-vocab-candidate');
+      const label=node('label','edition-option-head');
+      const check=node('input');check.type='checkbox';check.checked=decision.selected;
+      check.setAttribute('aria-label','Añadir '+item.surface);
+      check.addEventListener('change',()=>{decision.selected=check.checked;});
+      label.append(check,node('strong','',item.surface+' · '+item.occurrences+' aparición(es)'));
+      row.append(label,node('p','hint',item.status==='lemma-documented'?
+        'Lema documentado por forma individual: '+item.lemma+' (significado sin verificar)':
+        item.status==='ambiguous'?'Forma con análisis ambiguos: decide el enunciado.':
+        'Forma sin lema documentado en el banco disponible. El enunciado es provisional.'));
+      const name=textField('Enunciado del vocabulario',decision.headword,value=>{decision.headword=value;});
+      const meaning=textField('Significado (rellenar por el docente)',decision.meaning,value=>{decision.meaning=value;});
+      row.append(name,meaning);
+      section.append(row);
+    }
+    const controls=node('div','edition-inline-edit');
+    controls.append(action('Cancelar propuestas',()=>{vocabPreview=null;paint();}));
+    const accept=action('Añadir términos seleccionados',()=>{
+      if(!draft||!vocabPreview)return;
+      if(JSON.stringify(draft)!==vocabPreview.baseline){
+        setMessage('El texto o vocabulario ha cambiado. Prepara las propuestas de nuevo.',true);return;
+      }
+      const snapshot=vocabPreview;
+      apply((e,at)=>acceptVocabulary(e,p.id,snapshot.proposals,snapshot.choices,
+        ()=>freshId('voc'),at));
+      paint();
+    },'btn btn-primary');
+    accept.disabled=!view.proposals.length;
+    controls.append(accept);section.append(controls);
+    panel.append(section);
+  }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
+    panel.append(action('Proponer vocabulario del texto',()=>prepareVocabulary(p),'btn btn-primary'));
+    renderVocabularySuggestions(panel,p);
     const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
     for(const v of items){
       const group=node('div','edition-vocabulary-control');
@@ -534,6 +601,73 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     }).catch(e=>setMessage('No se pudo leer Mis textos: '+String(e),true));
     panel.append(node('p','hint','Una misma fuente puede tener varias apariciones independientes. Reordenar no regenera preguntas ni vocabulario.'));
   }
+  function docFilename(edition:NotebookEditionV1,draftExport:boolean):string{
+    const safe=edition.title.normalize('NFC').replace(/[\\/:*?"<>|]+/g,'-')
+      .replace(/\s+/g,' ').trim().slice(0,85)||'cuaderno';
+    return 'cuaderno-'+safe+(draftExport?'-borrador':'')+'.docx';
+  }
+  function exportBytes(bytes:Uint8Array,filename:string):void{
+    // Un ArrayBuffer propio mantiene compatibilidad con BlobPart en TS y Safari.
+    const buffer=new ArrayBuffer(bytes.length);
+    new Uint8Array(buffer).set(bytes);
+    const url=URL.createObjectURL(new Blob([buffer],{
+      type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }));
+    const link=node('a');link.href=url;link.download=filename;
+    document.body.append(link);link.click();link.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }
+  function openPrint(edition:NotebookEditionV1):void{
+    document.querySelector('.edition-print-root')?.remove();
+    const target=node('main','edition-print-root');
+    target.setAttribute('aria-label','Cuaderno A4 para impresión PDF');
+    for(const [index,p] of edition.placements.entries()){
+      target.append(paperFor(edition,p,index,edition.placements.length));
+    }
+    document.body.append(target);
+    const cleanup=()=>{target.remove();window.removeEventListener('afterprint',cleanup);};
+    window.addEventListener('afterprint',cleanup,{once:true});
+    // Impresión nativa: en iPad Safari el usuario elige «Guardar como PDF».
+    window.print();
+  }
+  async function exportNotebook(kind:'word'|'pdf',approved=false):Promise<void>{
+    if(!await flush()||!current)return;
+    try{
+      const edition=current.edition;
+      if(!edition.placements.length)throw new Error('Añade un texto antes de exportar.');
+      const warnings=notebookExportWarnings(edition);
+      if(warnings.length && (!approved||exportReview?.kind!==kind||
+          exportReview.baseline!==JSON.stringify(edition))){
+        exportReview={kind,warnings,baseline:JSON.stringify(edition)};
+        paint();return;
+      }
+      exportReview=null;
+      if(kind==='word'){
+        exportBytes(createNotebookDocx(edition),docFilename(edition,warnings.length>0));
+        setMessage('DOCX '+(warnings.length?'de borrador ':'')+'preparado. Comprueba su maquetación antes de imprimirlo.');
+      }else{
+        setMessage('Abriendo la impresión A4: elige Guardar como PDF en Safari.');
+        openPrint(edition);
+      }
+    }catch(e){setMessage('No se pudo exportar: '+(e instanceof Error?e.message:String(e)),true);}
+  }
+  function renderExportReview():HTMLElement|null{
+    if(!exportReview)return null;
+    const review=node('section','edition-export-review');
+    review.setAttribute('aria-label','Revisión previa a exportar');
+    review.append(node('h3','','Cuaderno pendiente de revisión'));
+    review.append(node('p','hint',
+      'La edición todavía contiene observaciones. Si exportas, el documento se identificará como borrador; no se alterará ningún dato.'));
+    const items=node('ul','edition-academic-diff');
+    for(const warning of exportReview.warnings.slice(0,50))items.append(node('li','',warning));
+    if(exportReview.warnings.length>50)items.append(node('li','','Hay más observaciones; revisa los textos restantes.'));
+    review.append(items);
+    const row=node('div','edition-inline-edit');
+    row.append(action(exportReview.kind==='word'?'Exportar borrador Word':'Imprimir borrador / Guardar PDF',
+      ()=>exportNotebook(exportReview!.kind,true),'btn btn-primary'));
+    row.append(action('Cancelar',()=>{exportReview=null;paint();}));
+    review.append(row);return review;
+  }
   function paint():void {
     element.replaceChildren();
     const header=node('div','edition-toolbar');
@@ -548,7 +682,9 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     choose.addEventListener('change',()=>{void changeEdition(choose.value);});
     tools.append(choose,action('+ Cuaderno',createNotebook,'btn btn-primary'),
       action('Guardar',async()=>{await flush();}),
-      action('Deshacer',undo),action('Copia JSON',backup));
+      action('Deshacer',undo),action('Copia JSON',backup),
+      action('Exportar Word',()=>exportNotebook('word')),
+      action('PDF / Imprimir',()=>exportNotebook('pdf')));
     header.append(tools);element.append(header);
     if(!draft||!session){
       const empty=node('div','edition-empty');
@@ -591,6 +727,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     nav.append(whole);element.append(nav);
     const review=academics.review();
     if(review)element.append(review);
+    const exportNotice=renderExportReview();
+    if(exportNotice)element.append(exportNotice);
     const mobileSwitch=node('div','edition-mobile-switch');
     for(const [key,label] of [['config','Configurar'],['preview','Vista previa']] as const){
       const b=action(label,()=>{mobile=key;paint();},
