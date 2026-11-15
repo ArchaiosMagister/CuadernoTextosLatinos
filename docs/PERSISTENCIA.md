@@ -48,3 +48,14 @@ La UI no es una aplicación docente funcional. La página de comprobación puede
 ### Nota de interfaz tras restaurar
 
 La zona editable se sincroniza con el contenido restaurado sólo después de una escritura confirmada. Si la copia no contiene el registro de prueba, la zona se vacía y se explica el motivo. Las importaciones erróneas o canceladas no modifican el borrador de la zona editable. Al exportar, se lee la copia más reciente, pero **no** se adopta su revisión en el editor: así no se elude el bloqueo de concurrencia entre pestañas.
+
+## Comprobación de recuperación (v0.2.2)
+
+- En la zona de ejemplo, pulsa **Guardar texto de prueba** antes de descargar una copia. El ejemplo visible inicialmente no cuenta como dato persistido.
+- La exportación rechaza cambios sin guardar para evitar copias incompletas.
+- Los nombres de archivo contienen fecha y hora, de modo que se pueden distinguir varias copias.
+- Al elegir una copia JSON, la interfaz muestra primero su fecha y una vista previa del texto que contiene, sin modificar IndexedDB.
+- Si indica **CERO textos**, ese JSON no puede restaurar el ejemplo que buscas: es una copia que se creó sin haber guardado previamente el texto.
+- La restauración exige una casilla de confirmación explícita; no depende de un cuadro de diálogo que Safari pueda suprimir.
+- Al restaurar, se vuelve a leer IndexedDB y se coteja el corpus grabado con el solicitado. Se muestra un mensaje claro de éxito o error.
+- Las pruebas E2E utilizan WebKit mediante Playwright en CI para recorrer el guardado, descarga, vista previa, restauración y recarga. Estas pruebas no sustituyen la verificación en Safari del iPad.

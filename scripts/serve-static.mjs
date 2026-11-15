@@ -1,0 +1,33 @@
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { resolve, sep } from 'node:path';
+
+const root = resolve('dist');
+const mimeTypes = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+};
+
+createServer(async (request, response) => {
+  try {
+    const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
+    const file = resolve(root, '.' + (pathname.endsWith('/') ? pathname + 'index.html' : pathname));
+    if (!file.startsWith(root + sep)) {
+      response.writeHead(403);
+      response.end('Prohibido');
+      return;
+    }
+    const extension = file.slice(file.lastIndexOf('.'));
+    const content = await readFile(file);
+    response.writeHead(200, {
+      'content-type': mimeTypes[extension] ?? 'application/octet-stream',
+      'cache-control': 'no-store',
+    });
+    response.end(content);
+  } catch {
+    response.writeHead(404);
+    response.end('No encontrado');
+  }
+}).listen(4173, '127.0.0.1');

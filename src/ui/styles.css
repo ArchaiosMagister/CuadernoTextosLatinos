@@ -78,3 +78,28 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   color: light-dark(#8a2020, #ffd7d7);
 }
 @media (prefers-reduced-motion: no-preference) { button { transition: opacity .12s; } }
+
+.preview {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--edge);
+  border-radius: .65rem;
+  background: light-dark(#f3f7fc, #292e39);
+}
+.preview[hidden] { display: none; }
+.preview h3 { margin: 0 0 .75rem; font-size: 1.1rem; }
+.preview h4 { margin: .85rem 0 .3rem; font-size: 1rem; }
+.preview pre {
+  margin: .5rem 0;
+  padding: .8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  background: light-dark(#fff, #181b20);
+  border: 1px solid var(--edge);
+  border-radius: .4rem;
+}
+.preview-warning {
+  font-weight: 650;
+  color: light-dark(#814b00, #ffd48f);
+}
