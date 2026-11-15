@@ -176,7 +176,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const target:AcademicSlotTargetV1={
         placementId:p.id,questionId:q.id,optionId:o.id,slotId,expectedRevision:s.revision,
         ...(o.kind==='preverb'?{sourceForm:sourceFor(o)[index]??''}:{}),
-        ...(o.kind==='phonetics'?{phoneticRules:rulesFor(q)}:{}),
+        ...(o.kind==='phonetics'&&rulesFor(q)!==undefined?{phoneticRules:rulesFor(q) as readonly string[]}:{}),
       };
       const academic=service().engine;
       const view=academic.previewSlot(s.edition,target);
@@ -203,7 +203,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         placementId:p.id,questionId:q.id,optionId:o.id,expectedRevision:s.revision,
         desiredCount:f.count,newSlotIds:f.newSlotIds,
         ...(f.sourceForms?{sourceForms:f.sourceForms}:{}),
-        ...(rulesFor(q)?{phoneticRules:rulesFor(q)}:{}),
+        ...(rulesFor(q)!==undefined?{phoneticRules:rulesFor(q) as readonly string[]}:{}),
         allowManualReplacement:replaceFor(o.id),seed:randomSeed(),
       });
       const details=prepareDetails(plan);
@@ -228,7 +228,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const plan=service().engine.prepareChoiceQuestion(s.edition,{
         placementId:p.id,questionId:q.id,expectedRevision:s.revision,
         desiredCountByKind,sourceFormsByKind,newSlotIdsByKind,
-        ...(rulesFor(q)?{phoneticRules:rulesFor(q)}:{}),
+        ...(rulesFor(q)!==undefined?{phoneticRules:rulesFor(q) as readonly string[]}:{}),
         allowManualReplacement:replaceFor(q.id),seed:randomSeed(),
       });
       const details=prepareDetails(plan);
