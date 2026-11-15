@@ -266,7 +266,37 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   padding: .7rem .65rem;
   font-weight: normal;
 }
-.reader-line.selected { background: light-dark(#d9eafa,#33485d); }
+/* La selección debe ser nativa: Safari muestra sus tiradores de selección de texto. */
+.reader-lines { -webkit-overflow-scrolling: touch; user-select: text; -webkit-user-select: text; }
+.reader-line {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  min-height: 2.7rem;
+}
+.reader-ref {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.reader-latin {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  cursor: text;
+}
+.reader-latin::selection { background: light-dark(#a1cafa,#3d779d); color: light-dark(#142a42,#fff); }
+.reader-latin::-moz-selection { background: #a1cafa; color: #142a42; }
+.lib-selection {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: .6rem .5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--edge);
+}
+.lib-selection [data-use-selection]:not(:disabled) {
+  box-shadow: 0 0 0 3px light-dark(#b6dbfa,#365e7a);
+}
 .reader-ref { font-size: .82rem; font-variant-numeric:tabular-nums; color:var(--subtle); }
 .reader-latin { font: 1.02rem/1.65 Georgia,"Gentium Book Plus",serif; overflow-wrap:anywhere; }
 .reader-pager, .lib-selection, .editor-actions {

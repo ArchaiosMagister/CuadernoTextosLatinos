@@ -1,5 +1,5 @@
 import {
-  buildFragment, findCitation, foldLatin, searchWorks,
+  findCitation, foldLatin, searchWorks,
   type LibraryEntry, type LibraryWork,
 } from '../core/library.js';
 import {
@@ -7,6 +7,7 @@ import {
   addTextToNotebook, removeTextFromNotebook, moveTextInNotebook, type TextDraft,
 } from '../core/editor-operations.js';
 import type { CorpusSnapshot } from '../ports/corpus-repository.js';
+import { readReaderSelection, type ReaderFragment } from './reader-selection.js';
 import { IndexedDbCorpusRepository, RevisionConflictError } from '../storage/indexeddb-corpus-repository.js';
 
 type Tab = 'library' | 'texts' | 'notebooks';
@@ -46,9 +47,8 @@ export function mountLibraryApp(root: HTMLElement): void {
   let catalogue: LibraryEntry[] = [];
   const cachedWorks = new Map<string,LibraryWork>();
   let activeWork: LibraryWork | null = null;
-  let workOffset = 0;
-  let firstLine: number | null = null;
-  let lastLine: number | null = null;
+  let selectedFragment: ReaderFragment | null = null;
+  let preservingSelection = false;
   let tab: Tab = 'library';
   let authorFilter = 'all';
   let genreFilter = 'all';
@@ -98,6 +98,7 @@ export function mountLibraryApp(root: HTMLElement): void {
   function setTab(t:Tab):void {
     if(t!==tab && !confirmDiscard())return;
     if(t!=='texts'){draft=emptyDraft();dirty=false;editingId=null;}
+    if(t!=='library'){selectedFragment=null;window.getSelection()?.removeAllRanges();}
     tab=t;render();
   }
   function editText(id:string):void {
@@ -111,12 +112,34 @@ export function mountLibraryApp(root: HTMLElement): void {
     editingId=text.id;
     dirty=false;tab='texts';render();
   }
+  /**
+   * Selectionchange llega también tras tocar los botones en Safari.
+   * Se conserva el último rango válido al cambiar de foco y sólo se borra
+   * al hacer otra selección en el lector o pulsar «Limpiar».
+   */
+  function syncReaderSelection():void {
+    if (tab!=='library' || !activeWork || preservingSelection) return;
+    const reader=root.querySelector<HTMLElement>('.reader-lines');
+    if(!reader)return;
+    const selection=window.getSelection();
+    const picked=readReaderSelection(activeWork,reader,selection);
+    if(picked) selectedFragment=picked;
+    else if(selection?.isCollapsed && selection.anchorNode && reader.contains(selection.anchorNode)) {
+      selectedFragment=null;
+    }
+    const add=root.querySelector<HTMLButtonElement>('[data-use-selection]');
+    const clear=root.querySelector<HTMLButtonElement>('[data-clear-selection]');
+    const description=root.querySelector<HTMLElement>('.selection-description');
+    if(add)add.disabled=!selectedFragment || !ready();
+    if(clear)clear.disabled=!selectedFragment;
+    if(description)description.textContent=selectedFragment
+      ? selectedFragment.reference+' · '+selectedFragment.wordCount+' palabras seleccionadas'
+      : 'Selecciona con el ratón o mantén pulsado y arrastra los tiradores con el dedo.';
+  }
+
   function useFragment():void {
-    if(!activeWork||firstLine===null||!ready())return;
-    const second=lastLine??firstLine;
-    let frag:ReturnType<typeof buildFragment>;
-    try {frag=buildFragment(activeWork,firstLine,second);}
-    catch(err){message(err instanceof Error?err.message:String(err),true);return;}
+    if(!activeWork||!selectedFragment||!ready())return;
+    const frag=selectedFragment;
     if(!confirmDiscard())return;
     const duplicate=snapshot!.corpus.texts.find(t=>
       t.latin===frag.latin && t.source.author===activeWork?.author
@@ -128,8 +151,8 @@ export function mountLibraryApp(root: HTMLElement): void {
       author:activeWork.author,work:activeWork.latin,reference:frag.reference,
       latin:frag.latin,
     };
-    editingId=null;dirty=true;tab='texts';render();
-    message('Fragmento de ' + frag.wordCount + ' palabras incorporado al editor. Pulsa «Guardar texto».');
+    editingId=null;dirty=true;tab='texts';selectedFragment=null;render();
+    message('Fragmento de '+frag.wordCount+' palabras incorporado al editor. Pulsa «Guardar texto».');
   }
 
   async function showWork(meta:LibraryEntry):Promise<void> {
@@ -152,8 +175,9 @@ export function mountLibraryApp(root: HTMLElement): void {
         cachedWorks.set(meta.urn,work);
       }
       activeWork=work;
-      firstLine=null;lastLine=null;workOffset=0;
-      message('Selecciona el comienzo y el final del pasaje tocando las líneas.');
+      selectedFragment=null;
+      window.getSelection()?.removeAllRanges();
+      message('Selecciona cualquier fragmento con el ratón o el dedo; el botón se activará automáticamente.');
       render();
     }catch(err){message(err instanceof Error?err.message:String(err),true);}
     finally{busy=false;}
@@ -221,59 +245,56 @@ export function mountLibraryApp(root: HTMLElement): void {
       const go=button('Ir a',()=>{
         const index=findCitation(activeWork!,citation.value);
         if(index<0){message('No existe el pasaje «'+citation.value+'».',true);return;}
-        workOffset=Math.floor(index/45)*45;render();
-        const row=Array.from(root.querySelectorAll<HTMLElement>('.reader-line')).find(el=>el.dataset.c===activeWork?.lines[index]?.c);
-        row?.scrollIntoView({block:'center'});
+        const row=Array.from(root.querySelectorAll<HTMLElement>('.reader-line'))
+          .find(element=>element.dataset.index===String(index));
+        row?.scrollIntoView({block:'center',behavior:'auto'});
         message('Mostrando el pasaje '+citation.value+'.');
       },'btn btn-outline');
-      citation.addEventListener('keydown',e=>{if(e.key==='Enter')go.click();});
+      citation.addEventListener('keydown',event=>{if(event.key==='Enter')go.click();});
       head.append(tit,citation,go);
-      const readInfo=el('p','hint','Toca una línea para marcar el inicio; toca otra para marcar el final. En iPad no necesitas arrastrar con el dedo.');
+      const readInfo=el('p','hint','Selecciona directamente las palabras que quieras, incluso dentro de una frase o entre varios párrafos. En iPad, mantén pulsado y ajusta la selección con los tiradores.');
       const readerLines=el('div','reader-lines');
-      const end=Math.min(activeWork.lines.length,workOffset+45);
-      for(let i=workOffset;i<end;i++){
-        const line=activeWork.lines[i]!;
-        const row=el('button','reader-line');
-        row.type='button';
+      readerLines.setAttribute('aria-label','Texto latino seleccionable');
+      // El lector completo permite arrastrar la selección a través de tantos
+      // párrafos como se necesite. No se limita a bloques de 45 pasajes.
+      activeWork.lines.forEach((line,index)=>{
+        const row=el('div','reader-line');
+        row.dataset.index=String(index);
         row.dataset.c=line.c;
-        const lo=Math.min(firstLine??-1,lastLine??firstLine??-1);
-        const hi=Math.max(firstLine??-1,lastLine??firstLine??-1);
-        if(firstLine!==null&&i>=lo&&i<=hi)row.classList.add('selected');
         row.append(el('span','reader-ref',line.c),el('span','reader-latin',line.t));
-        row.addEventListener('click',()=>{
-          if(firstLine===null||lastLine!==null){firstLine=i;lastLine=null;}
-          else{lastLine=i;}
-          const remembered=readerLines.scrollTop;
-          render();
-          const replacement=root.querySelector<HTMLElement>('.reader-lines');
-          if(replacement)replacement.scrollTop=remembered;
-        });
         readerLines.append(row);
-      }
-      const pager=el('div','reader-pager');
-      const prev=button('Anterior',()=>{workOffset=Math.max(0,workOffset-45);render();},'btn btn-outline');
-      prev.disabled=workOffset===0;
-      const next=button('Siguiente',()=>{workOffset=Math.min(activeWork!.lines.length-1,workOffset+45);render();},'btn btn-outline');
-      next.disabled=end>=activeWork.lines.length;
-      pager.append(prev,el('span','muted','Pasajes '+(workOffset+1)+'–'+end+' / '+activeWork.lines.length),next);
+      });
+      readerLines.addEventListener('pointerup',()=>window.setTimeout(syncReaderSelection,0));
+      readerLines.addEventListener('keyup',syncReaderSelection);
+      readerLines.addEventListener('touchend',()=>window.setTimeout(syncReaderSelection,80),{passive:true});
       const selection=el('div','lib-selection');
-      if(firstLine!==null){
-        try {
-          const picked=buildFragment(activeWork,firstLine,lastLine??firstLine);
-          selection.append(el('span','selection-description',picked.reference+' · '+picked.wordCount+' palabras'));
-        }catch(e){selection.append(el('span','muted',e instanceof Error?e.message:String(e)));}
-      }else selection.append(el('span','muted','Ningún fragmento seleccionado.'));
+      const description=el('span','selection-description',
+        selectedFragment
+          ? selectedFragment.reference+' · '+selectedFragment.wordCount+' palabras seleccionadas'
+          : 'Selecciona con el ratón o mantén pulsado y arrastra los tiradores con el dedo.');
       const add=button('Añadir selección a mis textos',useFragment,'btn btn-primary');
-      add.disabled=firstLine===null;
-      const clear=button('Limpiar',()=>{firstLine=null;lastLine=null;render();},'btn btn-outline');
-      clear.disabled=firstLine===null;
-      selection.append(add,clear);
+      add.dataset.useSelection='true';
+      add.disabled=!selectedFragment || !ready();
+      // Safari puede colapsar el rango al tocar el botón: guardamos el texto
+      // previamente extraído antes de que cambie el foco.
+      add.addEventListener('pointerdown',()=>{preservingSelection=true;});
+      add.addEventListener('click',()=>{preservingSelection=false;});
+      add.addEventListener('pointercancel',()=>{preservingSelection=false;});
+      const clear=button('Limpiar',()=>{
+        selectedFragment=null;
+        preservingSelection=false;
+        window.getSelection()?.removeAllRanges();
+        syncReaderSelection();
+      },'btn btn-outline');
+      clear.dataset.clearSelection='true';
+      clear.disabled=!selectedFragment;
+      selection.append(description,add,clear);
       const source=el('p','source-reference');
       source.append(el('span','',activeWork.editorial+' '));
       const link=el('a','','Fuente y edición');
       link.href=activeWork.source;link.target='_blank';link.rel='noopener noreferrer';
       source.append(link);
-      reader.append(head,readInfo,selection,readerLines,pager,source);
+      reader.append(head,readInfo,selection,readerLines,source);
     }
     main.append(sidebar,reader);
     return main;
@@ -436,7 +457,7 @@ export function mountLibraryApp(root: HTMLElement): void {
   function render():void {
     root.replaceChildren();
     const head=el('div','workspace-header');
-    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · FASE 2'),el('h1','','Biblioteca y cuadernos'));
+    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · VERSIÓN 0.3.1'),el('h1','','Biblioteca y cuadernos'));
     const tag=el('span','offline-indicator',offlinePrepared?'Biblioteca preparada sin conexión':'Preparando biblioteca sin conexión');
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
@@ -463,10 +484,16 @@ export function mountLibraryApp(root: HTMLElement): void {
   const originEvent=async()=>{
     try {
       const next=await repository.load();
-      if(!dirty){snapshot=next;render();}
-      else message('El almacenamiento ha cambiado: guarda o descarta tu borrador antes de releer.',true);
+      // Cambiar el foco (p. ej., al mostrar los tiradores de Safari) no debe
+      // repintar todo el lector y destruir la selección nativa.
+      if(!dirty){
+        if(!snapshot || next.revision!==snapshot.revision){snapshot=next;render();}
+      } else if(!snapshot || next.revision!==snapshot.revision) {
+        message('El almacenamiento ha cambiado: guarda o descarta tu borrador antes de releer.',true);
+      }
     }catch(err){message(err instanceof Error?err.message:String(err),true);}
   };
+  document.addEventListener('selectionchange',syncReaderSelection);
   window.addEventListener('corpus-updated',()=>{void originEvent();});
   window.addEventListener('focus',()=>{if(!busy&&!dirty)void originEvent();});
   window.addEventListener('online',()=>{message('Conexión disponible. La biblioteca instalada también funciona sin conexión.');});
@@ -500,7 +527,9 @@ export function mountLibraryApp(root: HTMLElement): void {
   if('serviceWorker' in navigator && window.isSecureContext){
     void navigator.serviceWorker.register('./service-worker.js').then(async()=>{
       await navigator.serviceWorker.ready;
-      offlinePrepared=true;render();
+      offlinePrepared=true;
+      const indicator=root.querySelector<HTMLElement>('.offline-indicator');
+      if(indicator)indicator.textContent='Biblioteca preparada sin conexión';
     }).catch(e=>message('Los textos se pueden consultar en línea, pero no se ha podido preparar la caché sin conexión: '+String(e),true));
   }
 }

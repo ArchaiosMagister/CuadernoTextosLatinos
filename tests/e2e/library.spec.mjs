@@ -1,5 +1,22 @@
 import { test, expect } from '@playwright/test';
 
+/** Selecciona caracteres reales mediante Range, igual que el mecanismo nativo de Safari. */
+async function selectText(page, startLine, startOffset, endLine, endOffset) {
+  await page.evaluate(({ startLine, startOffset, endLine, endOffset }) => {
+    const lines = Array.from(document.querySelectorAll('.reader-latin'));
+    const first = lines[startLine].firstChild;
+    const last = lines[endLine].firstChild;
+    const range = document.createRange();
+    range.setStart(first, startOffset);
+    range.setEnd(last, endOffset);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  }, { startLine, startOffset, endLine, endOffset });
+}
+
+
 test('biblioteca Examinator: buscar, elegir pasajes y guardarlos en un cuaderno', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
@@ -9,10 +26,12 @@ test('biblioteca Examinator: buscar, elegir pasajes y guardarlos en un cuaderno'
   await page.locator('.lib-sidebar .work-row').filter({hasText:'De bello Gallico'}).click();
   await expect(page.locator('.lib-reader .reader-work')).toContainText('De bello Gallico');
 
-  await page.locator('.reader-line').first().click();
-  await page.locator('.reader-line').nth(1).click();
-  await expect(page.locator('.selection-description')).toContainText('palabras');
-  await page.getByRole('button', { name: 'Añadir selección a mis textos' }).click();
+  const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
+  await expect(add).toBeDisabled();
+  await selectText(page, 0, 0, 1, 30);
+  await expect(page.locator('.selection-description')).toContainText('palabras seleccionadas');
+  await expect(add).toBeEnabled();
+  await add.click();
   await expect(page.getByRole('heading', { name: 'Nuevo texto' })).toBeVisible();
   const latin = await page.locator('.editor-form textarea').inputValue();
   expect(latin.split(/\s+/).length).toBeGreaterThan(6);
@@ -100,4 +119,70 @@ test('la biblioteca funciona montada en la subcarpeta de GitHub Pages', async ({
     return { status:response.status, pathname:new URL('./library/catalog.json',location.href).pathname };
   });
   expect(paths).toEqual({status:200,pathname:'/CuadernoTextosLatinos/library/catalog.json'});
+});
+
+test('selecciona exactamente parte de una frase sin copiar la referencia', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
+  await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
+  const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
+  await expect(add).toBeDisabled();
+  const index = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-latin'))
+    .findIndex(node => node.textContent.length > 60));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const expected = await page.locator('.reader-latin').nth(index).evaluate(node => node.textContent.slice(7, 35).trim());
+  const cite = await page.locator('.reader-ref').nth(index).textContent();
+  await selectText(page, index, 7, index, 35);
+  await expect(add).toBeEnabled();
+  await expect(page.locator('.selection-description')).toContainText(cite);
+  await add.click();
+  await expect(page.locator('.editor-form textarea')).toHaveValue(expected);
+  await expect(page.locator('.editor-form input').nth(3)).toHaveValue(cite);
+});
+
+test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de frase', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
+  await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
+  // showWork carga el JSON de forma asíncrona: esperar al lector, no asumir
+  // que estará listo tras pulsar una obra.
+  await expect(page.locator('.reader-latin').nth(3)).toHaveCount(1);
+  const index = await page.evaluate(() => Array.from(document.querySelectorAll('.reader-latin'))
+    .findIndex((node,i,arr) => node.textContent.length > 60
+      && i + 3 < arr.length && arr[i+3].textContent.length > 30));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const expected = await page.evaluate((first) => {
+    const spans = Array.from(document.querySelectorAll('.reader-latin')).slice(first, first + 4);
+    const contents = spans.map(node=>node.textContent);
+    return [contents[0].slice(15),contents[1],contents[2],contents[3].slice(0,18)]
+      .map(part=>part.trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+  }, index);
+  const refs = await page.locator('.reader-ref').allTextContents();
+  await selectText(page, index, 15, index + 3, 18);
+  const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
+  await expect(add).toBeEnabled();
+  await expect(page.locator('.selection-description')).toContainText(refs[index]+'–'+refs[index+3]);
+  await add.click();
+  await expect(page.locator('.editor-form textarea')).toHaveValue(expected);
+  for (const ref of refs.slice(index,index+4)) {
+    expect(expected.includes(ref+' ')).toBe(false);
+  }
+});
+
+test('la selección fuera del lector no activa el botón de incorporación', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
+  await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
+  const add = page.getByRole('button',{ name:'Añadir selección a mis textos' });
+  await expect(add).toBeDisabled();
+  await page.evaluate(() => {
+    const other = document.querySelector('.reader-work').firstChild;
+    const range = document.createRange();
+    range.selectNodeContents(other);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await expect(add).toBeDisabled();
 });
