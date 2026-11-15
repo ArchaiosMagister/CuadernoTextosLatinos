@@ -9,8 +9,9 @@ import {
 import type { CorpusSnapshot } from '../ports/corpus-repository.js';
 import { readReaderSelection, type ReaderFragment } from './reader-selection.js';
 import { IndexedDbCorpusRepository, RevisionConflictError } from '../storage/indexeddb-corpus-repository.js';
+import { createEditionPane } from './edition-app.js';
 
-type Tab = 'library' | 'texts' | 'notebooks';
+type Tab = 'library' | 'texts' | 'notebooks' | 'compose';
 const repository = new IndexedDbCorpusRepository();
 const cmp = new Intl.Collator('es', { sensitivity: 'base' });
 const emptyDraft = (): TextDraft => ({ title:'',latin:'',author:'',work:'',reference:'' });
@@ -46,6 +47,7 @@ export function mountLibraryApp(root: HTMLElement): void {
   let snapshot: CorpusSnapshot | null = null;
   let catalogue: LibraryEntry[] = [];
   const cachedWorks = new Map<string,LibraryWork>();
+  const composer = createEditionPane();
   let activeWork: LibraryWork | null = null;
   let selectedFragment: ReaderFragment | null = null;
   let preservingSelection = false;
@@ -95,11 +97,15 @@ export function mountLibraryApp(root: HTMLElement): void {
   function confirmDiscard(): boolean {
     return !dirty || window.confirm('Hay cambios sin guardar en el editor. ¿Deseas descartarlos?');
   }
-  function setTab(t:Tab):void {
+  async function setTab(t:Tab):Promise<void> {
+    if (t===tab)return;
+    if (tab==='compose' && !await composer.flush())return;
     if(t!==tab && !confirmDiscard())return;
     if(t!=='texts'){draft=emptyDraft();dirty=false;editingId=null;}
     if(t!=='library'){selectedFragment=null;window.getSelection()?.removeAllRanges();}
-    tab=t;render();
+    tab=t;
+    if(t==='compose')await composer.open();
+    render();
   }
   function editText(id:string):void {
     if(!confirmDiscard())return;
@@ -462,7 +468,7 @@ export function mountLibraryApp(root: HTMLElement): void {
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
     tabs.setAttribute('aria-label','Apartados del cuaderno');
-    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],['notebooks','Cuadernos']];
+    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],['notebooks','Cuadernos'],['compose','Preparar cuaderno']];
     for(const [key,title] of buttons) {
       const b=button(title,()=>setTab(key),'workspace-tab'+(tab===key?' current':''));
       b.setAttribute('aria-current',tab===key?'page':'false');
@@ -477,7 +483,8 @@ export function mountLibraryApp(root: HTMLElement): void {
     root.append(head,tabs);
     if(tab==='library')root.append(renderCatalog());
     else if(tab==='texts')root.append(renderMyTexts());
-    else root.append(renderNotebooks());
+    else if(tab==='notebooks')root.append(renderNotebooks());
+    else root.append(composer.element);
     root.append(state);
   }
 
