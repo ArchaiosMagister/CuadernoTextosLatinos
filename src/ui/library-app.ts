@@ -51,6 +51,7 @@ export function mountLibraryApp(root: HTMLElement): void {
   let lastLine: number | null = null;
   let tab: Tab = 'library';
   let authorFilter = 'all';
+  let genreFilter = 'all';
   let query = '';
   let ownQuery = '';
   let editingId: string | null = null;
@@ -170,11 +171,19 @@ export function mountLibraryApp(root: HTMLElement): void {
       option.value=author;select.append(option);
     }
     select.value=authorFilter;
+    const genre=el('select','field-control');
+    genre.setAttribute('aria-label','Filtrar por género');
+    const genres=[...new Set(catalogue.map(x=>x.genre))].sort(cmp.compare);
+    for(const name of ['all',...genres]) {
+      const option=el('option','',name==='all'?'Todos los géneros':name);
+      option.value=name;genre.append(option);
+    }
+    genre.value=genreFilter;
     const hints=el('p','hint','Biblioteca incluida · obras disponibles sin conexión tras la primera carga.');
     const list=el('div','work-list');
     const counter=el('small','muted');
     const updateList=()=>{
-      const matches=searchWorks(catalogue,query,authorFilter);
+      const matches=searchWorks(catalogue,query,authorFilter).filter(item=>genreFilter==='all'||item.genre===genreFilter);
       counter.textContent=matches.length+' obra(s) encontradas';
       list.replaceChildren();
       for(const item of matches) {
@@ -192,7 +201,8 @@ export function mountLibraryApp(root: HTMLElement): void {
     };
     f.addEventListener('input',()=>{query=f.value;updateList();});
     select.addEventListener('change',()=>{authorFilter=select.value;updateList();});
-    filters.append(f,select,counter,hints);
+    genre.addEventListener('change',()=>{genreFilter=genre.value;updateList();});
+    filters.append(f,select,genre,counter,hints);
     sidebar.append(filters,list);
     updateList();
     const reader=el('section','lib-reader');
@@ -212,6 +222,8 @@ export function mountLibraryApp(root: HTMLElement): void {
         const index=findCitation(activeWork!,citation.value);
         if(index<0){message('No existe el pasaje «'+citation.value+'».',true);return;}
         workOffset=Math.floor(index/45)*45;render();
+        const row=Array.from(root.querySelectorAll<HTMLElement>('.reader-line')).find(el=>el.dataset.c===activeWork?.lines[index]?.c);
+        row?.scrollIntoView({block:'center'});
         message('Mostrando el pasaje '+citation.value+'.');
       },'btn btn-outline');
       citation.addEventListener('keydown',e=>{if(e.key==='Enter')go.click();});
@@ -231,7 +243,10 @@ export function mountLibraryApp(root: HTMLElement): void {
         row.addEventListener('click',()=>{
           if(firstLine===null||lastLine!==null){firstLine=i;lastLine=null;}
           else{lastLine=i;}
+          const remembered=readerLines.scrollTop;
           render();
+          const replacement=root.querySelector<HTMLElement>('.reader-lines');
+          if(replacement)replacement.scrollTop=remembered;
         });
         readerLines.append(row);
       }
