@@ -188,6 +188,7 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
       '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
       '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'+
+      '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>'+
       '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'+
       '</Types>'},
     {path:'_rels/.rels',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -199,9 +200,12 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
       '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'+
       '<Relationship Id="rIdStyles1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+      '<Relationship Id="rIdSettings1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>'+
       '</Relationships>'},
     {path:'word/document.xml',content:wordDocument(edition)},
     {path:'word/styles.xml',content:styles(f)},
+    {path:'word/settings.xml',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<w:settings xmlns:w="'+XML+'"><w:updateFields w:val="true"/></w:settings>'},
     {path:'word/footer1.xml',content:footer()},
     {path:'docProps/core.xml',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '+
