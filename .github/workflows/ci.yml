@@ -27,3 +27,6 @@ jobs:
         run: npx playwright install --with-deps webkit
       - name: Probar guardado, exportación y restauración en WebKit
         run: npm run test:e2e
+
+      - name: Inspeccionar corpus Examinator2 (temporal)
+        run: node scripts/probe-examinator.mjs
