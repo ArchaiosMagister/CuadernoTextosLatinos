@@ -115,10 +115,17 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
       let letter=0;
       for(const option of q.options.filter(o=>o.enabled)){
         letter++;
-        const terms=option.slots.map(s=>s.value).join(', ');
-        const punctuation=terms?(option.statement.value.endsWith('.')?' ':' ')+terms+'.':'';
-        body+=paragraph(String.fromCharCode(96+letter)+'.  '+option.statement.value+punctuation,
-          paraProps({after:style?.subquestionGapPt??3,keepLines:true,left:700,hanging:250}));
+        let optionRuns=run(String.fromCharCode(96+letter)+'.  '+option.statement.value);
+        if(option.slots.length){
+          optionRuns+=run(' ');
+          option.slots.forEach((slot,index)=>{
+            if(index)optionRuns+=run(', ');
+            optionRuns+=run(slot.value,{italic:true});
+          });
+          optionRuns+=run('.');
+        }
+        body+='<w:p>'+paraProps({after:style?.subquestionGapPt??3,keepLines:true,left:700,hanging:250})+
+          optionRuns+'</w:p>';
       }
     }
   }
