@@ -59,7 +59,7 @@ test('ZIP STORE es autónomo, acepta UTF-8 y escribe directorio central',()=>{
 test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',()=>{
   const doc=fixture(),bytes=createNotebookDocx(doc),entries=files(bytes);
   for(const path of ['[Content_Types].xml','_rels/.rels','word/document.xml',
-    'word/_rels/document.xml.rels','word/footer1.xml','word/styles.xml','docProps/core.xml']){
+    'word/_rels/document.xml.rels','word/footer1.xml','word/styles.xml','word/settings.xml','docProps/core.xml']){
     assert.ok(entries.has(path),path);
     validXml(entries.get(path)!);
   }
