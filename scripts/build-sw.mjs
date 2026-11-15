@@ -1,4 +1,5 @@
-import { readdir, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 async function list(dir) {
@@ -16,7 +17,13 @@ if (!paths.some(p => p.includes('library/catalog.json'))
   || !paths.some(p => p.includes('library/works/'))) {
   throw new Error('No se puede preparar el acceso offline: la biblioteca está incompleta.');
 }
-const version = 'fase2-v1';
+// Fingerprint del contenido real, no solo de la lista de rutas.
+const hash = createHash('sha256');
+for (const filename of paths) {
+  hash.update(filename);
+  hash.update(await readFile('dist/' + filename.slice(2)));
+}
+const version = hash.digest('hex').slice(0, 16);
 const source = [
   'const CACHE_NAME = ' + JSON.stringify('cuaderno-textos-' + version) + ';',
   'const FILES = ' + JSON.stringify(paths) + ';',
