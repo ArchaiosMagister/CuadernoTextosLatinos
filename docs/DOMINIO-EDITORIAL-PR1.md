@@ -19,9 +19,11 @@
 3. Los campos numéricos de puntuación usan **centésimas enteras**. Una suma diferente de 800 es un borrador válido, pero no una edición lista; el sistema no redistribuye puntos.
 4. Los apartados de elección derivan su encabezado del número de opciones activas usando marcadores `{required}` y `{offered}`, evitando frases desincronizadas.
 5. Un texto con preguntas morfológicas sin palabras o apartados activos sin términos **no se certifica como listo** aunque sume 8. Ningún generador ficticio rellena los huecos.
-6. Las marcas comprueban offsets UTF-16, texto exacto y huella de contexto; si cambia el texto, pasan a **revisión necesaria** y no se trasladan a otro homógrafo silenciosamente.
-7. Las regeneraciones puras requieren una propuesta con evidencia y no pueden fingir cambios manuales; el motor proveedor y su validación curricular están expresamente pendientes. Una sustitución de un elemento bloqueado exige política explícita.
-8. La navegación solo modifica `EditorSessionV1`, que queda **fuera del cuaderno exportado**. Menú y vista previa futura deberán leer/escribir los mismos registros.
+6. Las marcas comprueban offsets UTF-16, texto exacto y huella de contexto; si cambia el texto, pasan a **revisión necesaria** y no se trasladan a otro homógrafo silenciosamente. **Protección adicional de revisión:** si la edición recorta por completo el intervalo de una marca y dejaría offsets fuera de la cadena, esta PR rechaza la operación *sin perder texto, marcas ni análisis*. El flujo futuro para retirar/reanclar explícitamente una marca antes de acortar el texto deberá diseñarse con historial en la PR técnica 2 o posterior.
+7. Las incidencias de revisión `scopeId` solo pueden referirse a la misma edición o a entidades de su propia aparición, nunca a otro texto del cuaderno. Una regeneración no puede simular una palabra manual ni siquiera mediante confirmación de reemplazo; la confirmación autoriza sustituir por propuestas generadas identificadas.
+
+8. Las regeneraciones puras requieren una propuesta con evidencia y no pueden fingir cambios manuales; el motor proveedor y su validación curricular están expresamente pendientes. Una sustitución de un elemento bloqueado exige política explícita.
+9. La navegación solo modifica `EditorSessionV1`, que queda **fuera del cuaderno exportado**. Menú y vista previa futura deberán leer/escribir los mismos registros.
 
 ## No implementado en esta PR (bloqueo deliberado)
 
