@@ -445,3 +445,37 @@ test('la regeneración de pregunta rechaza falsos candidatos manuales',()=>{
   proposal.options[0]!.slots[0]={...proposal.options[0]!.slots[0]!,value:'ficticio',origin:'manual',provenance:null};
   assert.throws(()=>regenerateQuestion(e,'place.1',q.id,proposal,AT2),/no puede crear o modificar una palabra manual/);
 });
+
+
+test('marca de revisión no puede apuntar a una entidad de otra aparición',()=>{
+  const e=edition();
+  const bad=structuredClone(e);
+  const foreignQuestionId=bad.placements[1]!.questions[0]!.id;
+  bad.placements[0]!.reviewFlags=[{id:'review.cross',scopeId:foreignQuestionId,reason:'Revisión ajena'}];
+  assert.throws(()=>validateEdition(bad),/ámbito no pertenece a esta aparición/);
+  bad.placements[0]!.reviewFlags[0]!.scopeId=bad.placements[0]!.questions[0]!.id;
+  assert.doesNotThrow(()=>validateEdition(bad));
+});
+
+test('editar el texto sin espacio para sus anclajes aborta sin perder marcas ni análisis',()=>{
+  const e=withMarks(edition());
+  const before=snapshotEdition(e);
+  assert.throws(()=>editPlacementText(e,'place.1','latin','x',AT2),/recorta un subrayado/);
+  assert.equal(snapshotEdition(e),before);
+  assert.equal(morph(e.placements[0]!).words[0]!.surface,'arma');
+  // Una sustitución del mismo tamaño conserva la marca como pendiente de revisión.
+  const altered=editPlacementText(e,'place.1','latin','anno et arma',AT2);
+  assert.equal(altered.placements[0]!.text.markup[0]!.reviewRequired,true);
+  assert.equal(checkEditionReadiness(altered).some(v=>v.code==='morph-anchors'),true);
+});
+
+test('ni con confirmación una regeneración puede fingir una palabra manual nueva',()=>{
+  const e=withSlots(edition());
+  const q=choice(e.placements[0]!);
+  const proposal=structuredClone(q);
+  proposal.options[0]!.slots[0]={...proposal.options[0]!.slots[0]!,
+    value:'palabra inventada',origin:'manual',provenance:null};
+  assert.throws(()=>regenerateQuestion(e,'place.1',q.id,proposal,AT2,'replace-confirmed'),
+    /no puede crear o modificar una palabra manual/);
+  assert.equal(choice(e.placements[0]!).options[0]!.slots[0]!.value,'instruxit');
+});
