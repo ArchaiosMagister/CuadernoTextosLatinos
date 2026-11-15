@@ -17,6 +17,7 @@ import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPla
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
 import { createAcademicControls } from './academic-controls.js';
 import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
+import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 
@@ -120,7 +121,9 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
       for(const option of q.options.filter(o=>o.enabled)){
         const row=node('li');
         const statement=option.statement.value;
-        row.append(document.createTextNode(statement));
+        for(const segment of splitInlineItalics(statement)){
+          row.append(segment.italic?node('em','',segment.text):document.createTextNode(segment.text));
+        }
         if(option.slots.length){
           row.append(document.createTextNode(' '));
           option.slots.forEach((slot,index)=>{
@@ -402,6 +405,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
           opt.append(head,textField('Enunciado del apartado',o.statement.value,value=>{
             apply((e,at)=>editOptionStatement(e,p.id,q.id,o.id,value,at));
           }));
+          opt.append(node('p','hint','Para aplicar cursiva a una palabra dentro del enunciado, rodéala de *asteriscos*.'));
           for(const [slotIndex,slot] of o.slots.entries()){
             const word=node('div','edition-inline-edit');
             word.append(textField('Palabra',slot.value,value=>{
