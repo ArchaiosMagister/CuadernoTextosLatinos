@@ -3,7 +3,7 @@
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
-import type { NotebookEditionV1, QuestionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
+import type { NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
 import { createEdition, placementFromCorpus } from '../core/edition-factory.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
   editSlotManual, editVocabulary, insertManualVocabulary, movePlacement, moveSession,
@@ -141,9 +141,6 @@ function freshId(prefix:string):string{return prefix+'.'+crypto.randomUUID();}
 function now():string{return new Date().toISOString();}
 function formatPoints(p:TextPlacementV1):string {
   return (scorePlacement(p)/100).toLocaleString('es-ES')+' / 8 puntos';
-}
-function editableField(value:string,at:string) {
-  return {value,origin:'manual' as const,locked:true,lastEditAt:at};
 }
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
@@ -369,8 +366,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
             }));
             word.append(action('Quitar',()=>{
               apply((e,at)=>validateEdition({...e,updatedAt:at,placements:e.placements.map(x=>
-                x.id!==p.id?x:{...x,questions:x.questions.map(item=>item.id!==q.id?item:{
-                  ...q,options:q.options.map(x=>x.id!==o.id?x:{...x,slots:x.slots.filter(s=>s.id!==slot.id)}),
+                x.id!==p.id?x:{...x,questions:x.questions.map(item=>item.id!==q.id||item.kind!=='choice'?item:{
+                  ...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:opt.slots.filter(s=>s.id!==slot.id)}),
                 })})}));paint();
             }));
             opt.append(word);
@@ -380,8 +377,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
             const value=input.value.trim();if(!value)return;
             apply((e,at)=>validateEdition({...e,updatedAt:at,
               placements:e.placements.map(x=>x.id!==p.id?x:{...x,questions:x.questions.map(item=>
-                item.id!==q.id?item:{...q,options:q.options.map(x=>x.id!==o.id?x:{...x,slots:[
-                  ...x.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
+                item.id!==q.id||item.kind!=='choice'?item:{...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:[
+                  ...opt.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
                     proposedLemmaId:null,provenance:null},
                 ]})})})}));paint();
           },'btn btn-outline');
