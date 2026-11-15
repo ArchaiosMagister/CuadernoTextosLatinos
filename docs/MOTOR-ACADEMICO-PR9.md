@@ -32,7 +32,7 @@ El motor no ofrece un botón que pueda regenerar otras preguntas como efecto sec
 
 ## Alcance y límites de la PR
 
-Incluye banco académico tipado, filtrado estricto por estado, trazabilidad, preparación de planes, confirmación CAS e historial, motor offline determinista y pruebas de regresión. **No incluye** importadores de bancos de Examinator2/GeneradorExamenes, estadísticas curriculares, asignación de soluciones, nuevas pantallas, Word/PDF, análisis automático de cualquier palabra o etiquetado gramatical automático. Los repertorios docentes reales se conectan mediante una instantánea offline fijada por SHA; las reservas sobre evolución fonética y semántica de prefijos se conservan sin bloquear su elegibilidad docente; falta el enlace contextual con la lematización de textos.
+Incluye banco académico tipado, filtrado estricto por estado, trazabilidad, preparación de planes, confirmación CAS e historial, motor offline determinista y pruebas de regresión. **Incluye** un adaptador offline a los cinco JSON pertinentes de GeneradorExamenes, pero **no incluye** sincronización automática desde otras aplicaciones, incorporación del analizador contextual de Examinator2, asignación de soluciones, nuevas pantallas, Word/PDF, análisis automático de cualquier palabra ni etiquetado gramatical automático. Los repertorios docentes reales se conectan mediante una instantánea offline fijada por SHA; las reservas sobre evolución fonética y semántica de prefijos se conservan sin bloquear su elegibilidad docente; falta el enlace contextual con la lematización de textos.
 
 ## Pruebas obligatorias
 
