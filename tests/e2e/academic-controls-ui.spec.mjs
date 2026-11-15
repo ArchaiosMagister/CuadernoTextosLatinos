@@ -64,6 +64,26 @@ test('academia: propuestas de prefijos solo cambian su apartado y respetan edici
   const undo=await readEdition(page);
   expect(undo.placements[0].questions.find(q=>q.kind==='choice')
     .options.find(o=>o.kind==='prefix').slots[0].value).toBe('interdependencia');
+  await page.locator('.edition-option').filter({hasText:'Prefijos'})
+    .getByRole('button',{name:'Proponer solo esta palabra'}).first().click();
+  const individual=page.getByRole('region',{name:'Revisar propuesta académica'});
+  await expect(individual.getByRole('checkbox',
+    {name:'Autorizo sustituir esta decisión manual protegida.'})).not.toBeChecked();
+  await individual.locator('select').selectOption({index:1});
+  await individual.getByRole('button',{name:'Confirmar propuesta'}).click();
+  await expect(page.locator('.edition-save-state')).toContainText('palabra manual está protegida');
+  const notOverwritten=await readEdition(page);
+  expect(notOverwritten).toEqual(undo);
+  await individual.getByRole('checkbox',
+    {name:'Autorizo sustituir esta decisión manual protegida.'}).check();
+  await individual.getByRole('button',{name:'Confirmar propuesta'}).click();
+  const changed=await readEdition(page);
+  const originalOptions=notOverwritten.placements[0].questions.find(q=>q.kind==='choice').options;
+  const nextOptions=changed.placements[0].questions.find(q=>q.kind==='choice').options;
+  expect(nextOptions.find(o=>o.kind==='prefix').slots[0].value).not.toBe('interdependencia');
+  expect(nextOptions.find(o=>o.kind==='prefix').slots.slice(1))
+    .toEqual(originalOptions.find(o=>o.kind==='prefix').slots.slice(1));
+  expect(nextOptions.filter(o=>o.kind!=='prefix')).toEqual(originalOptions.filter(o=>o.kind!=='prefix'));
 });
 
 test('academia: análisis morfológico selecciona ocurrencia exacta y guarda subrayado',async({page})=>{
