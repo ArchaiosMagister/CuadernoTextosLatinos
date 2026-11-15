@@ -4,15 +4,58 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="description" content="Base técnica del Cuaderno de textos latinos" />
-    <title>Cuaderno de textos latinos</title>
+    <meta name="description" content="Comprobador de persistencia local del Cuaderno de textos latinos" />
+    <title>Cuaderno de textos latinos — comprobación de almacenamiento</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <main id="app" aria-live="polite">
-      <h1>Cuaderno de textos latinos</h1>
-      <p>Base técnica en preparación. Aún no hay herramientas de edición.</p>
+    <main class="shell" id="app">
+      <header>
+        <p class="phase">FASE 1 · COMPROBADOR TÉCNICO</p>
+        <h1>Cuaderno de textos latinos</h1>
+        <p>Comprueba el almacenamiento local, las copias de seguridad y su recuperación. Este módulo no es todavía el editor de textos definitivo.</p>
+      </header>
+      <section class="panel" aria-labelledby="storage-heading">
+        <h2 id="storage-heading">Datos de este dispositivo</h2>
+        <dl class="metrics">
+          <div><dt>Textos</dt><dd id="count-texts">—</dd></div>
+          <div><dt>Etiquetas</dt><dd id="count-tags">—</dd></div>
+          <div><dt>Cuadernos</dt><dd id="count-notebooks">—</dd></div>
+          <div><dt>Revisión</dt><dd id="revision">—</dd></div>
+        </dl>
+        <p><strong>Última prueba guardada:</strong> <span id="last-text">Ninguna todavía.</span></p>
+        <button type="button" id="reload">Releer datos guardados</button>
+      </section>
+      <section class="panel" aria-labelledby="test-heading">
+        <h2 id="test-heading">1. Probar el guardado</h2>
+        <label for="latin-test">Texto latino de prueba (editable)</label>
+        <textarea id="latin-test" rows="3" maxlength="200000" spellcheck="false">Helvētiī cum omnibus suīs carrīs impedīmenta contulērunt.</textarea>
+        <div class="actions">
+          <button type="button" id="save-test">Guardar texto de prueba</button>
+        </div>
+        <p class="note">El botón actualiza únicamente el registro de prueba y conserva los demás textos que pudieras haber importado.</p>
+      </section>
+      <section class="panel" aria-labelledby="backup-heading">
+        <h2 id="backup-heading">2. Copia de seguridad</h2>
+        <p>Descarga una copia JSON con un control de integridad SHA-256. Consérvala fuera del navegador para poder recuperar tus datos.</p>
+        <button type="button" id="export-backup">Exportar copia JSON</button>
+      </section>
+      <section class="panel" aria-labelledby="restore-heading">
+        <h2 id="restore-heading">3. Recuperar una copia</h2>
+        <label for="backup-file">Archivo JSON previamente exportado</label>
+        <input type="file" id="backup-file" accept=".json,application/json" />
+        <label class="confirmation">
+          <input type="checkbox" id="confirm-replace" />
+          He guardado una copia de mis datos actuales y entiendo que esta recuperación los sustituirá.
+        </label>
+        <button type="button" id="restore-backup">Verificar y restaurar</button>
+        <p class="note">Antes de escribir, el archivo se comprueba íntegramente y se solicitará confirmación. Si algo falla, no se sustituye el corpus actual.</p>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite">Iniciando comprobación del almacenamiento…</p>
+      <footer>
+        <p><strong>Importante:</strong> los datos están en este navegador y este dispositivo. No se sincronizan con el ordenador ni el móvil. Safari puede eliminar datos del sitio en determinadas circunstancias; conserva siempre copias externas. No hay cuentas, servidor ni publicación de textos.</p>
+      </footer>
     </main>
   </body>
 </html>
