@@ -423,7 +423,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-paper-head { text-align:center; border-top: .5pt solid #777; border-bottom:.5pt solid #777; padding:.55em 0 .65em; margin-bottom:.85em; }
 .edition-paper-head h2 { font:700 1.06em/1.32 "Palatino Linotype",Palatino,Georgia,serif; margin:0 0 .24em; }
 .edition-paper-source { font-size:1em; margin:0; line-height:1.4; }
-.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.6em 0 2em; line-height:inherit; }
+.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.6em 0 6em; line-height:inherit; }
 .edition-underlined { text-decoration:underline; text-decoration-thickness: .6pt; text-underline-offset:1pt; }
 .edition-roman { font-style:normal; }
 .edition-review { text-decoration-color:#b33333; text-decoration-style:wavy; }
