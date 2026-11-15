@@ -10,7 +10,7 @@ import type { WorkspaceRepository, EditionSnapshotV1 } from '../storage/workspac
 export class MorphTokenSelectionError extends Error {
   constructor(msg:string){super(msg);this.name='MorphTokenSelectionError';}
 }
-const fail=(msg:string):never=>{throw new MorphTokenSelectionError(msg);};
+function fail(msg:string):never { throw new MorphTokenSelectionError(msg); }
 const letters=/[\p{L}\p{M}]/u;
 export interface MorphTokenTargetV1 {
   editionId:string;
