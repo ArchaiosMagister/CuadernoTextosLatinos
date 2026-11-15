@@ -642,6 +642,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
         paint();return;
       }
       exportReview=null;
+      paint(); // El aviso no debe permanecer abierto tras exportar.
       if(kind==='word'){
         exportBytes(createNotebookDocx(edition),docFilename(edition,warnings.length>0));
         setMessage('DOCX '+(warnings.length?'de borrador ':'')+'preparado. Comprueba su maquetación antes de imprimirlo.');
