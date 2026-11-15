@@ -15,7 +15,7 @@ import {
 export class AcademicEngineError extends Error {
   constructor(message: string) { super(message); this.name = 'AcademicEngineError'; }
 }
-const fail = (msg: string): never => { throw new AcademicEngineError(msg); };
+function fail(msg: string): never { throw new AcademicEngineError(msg); }
 const normalize = (value: string): string => value.normalize('NFC').toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
 const choose = <T>(items: readonly T[], seed: number): T => items[((seed % items.length) + items.length) % items.length]!;
 function checkSeed(seed: number): void {
@@ -207,7 +207,7 @@ export class AcademicQuestionEngineV1 {
     const o=getOption(q,target.optionId);
     const items=this.assignOption(q,o,target.desiredCount,target.sourceForms,target.newSlotIds,
       target.allowManualReplacement??false,target.seed,new Set());
-    return makePlan(edition,target,'subquestion',this.bank,{optionId:o.id,replaceLocked:target.allowManualReplacement,
+    return makePlan(edition,target,'subquestion',this.bank,{optionId:o.id,replaceLocked:target.allowManualReplacement??false,
       assignments:[{optionId:o.id,items}]});
   }
   /** Solo la pregunta 4 de elección es autogenerable; no se inventan traducciones ni sintaxis. */
@@ -230,7 +230,7 @@ export class AcademicQuestionEngineV1 {
       }
     }
     if(!assignments.length)fail('La pregunta no contiene apartados activos');
-    return makePlan(edition,target,'choice-question',this.bank,{replaceLocked:target.allowManualReplacement,assignments});
+    return makePlan(edition,target,'choice-question',this.bank,{replaceLocked:target.allowManualReplacement??false,assignments});
   }
 
   private regenerateFromPlan(edition:NotebookEditionV1,plan:AcademicPlanV1,at:string):NotebookEditionV1 {

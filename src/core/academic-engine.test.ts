@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { VerifiedAcademicBankV1, AcademicBankError, type AcademicBankRecordV1 } from './academic-bank.js';
-import { AcademicQuestionEngineV1, AcademicEngineError, type AcademicPlanV1 } from './academic-engine.js';
+import { AcademicQuestionEngineV1, AcademicEngineError } from './academic-engine.js';
 import { createEdition, createPlacement } from './edition-factory.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
 import { WorkspaceRepository, WorkspaceConflictError } from '../storage/workspace-repository.js';
@@ -88,7 +88,7 @@ test('no se inventan candidatos cuando falta el banco',()=>{
 });
 test('la forma de partida es obligatoria al regenerar modificación preverbial',()=>{
   const ed=corpus(),t=target(ed,'preverb');
-  assert.throws(()=>engine().previewSlot(ed,{...t,sourceForm:undefined}),/forma de partida/);
+  assert.throws(()=>engine().previewSlot(ed,{placementId:t.placementId,questionId:t.questionId,optionId:t.optionId,slotId:t.slotId,expectedRevision:t.expectedRevision}),/forma de partida/);
 });
 test('el candidato no puede repetirse ni ser la misma palabra',()=>{
   const e=engine(),ed=corpus(),t=target(ed,'phonetics');
