@@ -114,12 +114,15 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
     const style=q.styleOverride;
     const before=style?.beforePt??(index===1?8:f.questionGapPt);
     const after=style?.afterPt??(q.kind==='choice'?4:0);
+    // Mantener unida la batería de preguntas cortas. Sin keepNext, la primera
+    // quedaba huérfana al final de la página 2 en documentos largos reales.
     body+=paragraph(index+'.  '+exportQuestionHeading(q,f.showPoints),
-      paraProps({before,after,keepNext:q.kind==='choice',keepLines:true,left:360,hanging:260}),
+      paraProps({before,after,keepNext:true,keepLines:true,left:360,hanging:260}),
       {bold:true});
     if(q.kind==='choice'){
       let letter=0;
-      for(const option of q.options.filter(o=>o.enabled)){
+      const enabledOptions=q.options.filter(o=>o.enabled);
+      for(const option of enabledOptions){
         letter++;
         let optionRuns=run(String.fromCharCode(96+letter)+'.  '+option.statement.value);
         if(option.slots.length){
@@ -130,7 +133,8 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
           });
           optionRuns+=run('.');
         }
-        body+='<w:p>'+paraProps({after:style?.subquestionGapPt??3,keepLines:true,left:700,hanging:250})+
+        body+='<w:p>'+paraProps({after:style?.subquestionGapPt??3,
+          keepLines:true,keepNext:letter<enabledOptions.length,left:700,hanging:250})+
           optionRuns+'</w:p>';
       }
     }
