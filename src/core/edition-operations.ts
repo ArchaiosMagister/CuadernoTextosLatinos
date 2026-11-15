@@ -75,6 +75,13 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
     if(key==='latin'){
       if(typeof value!=='string')fail('El texto latino no puede ser nulo');
       const newLatin=value;
+      // El contrato V1 exige offsets dentro de la longitud UTF-16 del texto.
+      // No podemos recortar un anclaje y mantener sus coordenadas inválidas.
+      // Nunca se descarta silenciosamente la marca ni el análisis docente:
+      // primero debe retirarse/reanclarse de forma explícita (operación futura).
+      if(p.text.markup.some(mark=>mark.endUtf16>newLatin.length)){
+        fail('La edición recorta un subrayado fuera del texto. Revisa o retira primero las marcas afectadas.');
+      }
       editedText.markup=p.text.markup.map(m=>({...m,
         reviewRequired:m.reviewRequired
           || newLatin.slice(m.startUtf16,m.endUtf16)!==m.exact
@@ -243,8 +250,10 @@ export function regenerateQuestion(e:NotebookEditionV1,placementId:string,questi
       const existingSlots=new Map(old.options.flatMap(o=>o.slots).map(w=>[w.id,w]));
       for(const proposed of replacement.options.flatMap(o=>o.slots)){
         if(proposed.origin==='generated')assertCandidate(proposed);
-        else if(JSON.stringify(existingSlots.get(proposed.id))!==JSON.stringify(proposed))
-          fail('Una regeneración no puede crear o modificar una palabra manual');
+        else if(lockedPolicy==='preserve'
+          && JSON.stringify(existingSlots.get(proposed.id))!==JSON.stringify(proposed)){
+          fail('Una regeneración sin confirmación no puede crear o modificar una palabra manual');
+        }
       }
     }
     if(old.kind==='choice'&&replacement.kind==='choice'&&lockedPolicy==='preserve'){
