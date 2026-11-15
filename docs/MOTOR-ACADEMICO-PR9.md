@@ -1,6 +1,6 @@
 # PR técnica #9 — Motor académico de propuestas y regeneración
 
-**Estado:** implementación de dominio y pruebas, aislada de la interfaz y de la importación de bancos reales. No ejecuta propuestas en el arranque ni toca cuadernos existentes.
+**Estado:** implementación de dominio y pruebas, aislada de la interfaz. Integración selectiva de bancos reales documentada en `docs/INTEGRACION-BANCOS-DOCENTES-PR9.md`; la app pública sigue sin conectarse a ellos. No ejecuta propuestas en el arranque ni toca cuadernos existentes.
 
 ## Objetivo
 
@@ -9,7 +9,7 @@ Interconectar el contrato editorial de la PR #7 con el CAS/historial de la PR #8
 ## Frontera filológica y proveedor
 
 - `VerifiedAcademicBankV1` recibe registros con ID estable, tipo (`morphology`, `preverb`, `phonetics`, `prefix`, `latinism`), curso `latin-ii`, valor explícito, evidencia `{provider,recordId,bankRevision,decisionId}`, revisión y un manifiesto con origen y responsable de verificación.
-- **La marca `verified` es una declaración de la fuente, NO una validación filológica realizada por este módulo.** Los adaptadores reales de Examinator2 / GeneradorExamenes deberán importar solamente datos con evidencia individual auditada. Las pruebas usan **fixtures sintéticas**, jamás publicables como contenido académico.
+- **La marca `verified` es una declaración de la fuente, NO una validación filológica realizada por este módulo.** El adaptador real `academic-teacher-adapter.ts` importa exclusivamente los registros y estados que el JSON docente acredita; mantiene 655 fichas fonéticas y 285 prefijos como pendientes en vez de inventar una certificación individual. Las pruebas unitarias del motor continúan utilizando **fixtures sintéticas** independientes de los bancos reales.
 - Los registros `needs-review` y `rejected` permanecen reconocibles para auditoría, pero no se proponen. Una falta de formas verificadas detiene la regeneración, sin inventar contenido ni cambiar la puntuación.
 - Morfología exige coincidencia exacta de **forma y subrayado del token concreto**, lema y análisis verificados. Si hay más de una lectura distinta de la misma forma, se señala `ambiguous` y se requiere elección del docente; no se aplica una preferencia ciega.
 - Modificación preverbial exige **forma de partida por casilla**. No deduce prefijos o derivaciones a partir de grafías ni inventa relaciones. Evolución fonética, prefijos y latinismos solo utilizan fichas ya aportadas por el banco.
@@ -32,7 +32,7 @@ El motor no ofrece un botón que pueda regenerar otras preguntas como efecto sec
 
 ## Alcance y límites de la PR
 
-Incluye banco académico tipado, filtrado estricto por estado, trazabilidad, preparación de planes, confirmación CAS e historial, motor offline determinista y pruebas de regresión. **No incluye** importadores de bancos de Examinator2/GeneradorExamenes, estadísticas curriculares, asignación de soluciones, nuevas pantallas, Word/PDF, análisis automático de cualquier palabra o etiquetado gramatical automático. Los conectores de bancos son el siguiente bloque dentro de la fase del motor, después de que se contrasten las fuentes reales.
+Incluye banco académico tipado, filtrado estricto por estado, trazabilidad, preparación de planes, confirmación CAS e historial, motor offline determinista y pruebas de regresión. **No incluye** importadores de bancos de Examinator2/GeneradorExamenes, estadísticas curriculares, asignación de soluciones, nuevas pantallas, Word/PDF, análisis automático de cualquier palabra o etiquetado gramatical automático. Los repertorios docentes reales se conectan de manera selectiva mediante una instantánea offline fijada por SHA; aún faltan verificaciones individuales de evolución fonética y semántica de prefijos y el enlace contextual con la lematización de textos.
 
 ## Pruebas obligatorias
 
