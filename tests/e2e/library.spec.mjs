@@ -152,7 +152,7 @@ test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de
     const spans = Array.from(document.querySelectorAll('.reader-latin')).slice(first, first + 4);
     const contents = spans.map(node=>node.textContent);
     return [contents[0].slice(15),contents[1],contents[2],contents[3].slice(0,18)]
-      .map(part=>part.trim()).filter(Boolean).join(' ').replace(/\\s+/g,' ').trim();
+      .map(part=>part.trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
   }, index);
   const refs = await page.locator('.reader-ref').allTextContents();
   await selectText(page, index, 15, index + 3, 18);
