@@ -257,8 +257,26 @@ export function validateEdition(input:unknown):NotebookEditionV1 {
     for(const f of p.reviewFlags)register(f,path+'.reviewFlags');
     if(new Set(p.grammaticalTagIds).size!==p.grammaticalTagIds.length)fail(path+'.grammaticalTagIds','etiqueta duplicada');
   });
+  // Cada marca de revisión pertenece a la edición o a la aparición que la declara.
+  // Un ID de otra aparición, aunque exista, no es un ámbito válido.
   for(const p of e.placements){
-    for(const f of p.reviewFlags)if(!ids.has(f.scopeId))fail('reviewFlags.scopeId','referencia a entidad inexistente');
+    const localIds = new Set<string>([e.id,p.id]);
+    for(const m of p.text.markup)localIds.add(m.id);
+    for(const q of p.questions){
+      localIds.add(q.id);
+      if(q.kind==='morphology')for(const w of q.words)localIds.add(w.id);
+      if(q.kind==='choice')for(const o of q.options){
+        localIds.add(o.id);
+        for(const w of o.slots)localIds.add(w.id);
+      }
+    }
+    for(const v of p.vocabulary)localIds.add(v.id);
+    for(const f of p.reviewFlags)localIds.add(f.id);
+    for(const f of p.reviewFlags){
+      if(!localIds.has(f.scopeId)){
+        fail('reviewFlags.scopeId','el ámbito no pertenece a esta aparición');
+      }
+    }
   }
   return e;
 }
