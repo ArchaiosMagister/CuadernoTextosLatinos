@@ -13,7 +13,11 @@ const mimeTypes = {
 createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
-    const file = resolve(root, '.' + (pathname.endsWith('/') ? pathname + 'index.html' : pathname));
+    // Montaje de prueba bajo la misma subruta que usa GitHub Pages.
+    const mount = '/CuadernoTextosLatinos';
+    const nested = pathname === mount || pathname.startsWith(mount + '/');
+    const localPath = nested ? pathname.slice(mount.length) || '/' : pathname;
+    const file = resolve(root, '.' + (localPath.endsWith('/') ? localPath + 'index.html' : localPath));
     if (!file.startsWith(root + sep)) {
       response.writeHead(403);
       response.end('Prohibido');
