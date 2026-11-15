@@ -457,7 +457,7 @@ export function mountLibraryApp(root: HTMLElement): void {
   function render():void {
     root.replaceChildren();
     const head=el('div','workspace-header');
-    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · FASE 2'),el('h1','','Biblioteca y cuadernos'));
+    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · VERSIÓN 0.3.1'),el('h1','','Biblioteca y cuadernos'));
     const tag=el('span','offline-indicator',offlinePrepared?'Biblioteca preparada sin conexión':'Preparando biblioteca sin conexión');
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
