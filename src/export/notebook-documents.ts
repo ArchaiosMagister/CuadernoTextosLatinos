@@ -222,7 +222,8 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
     {path:'word/document.xml',content:wordDocument(edition)},
     {path:'word/styles.xml',content:styles(f)},
     {path:'word/settings.xml',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
-      '<w:settings xmlns:w="'+XML+'"><w:updateFields w:val="true"/></w:settings>'},
+      '<w:settings xmlns:w="'+XML+'"><w:updateFields w:val="true"/>'+
+      '<w:doNotExpandShiftReturn/></w:settings>'},
     {path:'word/footer1.xml',content:footer()},
     {path:'docProps/core.xml',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '+
