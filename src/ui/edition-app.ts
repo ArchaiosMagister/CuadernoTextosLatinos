@@ -7,7 +7,7 @@ import type { NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../c
 import { createEdition, placementFromCorpus } from '../core/edition-factory.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
   editSlotManual, editVocabulary, insertManualVocabulary, movePlacement, moveSession,
-  questionDisplayText, scorePlacement, setQuestionPoints, toggleOption, toggleQuestion,
+  scorePlacement, setQuestionPoints, toggleOption, toggleQuestion,
 } from '../core/edition-operations.js';
 import { validateEdition } from '../core/edition-validation.js';
 import type { EditorSessionV1 } from '../core/edition-model.js';
