@@ -52,6 +52,7 @@ La copia usa `format:'cuaderno-textos-latinos-workspace'`, `backupVersion:2`, fe
 - Unitarias: creación, CAS por cuaderno, CAS del corpus, dos pestañas concurrentes, fallo de transacción, corrupción, versión futura, historial y 25 deshacer, aislamiento entre ediciones.
 - Migración: vacíos y poblados, dos cuadernos con texto compartido, orden, huellas, doble ejecución, estado antiguo modificado, conflicto con workspace existente, IDs deterministas, backup v1 y límites del modelo.
 - Copias v2: lectura congruente, SHA inválido, versión desconocida, preflight, confirmaciones, restauración, conflicto de epoch, lectura posterior y preservación del estado ante fallos.
+- WebKit real: nuevos casos de commit, deshacer tras recargar, migración real entre dos bases IndexedDB aisladas, importación idempotente y backup/restauración v2 en el motor Safari.
 - No regresiones: todas las pruebas anteriores, compilación y batería Playwright WebKit del lector, almacenamiento legacy y restauración v1.
 
 **Criterio de integración:** PR verde en CI, sin fusión o despliegue hasta autorización explícita. Se añade este módulo a la rama `main` únicamente cuando el profesor lo indique; la UI actual no cambia.
