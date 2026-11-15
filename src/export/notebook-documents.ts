@@ -21,17 +21,8 @@ function paraProps(options:{
   keepNext?:boolean;keepLines?:boolean;pageBreak?:boolean;left?:number;hanging?:number;
   topBorder?:boolean;bottomBorder?:boolean;
 }={}):string {
+  // Orden CT_PPrBase de WordprocessingML: keep*, borders, spacing, ind, jc.
   let s='<w:pPr>';
-  if(options.align)s+='<w:jc w:val="'+options.align+'"/>';
-  if(options.before!==undefined||options.after!==undefined||options.linePt!==undefined){
-    const a:Record<string,string|number>={};
-    if(options.before!==undefined)a['w:before']=twips(options.before);
-    if(options.after!==undefined)a['w:after']=twips(options.after);
-    if(options.linePt!==undefined){a['w:line']=twips(options.linePt);a['w:lineRule']='exact';}
-    s+='<w:spacing'+attrs(a)+'/>';
-  }
-  if(options.left!==undefined||options.hanging!==undefined)
-    s+='<w:ind'+attrs({'w:left':options.left??0,'w:hanging':options.hanging??0})+'/>';
   if(options.keepNext)s+='<w:keepNext/>';
   if(options.keepLines)s+='<w:keepLines/>';
   if(options.pageBreak)s+='<w:pageBreakBefore/>';
@@ -43,6 +34,16 @@ function paraProps(options:{
     }
     s+='</w:pBdr>';
   }
+  if(options.before!==undefined||options.after!==undefined||options.linePt!==undefined){
+    const a:Record<string,string|number>={};
+    if(options.before!==undefined)a['w:before']=twips(options.before);
+    if(options.after!==undefined)a['w:after']=twips(options.after);
+    if(options.linePt!==undefined){a['w:line']=twips(options.linePt);a['w:lineRule']='exact';}
+    s+='<w:spacing'+attrs(a)+'/>';
+  }
+  if(options.left!==undefined||options.hanging!==undefined)
+    s+='<w:ind'+attrs({'w:left':options.left??0,'w:hanging':options.hanging??0})+'/>';
+  if(options.align)s+='<w:jc w:val="'+options.align+'"/>';
   return s+'</w:pPr>';
 }
 function run(text:string,{bold=false,italic=false,underline=false}:{
