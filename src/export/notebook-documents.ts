@@ -46,17 +46,19 @@ function paraProps(options:{
   if(options.align)s+='<w:jc w:val="'+options.align+'"/>';
   return s+'</w:pPr>';
 }
-function run(text:string,{bold=false,italic=false,underline=false}:{
-  bold?:boolean;italic?:boolean;underline?:boolean;
+function run(text:string,{bold=false,italic=false,underline=false,sizePt}:{
+  bold?:boolean;italic?:boolean;underline?:boolean;sizePt?:number;
 }={}):string {
   if(!text)return '';
-  const flags=(bold?'<w:b/>':'')+(italic?'<w:i/>':'')+(underline?'<w:u w:val="single"/>':'');
+  const flags=(bold?'<w:b/>':'')+(italic?'<w:i/>':'')+
+    (underline?'<w:u w:val="single"/>':'')+
+    (sizePt===undefined?'':'<w:sz w:val="'+Math.round(sizePt*2)+'"/>');
   const parts=text.replace(/\r\n?/g,'\n').split('\n');
   return '<w:r>'+(flags?'<w:rPr>'+flags+'</w:rPr>':'')+
     parts.map((part,i)=>(i?'<w:br/>':'')+'<w:t xml:space="preserve">'+esc(part)+'</w:t>').join('')+
     '</w:r>';
 }
-function paragraph(text:string,props:string,flags:{bold?:boolean;italic?:boolean;underline?:boolean}={}):string{
+function paragraph(text:string,props:string,flags:{bold?:boolean;italic?:boolean;underline?:boolean;sizePt?:number}={}):string{
   return '<w:p>'+props+run(text,flags)+'</w:p>';
 }
 function latin(p:TextPlacementV1,f:PageFormatV1):string{
@@ -73,7 +75,9 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
     cursor=mark.endUtf16;
   }
   body+=run(source.slice(cursor),{italic:true});
-  return '<w:p>'+paraProps({align:'both',after:18,linePt:f.lineSpacingPt})+body+'</w:p>';
+  // El modelo Pages separa ampliamente el pasaje latino y el vocabulario:
+  // 6 em con la fuente elegida, coherente con la hoja HTML de impresión.
+  return '<w:p>'+paraProps({align:'both',after:6*f.fontSizePt,linePt:f.lineSpacingPt})+body+'</w:p>';
 }
 function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
   const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.order-b.order);
@@ -94,11 +98,11 @@ function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
     '<w:tblBorders><w:top w:val="single" w:sz="6"/><w:left w:val="single" w:sz="6"/>'+
     '<w:bottom w:val="single" w:sz="6"/><w:right w:val="single" w:sz="6"/>'+
     '<w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'+
-    '<w:tblCellMar><w:top w:w="65" w:type="dxa"/><w:bottom w:w="65" w:type="dxa"/>'+
+    '<w:tblCellMar><w:top w:w="30" w:type="dxa"/><w:bottom w:w="30" w:type="dxa"/>'+
     '<w:left w:w="85" w:type="dxa"/><w:right w:w="85" w:type="dxa"/></w:tblCellMar>'+
     '<w:tblLayout w:type="fixed"/></w:tblPr>'+
     '<w:tblGrid><w:gridCol w:w="'+availableTwips+'"/></w:tblGrid>'+
-    body+'</w:tbl>'+paragraph('',paraProps({after:4}));
+    body+'</w:tbl>';
 }
 export function exportQuestionHeading(q:QuestionV1,showPoints:boolean):string {
   const text=questionDisplayText(q);
@@ -147,8 +151,11 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
     p.text.work?run((p.text.author?', ':'')+p.text.work,{italic:true}):'',
     p.text.reference?run(' '+p.text.reference):'',
   ].join('');
+  // El tamaño explícito evita que Word/LibreOffice sustituyan la métrica del
+  // título y lo dividan en dos líneas cuando cabe en el A4 del modelo docente.
   const heading=paragraph(p.text.title,
-    paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),{bold:true});
+    paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),
+    {bold:true,sizePt:f.fontSizePt});
   const source='<w:p>'+paraProps({align:'center',after:16,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
   return heading+source+latin(p,f)+vocabulary(p,f)+questions(p,f);
