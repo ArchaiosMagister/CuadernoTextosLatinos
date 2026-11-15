@@ -122,8 +122,12 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
         const statement=option.statement.value;
         row.append(document.createTextNode(statement));
         if(option.slots.length){
-          row.append(document.createTextNode((statement.endsWith('.')?' ':' ') +
-            option.slots.map(s=>s.value).join(', ')+'.'));
+          row.append(document.createTextNode(' '));
+          option.slots.forEach((slot,index)=>{
+            if(index)row.append(document.createTextNode(', '));
+            row.append(node('em','',slot.value));
+          });
+          row.append(document.createTextNode('.'));
         }
         list.append(row);
       }
@@ -136,6 +140,15 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   footer.title='Numeración provisional de hojas en pantalla; la paginación real se validará en la exportación';
   paper.append(footer);
   return paper;
+}
+/** Hoja imprimible derivada del mismo modelo que la vista previa, sin datos duplicados. */
+export function renderNotebookPrintPages(edition:NotebookEditionV1):HTMLElement {
+  const root=node('main','edition-print-root');
+  root.setAttribute('aria-label','Cuaderno A4 para impresión PDF');
+  for(const [index,p] of edition.placements.entries()){
+    root.append(paperFor(edition,p,index,edition.placements.length));
+  }
+  return root;
 }
 function freshId(prefix:string):string{return prefix+'.'+crypto.randomUUID();}
 function now():string{return new Date().toISOString();}
@@ -619,11 +632,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   }
   function openPrint(edition:NotebookEditionV1):void{
     document.querySelector('.edition-print-root')?.remove();
-    const target=node('main','edition-print-root');
-    target.setAttribute('aria-label','Cuaderno A4 para impresión PDF');
-    for(const [index,p] of edition.placements.entries()){
-      target.append(paperFor(edition,p,index,edition.placements.length));
-    }
+    const target=renderNotebookPrintPages(edition);
     document.body.append(target);
     const cleanup=()=>{target.remove();window.removeEventListener('afterprint',cleanup);};
     window.addEventListener('afterprint',cleanup,{once:true});
