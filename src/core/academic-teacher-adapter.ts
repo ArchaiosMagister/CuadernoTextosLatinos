@@ -39,6 +39,10 @@ export interface TeacherAcademicAuditV1 {
   id: string;
   kind: TeacherAcademicKind;
   status: AcademicBankRecordV1['status'];
+  /** Elegibilidad docente heredada; no significa validación lexicográfica externa. */
+  teacherEligible: boolean;
+  /** Solo true para las formas contrastadas individualmente en verified-overrides. */
+  individuallyExternallyVerified: boolean;
   sourcePath: string;
   originalRecord: string;
   /** Enunciado / dato de origen, no una solución generada por este adaptador. */
@@ -60,6 +64,18 @@ export class TeacherAcademicImportError extends Error {
 }
 function bad(message:string):never {throw new TeacherAcademicImportError(message);}
 function same(value:string):string{return value.normalize('NFC').toLocaleLowerCase('es').trim();}
+/** Exclusiones docentes vinculantes de decisiones-docentes.json y criterios-docentes.mjs de GeneradorExamenes.
+ * Se documentan de forma independiente del banco apto para impedir una reactivación accidental.
+ */
+const PHONETIC_EXCLUSIONS = new Set([
+  'adpodiare','adripare','brochum','stuppaculum','refectum',
+  'inde','pirum','scrinium','quinionem','chœrilum','œagrum','œnomaum','œtam',
+].map(v=>v.toLocaleLowerCase('es').replaceAll('æ','ae').replaceAll('œ','oe')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'')));
+function phoneticKey(v:string):string {
+  return v.toLocaleLowerCase('es').replaceAll('æ','ae').replaceAll('œ','oe')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
 function text(value:unknown,label:string):string {
   if(typeof value!=='string'||!value.trim())bad(label+': vacío o inválido');
   return value;
@@ -79,9 +95,11 @@ function nonnegativeId(n:number,label:string):void {
 /** IMPORTANTE: elegibilidad como *enunciado docente* no equivale a certificar
  * una etimología ni una acepción que la fuente marca como orientativa.
  * - Latínismos: repertorio docente cerrado, términos textuales, no soluciones auto.
- * - Preverbios: asociaciones recogidas como atestiguadas y bases no ambiguas.
- * - Prefijos: solo decisión semántica explícitamente «revisado:».
- * - Fonética: APTO_PROPUESTO está en revisión, incluso si consta URL de fuente.
+ * - Preverbios: todas las asociaciones docentes son elegibles; si la base es homónima,
+ *   solo se consulta mediante el enunciado completo de su ficha (sero/volo).
+ * - Prefijos: las 286 voces son utilizables; el significado orientativo conserva su aviso.
+ * - Fonética: APTO_PROPUESTO autoriza el sorteo docente bajo N01–N20. NO certifica
+ *   una etimología externa individual ni habilita entradas excluidas.
  * - Morfología: SOLO singleForms con forma, lema, etiquetas y enlace individuales.
  */
 export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnapshotV1):TeacherAcademicImportResultV1 {
@@ -110,6 +128,7 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
     sourceKey:keyof typeof paths,sourceRow:string,note:string,
     params:{lemmaId?:string|null;surface?:string|null;analysis?:string|null;sourceForm?:string|null;
       decisionId?:string|null;sourceReference?:string|null;semanticReviewRequired?:boolean;
+      individuallyExternallyVerified?:boolean;
       rules?:readonly string[];transmission?:string|null;meaning?:string|null}={}):void{
     uniqueKey(seenAcademic,id,'candidatos académicos');
     const path=paths[sourceKey];
@@ -117,11 +136,14 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
       id,kind,value:text(value,id+'.value'),lemmaId:params.lemmaId??null,
       surface:params.surface??null,analysis:params.analysis??null,
       sourceForm:params.sourceForm??null,courses:[LATIN_II],status,
+      ...(kind==='phonetics'&&params.rules?{phoneticRules:params.rules}:{}),
       evidence:{provider:'github:ArchaiosMagister/GeneradorExamenes/'+path,
         recordId:sourceRow,bankRevision:revision,decisionId:params.decisionId??null},
     };
     entries.push(rec);
-    audit.set(id,Object.freeze({id,kind,status,sourcePath:path,originalRecord:sourceRow,
+    audit.set(id,Object.freeze({id,kind,status,teacherEligible:status==='verified',
+      individuallyExternallyVerified:params.individuallyExternallyVerified??false,
+      sourcePath:path,originalRecord:sourceRow,
       note,sourceReference:params.sourceReference??null,
       semanticReviewRequired:params.semanticReviewRequired??false,
       phoneticRules:Object.freeze([...(params.rules??[])]),
@@ -139,10 +161,12 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
       const term=text(derivative,'preverbios.derivatives');
       uniqueKey(relatives,same(term),'derivados de '+prompt);
       const id='ge.preverb.'+p.id+'.'+(ix+1);
-      put('preverb',id,term,p.ambiguousPrompt?'needs-review':'verified',
+      put('preverb',id,term,'verified',
         'preverb',`items[id=${p.id}].derivatives[${ix}]`,
-        `Base docente: ${head}; asociación tomada de lista de derivados atestiguados; no se han generado verbos por analogía.`,
-        {sourceForm:prompt,decisionId:p.ambiguousPrompt?null:'teacher-attested-unambiguous'});
+        `Base docente: ${head}; compuesto atestiguado en la lista. ${p.ambiguousPrompt
+          ? 'Para distinguir homónimos se exige seleccionar el enunciado completo.' : ''}`,
+        {sourceForm:p.ambiguousPrompt?head:prompt,
+          decisionId:p.ambiguousPrompt?'teacher-attested-qualified-base':'teacher-attested-unambiguous'});
     }
     if(seenPreverbs.has(same(prompt))&&!p.ambiguousPrompt)bad('Base repetida sin aviso de ambigüedad: '+prompt);
     seenPreverbs.add(same(prompt));
@@ -154,10 +178,10 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
     const status=text(p.meaningStatus,'prefijos.meaningStatus');
     if(!status.startsWith('orientativo;')&&!status.startsWith('revisado:'))bad('Estado semántico de prefijos no reconocido: '+status);
     const reviewed=status.startsWith('revisado:');
-    put('prefix','ge.prefix.'+(ix+1),v,reviewed?'verified':'needs-review',
+    put('prefix','ge.prefix.'+(ix+1),v,'verified',
       'prefix',`items[${ix}]`,
       `Prefijo de la lista: ${text(p.prefix,'prefijo')}. ${status}`,
-      {decisionId:reviewed?'semantic-reviewed':'semantic-review-pending',
+      {decisionId:reviewed?'semantic-reviewed':'teacher-approved-semantic-hint',
         semanticReviewRequired:!reviewed,meaning:text(p.meaningHint,'pista de significado')});
   }
   const seenLatinisms=new Set<string>();
@@ -175,14 +199,21 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
     const id=text(p.id,'fonetica.id');
     uniqueKey(seenPhonetics,id,'fonética');
     const status=text(p.estado,'fonetica.estado');
-    if(!Array.isArray(p.normas)||p.normas.some(n=>!/^N(?:0[1-9]|1[0-9]|20)$/.test(n)))bad('Normas fuera de N01-N20: '+id);
+    if(!Array.isArray(p.normas)||!p.normas.length
+      ||new Set(p.normas).size!==p.normas.length
+      ||p.normas.some(n=>!/^N(?:0[1-9]|1[0-9]|20)$/.test(n)))bad('Normas fuera de N01-N20 o repetidas: '+id);
     const source=p.fuente?.trim()||null;
-    // APTO_PROPUESTO se conserva como pendiente; nunca se promueve por URL o por número de normas.
-    const state:AcademicBankRecordV1['status']=status==='APTO_PROPUESTO'?'needs-review':'rejected';
+    if(!['APTO_PROPUESTO','REVISAR','EXCLUIDA'].includes(status))bad('Estado fonético desconocido: '+status);
+    const excluded=PHONETIC_EXCLUSIONS.has(phoneticKey(p.latin));
+    const state:AcademicBankRecordV1['status']=excluded||status==='EXCLUIDA'?'rejected'
+      :status==='APTO_PROPUESTO'?'verified':'needs-review';
     put('phonetics','ge.phonetics.'+id,text(p.latin,'fonetica.latin'),state,
       'phonetics',`items[id=${id}]`,
-      `Origen: ${status}; resultado que propone la fuente: ${text(p.castellano,'fonetica.castellano')}. Requiere validación individual antes de examen.`,
-      {sourceReference:source,decisionId:'phonetic-individual-review-pending',
+      `Estado docente: ${status}; resultado de la fuente: ${text(p.castellano,'fonetica.castellano')}.
+      ${excluded?'Exclusión docente expresa: no sortear.':
+        'Elegibilidad para sorteo docente, NO certificación lexicográfica de toda la cadena.'}`,
+      {sourceReference:source,decisionId:excluded?'teacher-explicit-exclusion':
+        status==='APTO_PROPUESTO'?'teacher-apt-for-selection':'teacher-review-pending',
         rules:p.normas,transmission:p.tipoTransmision,meaning:p.castellano});
   }
   const seenMorphology=new Set<string>();
@@ -195,7 +226,7 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
       'morphology',`singleForms[lang=lat][${ix}]`,
       'Solo esta forma y análisis explícitos de verified-overrides; no se extiende la evidencia al paradigma. '+(m.note??''),
       {lemmaId:lemma,surface:form,analysis:tags,sourceReference:url,
-        decisionId:'individually-verified-single-form'});
+        individuallyExternallyVerified:true,decisionId:'individually-verified-single-form'});
   }
   const bank=new VerifiedAcademicBankV1(manifest,entries);
   const pendingByKind={preverb:0,phonetics:0,prefix:0,latinism:0,morphology:0};
@@ -204,8 +235,11 @@ export function importTeacherAcademicSources(snapshot:TeacherAcademicSourceSnaps
 }
 
 /** Convertir una forma conjugada del texto a lema exige análisis contrastado, no quitar un prefijo. */
-export function teacherPreverbBases(snapshot:TeacherAcademicSourceSnapshotV1):readonly {lemma:string;enunciado:string;requiresDisambiguation:boolean}[]{
-  return snapshot.preverbs.map(p=>({lemma:p.prompt,enunciado:p.enunciado,requiresDisambiguation:p.ambiguousPrompt}));
+export function teacherPreverbBases(snapshot:TeacherAcademicSourceSnapshotV1):readonly {
+  lemma:string;enunciado:string;selectionKey:string;requiresDisambiguation:boolean
+}[]{
+  return snapshot.preverbs.map(p=>({lemma:p.prompt,enunciado:p.enunciado,
+    selectionKey:p.ambiguousPrompt?p.enunciado:p.prompt,requiresDisambiguation:p.ambiguousPrompt}));
 }
 /** Buscar candidato por ID, mostrar trazabilidad docente y avisos de semántica sin generar respuestas. */
 export function teacherAuditRecord(report:TeacherAcademicImportResultV1,recordId:string):TeacherAcademicAuditV1|null {

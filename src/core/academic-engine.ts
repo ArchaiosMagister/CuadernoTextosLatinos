@@ -42,6 +42,8 @@ export interface AcademicTargetV1 {
   placementId: string;
   questionId: string;
   expectedRevision: number;
+  /** Filtro curricular: solo normas N01–N20; vacío equivale a cero candidatas. */
+  phoneticRules?: readonly string[];
 }
 export interface AcademicSlotTargetV1 extends AcademicTargetV1 {
   optionId: string;
@@ -91,8 +93,13 @@ export interface AcademicPlanV1 {
   bankId: string;
   bankRevision: string;
 }
-function validSlotRecord(row: AcademicBankRecordV1,kind:AcademicSlotKindV1,sourceForm:string|null):boolean {
-  return row.kind===kind && (kind!=='preverb'||(sourceForm!==null&&row.sourceForm===sourceForm));
+function validSlotRecord(row: AcademicBankRecordV1,kind:AcademicSlotKindV1,sourceForm:string|null,
+  selectedRules?:readonly string[]):boolean {
+  if(row.kind!==kind || (kind==='preverb' && (sourceForm===null||row.sourceForm!==sourceForm)))return false;
+  // No basta con pasar un ID de una ficha de otra norma en el momento de confirmar.
+  if(kind==='phonetics'&&selectedRules!==undefined &&
+    (!row.phoneticRules||!row.phoneticRules.every(rule=>selectedRules.includes(rule))))return false;
+  return true;
 }
 function existingValues(q: Extract<QuestionV1,{kind:'choice'}>, exclusion: readonly string[]):Set<string> {
   const ids=new Set(exclusion);
@@ -118,7 +125,8 @@ export class AcademicQuestionEngineV1 {
     if(option.kind==='preverb'&&!sourceForm)fail('Es necesario elegir la forma de partida preverbial');
     const taken=existingValues(q,[slot.id]);
     taken.add(normalize(slot.value));
-    const rows=this.bank.verified(option.kind,sourceForm).filter(row=>!taken.has(normalize(row.value)));
+    const rows=this.bank.verified(option.kind,sourceForm,
+      option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalize(row.value)));
     return {status:slot.locked?'locked':rows.length?'ready':'no-candidates',
       candidates:rows.map(r=>({id:r.id,value:r.value,lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts(option.kind).needsReview};
@@ -164,7 +172,8 @@ export class AcademicQuestionEngineV1 {
 
   private assignOption(q:Extract<QuestionV1,{kind:'choice'}>,option:ChoiceOptionV1,
     count:number,sourceForms:readonly string[]|undefined,newIds:readonly string[]|undefined,
-    allowManualReplacement:boolean,seed:number,excluded:Set<string>):AcademicAssignmentV1[] {
+    allowManualReplacement:boolean,seed:number,excluded:Set<string>,
+    selectedPhoneticRules?:readonly string[]):AcademicAssignmentV1[] {
     if(!Number.isSafeInteger(count)||count<0||count>30)fail('Cantidad solicitada inválida (0–30)');
     const slots=option.slots;
     if(!allowManualReplacement && slots.some((s,i)=>s.locked&&i>=count)){
@@ -190,7 +199,8 @@ export class AcademicQuestionEngineV1 {
         continue;
       }
       const current=existing?normalize(existing.value):null;
-      const candidates=this.bank.verified(option.kind,sourceForm).filter(row=>{
+      const candidates=this.bank.verified(option.kind,sourceForm,
+        option.kind==='phonetics'?selectedPhoneticRules:undefined).filter(row=>{
         const key=normalize(row.value);
         return key!==current&&!excludedOthers.has(key);
       });
@@ -206,7 +216,7 @@ export class AcademicQuestionEngineV1 {
     const q=getChoice(getPlacement(edition,target.placementId),target.questionId);
     const o=getOption(q,target.optionId);
     const items=this.assignOption(q,o,target.desiredCount,target.sourceForms,target.newSlotIds,
-      target.allowManualReplacement??false,target.seed,new Set());
+      target.allowManualReplacement??false,target.seed,new Set(),target.phoneticRules);
     return makePlan(edition,target,'subquestion',this.bank,{optionId:o.id,replaceLocked:target.allowManualReplacement??false,
       assignments:[{optionId:o.id,items}]});
   }
@@ -220,7 +230,8 @@ export class AcademicQuestionEngineV1 {
       if(!o.enabled)continue;
       const count=target.desiredCountByKind[o.kind]??o.slots.length;
       const items=this.assignOption(q,o,count,target.sourceFormsByKind?.[o.kind],
-        target.newSlotIdsByKind?.[o.kind],target.allowManualReplacement??false,target.seed+idx*31,excluded);
+        target.newSlotIdsByKind?.[o.kind],target.allowManualReplacement??false,target.seed+idx*31,excluded,
+        target.phoneticRules);
       assignments.push({optionId:o.id,items});
       for(const entry of items){
         const candidate=entry.candidateId?this.bank.findVerified(entry.candidateId):null;
@@ -260,7 +271,7 @@ export class AcademicQuestionEngineV1 {
         if(slot.locked&&!plan.replaceLocked)fail('Casilla protegida manualmente');
         if(candidate.candidateId===null)fail('Falta propuesta de palabra individual');
         const row=this.bank.findVerified(candidate.candidateId);
-        if(!row||!validSlotRecord(row,option.kind,candidate.sourceForm))fail('Propuesta académica no válida');
+        if(!row||!validSlotRecord(row,option.kind,candidate.sourceForm,plan.target.phoneticRules))fail('Propuesta académica no válida');
         if(normalize(row.value)===normalize(slot.value))fail('La propuesta no cambia la palabra');
         const taken=existingValues(q,[slot.id]);
         if(taken.has(normalize(row.value)))fail('La palabra ya aparece en otro apartado');
@@ -276,7 +287,7 @@ export class AcademicQuestionEngineV1 {
         }
         if(old?.locked&&!plan.replaceLocked)fail('No se puede sustituir una palabra protegida');
         const row=this.bank.findVerified(entry.candidateId);
-        if(!row||!validSlotRecord(row,option.kind,entry.sourceForm))fail('Propuesta fuera de banco/curso/fuente');
+        if(!row||!validSlotRecord(row,option.kind,entry.sourceForm,plan.target.phoneticRules))fail('Propuesta fuera de banco/curso/fuente');
         const valueKey=normalize(row.value);
         if(used.has(valueKey))fail('Dos casillas recibirían la misma palabra');
         used.add(valueKey);

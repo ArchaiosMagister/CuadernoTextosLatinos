@@ -272,3 +272,38 @@ test('no se oculta una ambigüedad si un candidato está pendiente de revisión'
   assert.equal(p.status,'ready');
   assert.equal(p.pendingReview,1);
 });
+
+
+test('filtrar fonética por leyes impartidas conserva la opción de usar el banco completo',()=>{
+  const ed=corpus();
+  const e=engine([
+    record('phonetics',0,{phoneticRules:['N05']}),
+    record('phonetics',1,{phoneticRules:['N07']}),
+    record('phonetics',2,{phoneticRules:['N05','N07']}),
+  ]);
+  const t=target(ed,'phonetics');
+  assert.equal(e.previewSlot(ed,{...t,phoneticRules:['N05']}).candidates.length,1);
+  assert.equal(e.previewSlot(ed,{...t,phoneticRules:['N07']}).candidates.length,1);
+  assert.equal(e.previewSlot(ed,{...t,phoneticRules:[]}).status,'no-candidates');
+  assert.equal(e.previewSlot(ed,t).candidates.length,3);
+  assert.throws(()=>e.previewSlot(ed,{...t,phoneticRules:['N99']}),/Filtro/);
+  assert.throws(()=>e.prepareSlot(ed,{...t,phoneticRules:['N05']},'phonetics.1'),/No hay alternativas/);
+  assert.throws(()=>e.prepareSubquestion(ed,{...targeted(ed,'phonetics'),desiredCount:2,seed:0,
+    phoneticRules:['N05']}),/No hay suficientes/);
+});
+
+test('la confirmación CAS no admite una ficha fonética de una ley excluida por el filtro',async()=>{
+  const e=engine([
+    record('phonetics',0,{phoneticRules:['N05']}),
+    record('phonetics',1,{phoneticRules:['N07']}),
+  ]);
+  const db=repo(),ed=await create(db),t={...target(ed,'phonetics'),phoneticRules:['N05']};
+  const plan=e.prepareSlot(ed,t,'phonetics.0');
+  const injected={...plan,assignments:plan.assignments.map(a=>({...a,
+    items:a.items.map(item=>({...item,candidateId:'phonetics.1'})),
+  }))};
+  await assert.rejects(e.commit(db,injected,LATER),/Propuesta académica no válida/);
+  assert.equal((await db.loadEdition(ed.id))?.revision,1);
+  const success=await e.commit(db,plan,LATER);
+  assert.equal(choice(success.edition).options[1]!.slots[0]!.value,'phonetics-0');
+});

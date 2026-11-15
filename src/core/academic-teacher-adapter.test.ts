@@ -46,29 +46,38 @@ function edition(){
   q.options[3]!.slots=[{id:'slot.latinism',value:'ad hoc',origin:'manual',locked:false,proposedLemmaId:null,provenance:null}];
   return {book,q};
 }
-test('clasificación conservadora: derivados atestiguados y latinismos son utilizables como enunciados',()=>{
+test('elegibilidad docente: derivados atestiguados y latinismos son utilizables como enunciados',()=>{
   const result=importTeacherAcademicSources(fixture());
   const bank=result.bank;
   assert.equal(bank.count,9);
   assert.deepEqual(bank.verified('preverb','mitto').map(x=>x.value),['admitto','remitto']);
   assert.equal(bank.verified('preverb','sero').length,0);
+  assert.deepEqual(bank.verified('preverb','sero, -ere, -rui, sertum').map(x=>x.value),['insero']);
   assert.deepEqual(bank.verified('latinism').map(x=>x.value),['a posteriori']);
-  assert.equal(result.pendingByKind.preverb,1);
+  assert.equal(result.pendingByKind.preverb,0);
   assert.equal(bank.manifest.revision.includes(sha.slice(0,12)),true);
 });
-test('fonética APTO_PROPUESTO y significado orientativo de prefijo nunca se promueven por tener fuente',()=>{
+test('fichas aptas y prefijos de significado orientativo se sortean con sus reservas visibles',()=>{
   const r=importTeacherAcademicSources(fixture());
-  assert.equal(r.bank.verified('phonetics').length,0);
-  assert.equal(r.bank.statusCounts('phonetics').needsReview,1);
-  assert.deepEqual(r.bank.verified('prefix').map(x=>x.value),['Antifaz']);
+  assert.deepEqual(r.bank.verified('phonetics').map(x=>x.value),['fabam']);
+  assert.deepEqual(r.bank.verified('phonetics',null,['N05']).map(x=>x.value),['fabam']);
+  assert.equal(r.bank.verified('phonetics',null,['N07']).length,0);
+  assert.equal(r.bank.verified('phonetics',null,[]).length,0);
+  assert.deepEqual(r.bank.verified('prefix').map(x=>x.value),['Antifaz','Interdependencia']);
   const record=teacherAuditRecord(r,'ge.phonetics.EVF-0104');
-  assert.equal(record?.status,'needs-review');
+  assert.equal(record?.status,'verified');
+  assert.equal(record?.teacherEligible,true);
+  assert.equal(record?.individuallyExternallyVerified,false);
   assert.deepEqual(record?.phoneticRules,['N05']);
   assert.equal(record?.sourceReference,'https://example.org/ficha');
   assert.equal(record?.meaning,'haba');
   const prefix=teacherAuditRecord(r,'ge.prefix.2');
   assert.equal(prefix?.semanticReviewRequired,true);
+  assert.equal(prefix?.teacherEligible,true);
+  assert.equal(prefix?.individuallyExternallyVerified,false);
   assert.match(prefix?.note??'',/orientativo/);
+  const morphology=teacherAuditRecord(r,'ge.morphology.1');
+  assert.equal(morphology?.individuallyExternallyVerified,true);
 });
 test('formas con dos lecturas individuales mantienen dos candidatos verificados pero nunca uno preferido',()=>{
   const r=importTeacherAcademicSources(fixture());
@@ -77,6 +86,7 @@ test('formas con dos lecturas individuales mantienen dos candidatos verificados 
   assert.equal(r.bank.verified('morphology','duces').length,0);
   const bases=teacherPreverbBases(fixture());
   assert.equal(bases[1]?.requiresDisambiguation,true);
+  assert.equal(bases[1]?.selectionKey,'sero, -ere, -rui, sertum');
 });
 test('motor real con lista docente restringe candidatos por base, apartado y estado',()=>{
   const r=importTeacherAcademicSources(fixture());
@@ -89,6 +99,8 @@ test('motor real con lista docente restringe candidatos por base, apartado y est
   assert.equal(preview.candidates.length,2);
   assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:preverb.id,
     slotId:preverb.slots[0]!.id,sourceForm:'sero',expectedRevision:0}).status,'no-candidates');
+  assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:preverb.id,
+    slotId:preverb.slots[0]!.id,sourceForm:'sero, -ere, -rui, sertum',expectedRevision:0}).status,'ready');
   const anotherSlot=q.options[3]!.slots[0]!;
   assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:q.options[3]!.id,
     slotId:anotherSlot.id,expectedRevision:0}).candidates.length,1);
@@ -106,14 +118,50 @@ test('el snapshot completo de GeneradorExamenes tiene el inventario revisado y e
   const stats={preverb:r.bank.statusCounts('preverb'),phonetics:r.bank.statusCounts('phonetics'),
     prefix:r.bank.statusCounts('prefix'),latinism:r.bank.statusCounts('latinism'),
     morphology:r.bank.statusCounts('morphology')};
-  assert.deepEqual(stats.preverb,{verified:857,needsReview:25,rejected:0});
-  assert.deepEqual(stats.phonetics,{verified:0,needsReview:655,rejected:0});
-  assert.deepEqual(stats.prefix,{verified:1,needsReview:285,rejected:0});
+  assert.deepEqual(stats.preverb,{verified:882,needsReview:0,rejected:0});
+  assert.deepEqual(stats.phonetics,{verified:655,needsReview:0,rejected:0});
+  assert.deepEqual(stats.prefix,{verified:286,needsReview:0,rejected:0});
   assert.deepEqual(stats.latinism,{verified:87,needsReview:0,rejected:0});
   assert.deepEqual(stats.morphology,{verified:55,needsReview:0,rejected:0});
   assert.equal(r.bank.count,1965);
   assert.equal(r.bank.verified('morphology','dux').length,2);
   assert.equal(r.bank.verified('preverb','mitto').some(x=>x.value==='remitto'),true);
-  assert.equal(r.bank.verified('phonetics').length,0);
-  assert.equal(r.bank.verified('prefix').some(x=>x.value==='Interdependencia'),false);
+  assert.equal(r.bank.verified('phonetics').length,655);
+  assert.equal(r.bank.verified('phonetics',null,['N05']).some(x=>x.value==='fabam'),true);
+  assert.equal(r.bank.verified('prefix').some(x=>x.value==='Interdependencia'),true);
+  assert.equal(r.bank.verified('preverb','sero').length,0);
+  assert.equal(r.bank.verified('preverb','sero, -ere, -rui, sertum').length,6);
+});
+
+
+test('las decisiones de exclusión siguen prevaleciendo sobre un estado APTO_PROPUESTO',()=>{
+  const example=fixture().phonetics[0]!;
+  const x=importTeacherAcademicSources({...fixture(),phonetics:[
+    {...example,latin:'chœrilum',id:'EVF-5000'},
+    {...example,id:'EVF-5001',estado:'REVISAR'},
+    {...example,id:'EVF-5002',estado:'EXCLUIDA'},
+  ]});
+  assert.equal(x.bank.verified('phonetics').length,0);
+  assert.deepEqual(x.bank.statusCounts('phonetics'),{verified:0,needsReview:1,rejected:2});
+  assert.equal(teacherAuditRecord(x,'ge.phonetics.EVF-5000')?.teacherEligible,false);
+  assert.throws(()=>importTeacherAcademicSources({...fixture(),phonetics:[
+    {...example,normas:['N05','N05']},
+  ]}),/repetidas/);
+  assert.throws(()=>x.bank.verified('phonetics',null,['N99']),/Filtro/);
+});
+
+test('las bases homónimas se diferencian por enunciado completo sin bloquear compuestos admitidos',()=>{
+  const s=fixture();
+  const data={...s,preverbs:[...s.preverbs,
+    {id:85,prompt:'sero',enunciado:'sero, -ere, sevi, satum',derivatives:['obsero'],ambiguousPrompt:true},
+    {id:118,prompt:'volo',enunciado:'volo, -are, -avi, -atum',derivatives:['advolo'],ambiguousPrompt:true},
+    {id:119,prompt:'volo',enunciado:'volo, velle, volui',derivatives:['malo'],ambiguousPrompt:true},
+  ]};
+  const report=importTeacherAcademicSources(data);
+  assert.equal(report.bank.verified('preverb','sero').length,0);
+  assert.deepEqual(report.bank.verified('preverb','sero, -ere, -rui, sertum').map(x=>x.value),['insero']);
+  assert.deepEqual(report.bank.verified('preverb','sero, -ere, sevi, satum').map(x=>x.value),['obsero']);
+  assert.deepEqual(report.bank.verified('preverb','volo, -are, -avi, -atum').map(x=>x.value),['advolo']);
+  assert.deepEqual(report.bank.verified('preverb','volo, velle, volui').map(x=>x.value),['malo']);
+  assert.equal(report.pendingByKind.preverb,0);
 });

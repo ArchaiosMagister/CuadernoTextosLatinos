@@ -20,7 +20,10 @@ export interface AcademicBankRecordV1 {
   /** Forma de partida de un derivado preverbial, si kind=preverb. */
   sourceForm: string | null;
   courses: readonly (typeof LATIN_II)[];
+  /** `verified` implica elegible según el banco docente; no certifica una etimología completa. */
   status: 'verified' | 'needs-review' | 'rejected';
+  /** Leyes fonéticas seleccionables N01–N20, nunca incluye FIX_M. */
+  phoneticRules?: readonly string[];
   evidence: EvidenceV1;
 }
 
@@ -86,7 +89,14 @@ function copyRecord(input: AcademicBankRecordV1, revision: string, ids: Set<stri
   }
   if (input.kind === 'preverb' && sourceForm === null) throw new AcademicBankError('El derivado preverbial necesita forma de partida');
   if (input.kind !== 'preverb' && sourceForm !== null) throw new AcademicBankError('Fuente preverbial fuera de su apartado');
+  const phoneticRules = input.phoneticRules;
+  if (phoneticRules !== undefined && (input.kind !== 'phonetics' || !Array.isArray(phoneticRules)
+    || !phoneticRules.length || new Set(phoneticRules).size !== phoneticRules.length
+    || phoneticRules.some(rule=>typeof rule !== 'string' || !/^N(?:0[1-9]|1[0-9]|20)$/.test(rule)))) {
+    throw new AcademicBankError('Las normas de cada étimo deben ser únicas y pertenecer a N01–N20');
+  }
   return Object.freeze({id,kind:input.kind,value,lemmaId,analysis,surface,sourceForm,
+    ...(phoneticRules === undefined ? {} : {phoneticRules:Object.freeze([...phoneticRules])}),
     courses:Object.freeze([...input.courses]),status:input.status,
     evidence:Object.freeze({provider,recordId,bankRevision,decisionId:evidence.decisionId})});
 }
@@ -108,12 +118,25 @@ export class VerifiedAcademicBankV1 {
     this.byId = new Map(rows.map(x => [x.id,x]));
     this.count = rows.length;
   }
-  /** Las propuestas no verificadas permanecen en el registro, pero JAMÁS se sortean. */
-  verified(kind: AcademicKindV1, surfaceOrSource: string | null = null): readonly AcademicBankRecordV1[] {
+  /** Selecciona solo fichas elegibles por la fuente. En fonética aplica también el filtro curricular.
+   * Si no se seleccionan leyes en Latín II, se consideran disponibles las N01–N20 (sin FIX_M).
+   * Un filtro explícito vacío no produce candidatos.
+   */
+  verified(kind: AcademicKindV1, surfaceOrSource: string | null = null,
+    selectedPhoneticRules?: readonly string[]): readonly AcademicBankRecordV1[] {
+    if(selectedPhoneticRules !== undefined && (kind !== 'phonetics'
+      || !Array.isArray(selectedPhoneticRules)
+      || new Set(selectedPhoneticRules).size !== selectedPhoneticRules.length
+      || selectedPhoneticRules.some(rule=>!/^N(?:0[1-9]|1[0-9]|20)$/.test(rule)))) {
+      throw new AcademicBankError('Filtro de leyes fonéticas inválido o aplicado a otro apartado');
+    }
+    const allowed=selectedPhoneticRules===undefined?null:new Set(selectedPhoneticRules);
     return [...this.byId.values()].filter(row => row.status === 'verified' && row.kind === kind
       && row.courses.includes(LATIN_II)
       && (kind === 'morphology' ? row.surface === surfaceOrSource
-        : kind === 'preverb' ? row.sourceForm === surfaceOrSource : true))
+        : kind === 'preverb' ? row.sourceForm === surfaceOrSource : true)
+      && (allowed===null || (row.phoneticRules !== undefined
+        && row.phoneticRules.every(rule=>allowed.has(rule)))))
       .sort((a,b) => a.id.localeCompare(b.id,'en'));
   }
   findVerified(id: string): AcademicBankRecordV1 | null {
