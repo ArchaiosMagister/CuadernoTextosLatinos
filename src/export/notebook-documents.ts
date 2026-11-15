@@ -78,7 +78,7 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
   body+=run(source.slice(cursor),{italic:true});
   // El modelo Pages separa ampliamente el pasaje latino y el vocabulario:
   // 6 em con la fuente elegida, coherente con la hoja HTML de impresión.
-  return '<w:p>'+paraProps({align:'both',after:6*f.fontSizePt,linePt:f.lineSpacingPt})+body+'</w:p>';
+  return '<w:p>'+paraProps({align:'both',after:5.3*f.fontSizePt,linePt:f.lineSpacingPt})+body+'</w:p>';
 }
 function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
   const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.order-b.order);
@@ -158,7 +158,7 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
   // título y lo dividan en dos líneas cuando cabe en el A4 del modelo docente.
   const heading=paragraph(p.text.title,
     paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),
-    {bold:true,sizePt:f.fontSizePt});
+    {bold:true,sizePt:Math.max(8,f.fontSizePt-1)});
   const source='<w:p>'+paraProps({align:'center',after:16,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
   return heading+source+latin(p,f)+vocabulary(p,f)+questions(p,f);
