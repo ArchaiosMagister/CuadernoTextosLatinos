@@ -13,7 +13,7 @@ test('biblioteca Examinator: buscar, elegir pasajes y guardarlos en un cuaderno'
   await page.locator('.reader-line').nth(1).click();
   await expect(page.locator('.selection-description')).toContainText('palabras');
   await page.getByRole('button', { name: 'Añadir selección a mis textos' }).click();
-  await expect(page.getByText('Nuevo texto')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nuevo texto' })).toBeVisible();
   const latin = await page.locator('.editor-form textarea').inputValue();
   expect(latin.split(/\s+/).length).toBeGreaterThan(6);
   await page.getByRole('button', { name: 'Guardar texto' }).click();
@@ -54,8 +54,11 @@ test('la biblioteca completa está disponible tras desconectarse de internet', a
   await page.goto('/');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await expect(page.locator('.offline-indicator')).toContainText('preparada sin conexión');
-  await page.context().setOffline(true);
+  // WebKit en CI presenta un fallo interno con context.setOffline(true) al navegar.
+  // Simulamos pérdida total de red abortando los requests no servidos por el SW.
+  await page.route('**/*', route => route.abort('internetdisconnected'));
   await page.reload();
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.getByRole('combobox',{name:'Filtrar por autor'}).selectOption('Eutropio');
