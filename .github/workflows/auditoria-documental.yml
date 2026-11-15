@@ -1,0 +1,53 @@
+name: Auditoría visual de documentos
+
+on:
+  pull_request:
+    paths:
+      - 'src/export/**'
+      - 'src/ui/**'
+      - 'src/core/edition-factory.ts'
+      - 'scripts/audit-**'
+      - '.github/workflows/auditoria-documental.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentos-reales:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Obtener código de la PR
+        uses: actions/checkout@v4
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias fijadas
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Compilar motor editorial y página
+        run: npm run build
+      - name: Generar tres cuadernos DOCX reales
+        run: node scripts/audit-real-documents.mjs
+      - name: Preparar renderizador y lector de PDF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer poppler-utils >/tmp/audit-apt.log
+          npx playwright install --with-deps chromium
+      - name: Renderizar Word y exportación de navegador
+        run: |
+          mkdir -p audit-output/word-pdf
+          libreoffice -env:UserInstallation=file:///tmp/cuaderno-audit-$$ --headless --convert-to pdf \
+            --outdir audit-output/word-pdf audit-output/breve.docx audit-output/largo.docx audit-output/varios.docx
+          node scripts/audit-browser-print.mjs
+      - name: Examinar páginas A4 y paginación física
+        run: python3 scripts/audit-layout.py
+      - name: Adjuntar documentos y páginas renderizadas para revisión visual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuaderno-auditoria-word-pdf
+          path: audit-output/
+          if-no-files-found: warn
+          retention-days: 7
