@@ -4,12 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="description" content="Comprobador de persistencia local del Cuaderno de textos latinos" />
-    <title>Cuaderno de textos latinos — comprobación de almacenamiento</title>
-    <link rel="stylesheet" href="./styles.css?v=0.2.2" />
-    <script type="module" src="./main.js?v=0.2.2"></script>
+    <meta name="description" content="Biblioteca latina offline y editor de cuadernos" />
+    <title>Cuaderno de textos latinos — Biblioteca y editor</title>
+    <link rel="stylesheet" href="./styles.css?v=0.3.0" />
+    <script type="module" src="./main.js?v=0.3.0"></script>
   </head>
   <body>
+    <section id="phase2" class="workspace-container" aria-label="Banco y editor de textos"></section>
+    <details id="diagnostics" class="legacy-details"><summary>Diagnóstico de almacenamiento y copias de seguridad (fase 1)</summary>
     <main class="shell" id="app">
       <header>
         <p class="phase">FASE 1 · COMPROBADOR TÉCNICO · VERSIÓN 0.2.2</p>
@@ -65,5 +67,6 @@
         <p><strong>Importante:</strong> los datos están únicamente en este navegador y dispositivo. Safari puede eliminarlos en determinadas circunstancias. Conserva siempre copias JSON externas. No hay sincronización, cuentas ni servidor de textos.</p>
       </footer>
     </main>
+    </details>
   </body>
 </html>

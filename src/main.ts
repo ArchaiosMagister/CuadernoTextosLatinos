@@ -1,3 +1,4 @@
+import { mountLibraryApp } from './ui/library-app.js';
 import { createBackup, MAX_BACKUP_CHARACTERS, readBackup } from './core/backup.js';
 import { serializeCorpus } from './core/archive.js';
 import type { LatinText } from './core/model.js';
@@ -134,6 +135,7 @@ async function saveVerificationText(): Promise<void> {
         : [...original.texts, nextText],
     };
     snapshot = await repo.save(updated, snapshot.revision);
+    window.dispatchEvent(new CustomEvent('corpus-updated'));
     controls.sample.value = nextText.latin;
     setStatus('Guardado confirmado en IndexedDB (revisión ' + snapshot.revision + '). Puedes descargar una copia de esta versión.');
   });
@@ -263,3 +265,13 @@ void (async () => {
     refresh();
   }
 })();
+
+/** El banco y el editor comparten la misma persistencia de la fase 1. */
+mountLibraryApp(required<HTMLElement>('phase2'));
+window.addEventListener('corpus-updated', () => {
+  if (busy) return;
+  void (async () => {
+    try { snapshot = await repo.load(); refresh(); }
+    catch { /* el mensaje de error se mostrará en el módulo correspondiente */ }
+  })();
+});

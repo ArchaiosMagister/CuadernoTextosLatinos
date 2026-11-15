@@ -25,13 +25,8 @@ const idOf = (urn) => urn.replace(/[^a-zA-Z0-9._-]/g, '_');
 
 async function examinadorIncludes() {
   const source = await download(RAW_EXAMINATOR + 'js/incluidos.js');
-  const context = { EXDATA: {}, window: {} };
-  context.window.EXDATA = context.EXDATA;
+  const context = { EXDATA: {} };
   vm.runInNewContext(source, context, { timeout: 12000, filename: 'Examinator2-incluidos.js' });
-  // Eutropio se conserva en datos.js; César se encuentra en incluidos.js.
-  // Se consulta exactamente el mismo corpus fijado en la revisión del autor.
-  const originalData = await download(RAW_EXAMINATOR + 'js/datos.js');
-  vm.runInNewContext(originalData, context, { timeout: 20000, filename: 'Examinator2-datos.js' });
   const files = Object.entries(context.EXDATA).filter(([key]) => key.startsWith('/app/data/incluidos/') && key.endsWith('.json'));
   const selected = [];
   for (const [path, contents] of files) {
