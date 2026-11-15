@@ -17,7 +17,7 @@ Se podrá ampliar el catálogo de otros autores mediante consulta online en otra
 - Buscar por autor u obra desde la columna lateral.
 - Filtrar autores y abrir una obra en el lector.
 - Ir a un pasaje por referencia (p. ej. 1.1, 1.1.2).
-- Tocar el inicio y el final de una selección en el iPad, conservando la cita.
+- Seleccionar libremente palabras o fragmentos de longitud variable con ratón, teclado o los tiradores táctiles de Safari en iPad, sin limitarse a capítulos o párrafos. El botón de incorporación se activa al seleccionar; la referencia se conserva sin copiar números del margen.
 - Incorporar un fragmento en «Mis textos».
 - Crear, editar, guardar, buscar y eliminar textos propios.
 - Crear y renombrar cuadernos, añadir y quitar textos, ordenar su contenido.
