@@ -41,4 +41,4 @@ Incluye banco académico tipado, filtrado estricto por estado, trazabilidad, pre
 - Misma palabra, otra subpregunta, otra pregunta o otra aparición: sustitución aislada y verificable.
 - Bloqueo manual, errores de candidatos, faltantes, ambigüedad, homógrafos, cambios de banco y conflictos de revisión: aborto sin perder datos.
 - Regeneración de pregunta completa con puntuación de **8 puntos** e historial de una sola operación.
-- `npm run check` y WebKit E2E existentes en GitHub Actions; hasta entonces no fusionar ni publicar.
+- `npm run check` y WebKit E2E, incluida una prueba nueva de regeneración persistida y deshacer tras recargar Safari/WebKit; hasta entonces no fusionar ni publicar.
