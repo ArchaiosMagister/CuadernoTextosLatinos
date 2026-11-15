@@ -139,3 +139,22 @@ test('academia: la modificación preverbial exige seleccionar base concreta',asy
   const q=e.placements[0].questions.find(x=>x.kind==='choice');
   expect(q.options.find(o=>o.kind==='preverb').slots).toHaveLength(5);
 });
+
+
+test('academia: la selección nativa en la hoja A4 se ancla al token seleccionado',async({page})=>{
+  await start(page,'arate arate.');
+  await page.locator('.edition-latin').evaluate(paragraph=>{
+    const text=paragraph.firstChild;
+    if(!text||text.nodeType!==Node.TEXT_NODE)throw new Error('Fragmento latino inesperado');
+    const r=document.createRange();r.setStart(text,6);r.setEnd(text,11);
+    const selected=window.getSelection();selected.removeAllRanges();selected.addRange(r);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await page.getByRole('button',{name:'Subrayar selección de la hoja'}).click();
+  const review=page.getByRole('region',{name:'Revisar propuesta académica'});
+  await expect(review).toContainText('Subrayar y analizar «arate»');
+  await review.getByRole('button',{name:'Confirmar propuesta'}).click();
+  const edition=await readEdition(page);
+  expect(edition.placements[0].text.markup.map(mark=>[mark.startUtf16,mark.endUtf16])).toEqual([[6,11]]);
+  expect(edition.placements[0].questions.find(q=>q.kind==='morphology').words).toHaveLength(1);
+});
