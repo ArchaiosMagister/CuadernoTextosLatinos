@@ -2,9 +2,10 @@ import { createBackup, MAX_BACKUP_CHARACTERS, readBackup } from './core/backup.j
 import type { LatinText } from './core/model.js';
 import type { CorpusSnapshot } from './ports/corpus-repository.js';
 import { IndexedDbCorpusRepository, RevisionConflictError } from './storage/indexeddb-corpus-repository.js';
+import { getStoredVerificationText, syncVerificationEditor, VERIFICATION_TEXT_ID } from './ui/verification-editor.js';
 
 const repo = new IndexedDbCorpusRepository();
-const TEST_ID = 'fase1.verificacion';
+const TEST_ID = VERIFICATION_TEXT_ID;
 
 function required<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -41,8 +42,8 @@ function refresh(): void {
   controls.countTags.textContent = data ? String(data.tags.length) : '—';
   controls.countNotebooks.textContent = data ? String(data.notebooks.length) : '—';
   controls.revision.textContent = snapshot ? String(snapshot.revision) : '—';
-  const test = data?.texts.find((entry) => entry.id === TEST_ID);
-  controls.lastText.textContent = test?.latin ?? 'Ninguna todavía.';
+  const testLatin = data ? getStoredVerificationText(data) : null;
+  controls.lastText.textContent = testLatin ?? 'Ninguna todavía.';
 }
 
 function lock(isBusy: boolean): void {
@@ -70,8 +71,20 @@ async function execute(action: () => Promise<void>): Promise<void> {
 }
 
 async function reload(): Promise<void> {
-  snapshot = await repo.load();
-  setStatus('Datos locales leídos correctamente. Puedes recargar Safari para comprobar que se conservan.');
+  if (!snapshot) throw new Error('El almacenamiento todavía no se ha inicializado.');
+  const saved = getStoredVerificationText(snapshot.corpus);
+  if (saved !== null && controls.sample.value !== saved && !window.confirm(
+    'Hay cambios sin guardar en el campo de texto. ¿Descartarlos y mostrar la última versión guardada?',
+  )) {
+    setStatus('Recarga cancelada: se conserva el texto que estabas escribiendo.');
+    return;
+  }
+  const latest = await repo.load();
+  snapshot = latest;
+  const found = syncVerificationEditor(latest.corpus, controls.sample);
+  setStatus(found
+    ? 'Datos locales leídos: el campo editable ya muestra el texto guardado.'
+    : 'Datos locales leídos: no hay ningún texto de prueba guardado.');
 }
 
 function saveVerificationText(): Promise<void> {
@@ -96,7 +109,8 @@ function saveVerificationText(): Promise<void> {
         : [...original.texts, nextText],
     };
     snapshot = await repo.save(updated, snapshot.revision);
-    setStatus('Texto de prueba guardado. Recarga la página y pulsa «Releer datos guardados».');
+    controls.sample.value = nextText.latin;
+    setStatus('Texto de prueba guardado. Al recargar la página, se mostrará este mismo texto.');
   });
 }
 
@@ -114,11 +128,14 @@ function downloadJson(content: string): void {
 
 function exportBackup(): Promise<void> {
   return execute(async () => {
-    // Se relee: el archivo debe representar el estado más reciente confirmado.
-    snapshot = await repo.load();
-    const file = await createBackup(snapshot.corpus);
+    // Leer la última revisión para la copia SIN adoptar su número en el editor.
+    // De otro modo, exportar podría ocultar un conflicto entre dos pestañas.
+    const latest = await repo.load();
+    const file = await createBackup(latest.corpus);
     downloadJson(file);
-    setStatus('Copia JSON preparada. Comprueba la descarga y guárdala fuera del navegador.');
+    setStatus(latest.revision === snapshot?.revision
+      ? 'Copia JSON preparada con los datos guardados (no incluye cambios sin guardar del campo). Consérvala fuera del navegador.'
+      : 'Copia JSON preparada con la revisión más reciente. Otra pestaña ha modificado los datos: vuelve a leerlos antes de guardar cambios.');
   });
 }
 
@@ -151,10 +168,14 @@ function restoreBackup(): Promise<void> {
       setStatus('Restauración cancelada. No se ha modificado ningún dato.');
       return;
     }
-    snapshot = await repo.save(incoming.corpus, snapshot.revision);
+    const restored = await repo.save(incoming.corpus, snapshot.revision);
+    snapshot = restored;
+    const hasText = syncVerificationEditor(restored.corpus, controls.sample);
     controls.file.value = '';
     controls.confirm.checked = false;
-    setStatus('Copia restaurada y validada correctamente. Se ha conservado el resto del archivo.');
+    setStatus(hasText
+      ? 'Copia restaurada: el campo editable y «Última prueba guardada» muestran ahora el texto recuperado. Revisión ' + restored.revision + '.'
+      : 'Copia restaurada correctamente, pero el archivo no contiene ningún texto de comprobación. Por eso el campo editable está vacío.');
   });
 }
 
@@ -167,7 +188,8 @@ lock(true);
 void (async () => {
   try {
     snapshot = await repo.load();
-    setStatus('Almacenamiento listo. Los datos permanecen en este dispositivo.');
+    syncVerificationEditor(snapshot.corpus, controls.sample, { keepExampleIfMissing: true });
+    setStatus('Almacenamiento listo. El campo muestra el texto guardado, si lo hay; los datos permanecen en este dispositivo.');
   } catch (error) {
     setStatus('No se pudo abrir IndexedDB: ' + (error instanceof Error ? error.message : String(error)), true);
   } finally {

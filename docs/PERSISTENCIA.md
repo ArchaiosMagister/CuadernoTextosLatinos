@@ -36,11 +36,15 @@ Importar exige escoger un archivo, marcar expresamente el reemplazo y aceptar un
 
 1. Abre la web publicada en Safari (en HTTPS, no desde un archivo local).
 2. Pulsa **Guardar texto de prueba** y comprueba que Textos = 1 y Revisión = 1.
-3. Recarga la página; comprueba el texto con macrones y pulsa **Releer datos guardados**.
+3. Recarga la página: el campo editable debe mostrar automáticamente el texto guardado (incluidos los macrones). Pulsa **Releer datos guardados** para volver a sincronizarlo.
 4. Cambia el texto, vuelve a guardarlo y verifica que aumenta la revisión.
 5. Pulsa **Exportar copia JSON** y revisa que aparece un archivo en Descargas/Archivos.
 6. Cambia el texto otra vez. Selecciona la copia descargada, marca la confirmación y pulsa **Verificar y restaurar**.
-7. Comprueba que reaparece el texto original y que la revisión aumenta.
+7. Comprueba que reaparece el texto original **tanto en «Última prueba guardada» como en el campo editable**, y que la revisión aumenta.
 8. Prueba importar un JSON ajeno o modificado y verifica que la app lo rechaza sin sustituir datos.
 
 La UI no es una aplicación docente funcional. La página de comprobación puede retirarse cuando se incorpore el editor definitivo.
+
+### Nota de interfaz tras restaurar
+
+La zona editable se sincroniza con el contenido restaurado sólo después de una escritura confirmada. Si la copia no contiene el registro de prueba, la zona se vacía y se explica el motivo. Las importaciones erróneas o canceladas no modifican el borrador de la zona editable. Al exportar, se lee la copia más reciente, pero **no** se adopta su revisión en el editor: así no se elude el bloqueo de concurrencia entre pestañas.
