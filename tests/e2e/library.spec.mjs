@@ -87,3 +87,17 @@ test('la caché offline incluye realmente las 28 obras completas y el arranque',
     shell: true,
   });
 });
+
+test('la biblioteca funciona montada en la subcarpeta de GitHub Pages', async ({ page }) => {
+  await page.goto('/CuadernoTextosLatinos/');
+  await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
+  await page.getByRole('combobox',{name:'Filtrar por autor'}).selectOption('Julio César');
+  await page.locator('.lib-sidebar .work-row').filter({hasText:'De bello Gallico'}).click();
+  await expect(page.locator('.reader-line').first()).toBeVisible();
+  await expect(page.locator('.lib-reader .reader-work')).toContainText('De bello Gallico');
+  const paths = await page.evaluate(async()=>{
+    const response=await fetch('./library/catalog.json');
+    return { status:response.status, pathname:new URL('./library/catalog.json',location.href).pathname };
+  });
+  expect(paths).toEqual({status:200,pathname:'/CuadernoTextosLatinos/library/catalog.json'});
+});
