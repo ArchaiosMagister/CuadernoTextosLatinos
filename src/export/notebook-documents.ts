@@ -6,6 +6,7 @@
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
+import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { zipStore } from './zip-store.js';
 
 const XML='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -128,7 +129,9 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
       const enabledOptions=q.options.filter(o=>o.enabled);
       for(const option of enabledOptions){
         letter++;
-        let optionRuns=run(String.fromCharCode(96+letter)+'.  '+option.statement.value);
+        let optionRuns=run(String.fromCharCode(96+letter)+'.  ');
+        optionRuns+=splitInlineItalics(option.statement.value)
+          .map(segment=>run(segment.text,{italic:segment.italic})).join('');
         if(option.slots.length){
           optionRuns+=run(' ');
           option.slots.forEach((slot,index)=>{
