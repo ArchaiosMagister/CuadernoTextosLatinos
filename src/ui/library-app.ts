@@ -311,7 +311,7 @@ export function mountLibraryApp(root: HTMLElement): void {
       if(!ready())return;
       if(!draft.title.trim()||!draft.latin.trim()){message('El título y el texto latino son obligatorios.',true);return;}
       const id=editingId??freshId();
-      const ok=await transaction(corpus=>upsertText(corpus,{...draft,id:editingId??undefined},id,new Date().toISOString()));
+      const ok=await transaction(corpus=>upsertText(corpus,draft,id,new Date().toISOString()));
       if(ok){editingId=id;draft.id=id;dirty=false;render();}
     },'btn btn-primary');
     if(!snapshot)save.disabled=true;
@@ -482,7 +482,7 @@ export function mountLibraryApp(root: HTMLElement): void {
     }
   })();
 
-  if('serviceWorker' in navigator && location.protocol==='https:'){
+  if('serviceWorker' in navigator && window.isSecureContext){
     void navigator.serviceWorker.register('./service-worker.js').then(async()=>{
       await navigator.serviceWorker.ready;
       offlinePrepared=true;render();
