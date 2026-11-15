@@ -15,6 +15,7 @@ import { IndexedDbCorpusRepository } from '../storage/indexeddb-corpus-repositor
 import { WorkspaceConflictError, WorkspaceRepository, type EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPlanV1 } from '../storage/workspace-migration.js';
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
+import { createAcademicControls } from './academic-controls.js';
 
 const workspace = new WorkspaceRepository();
 const legacy = new IndexedDbCorpusRepository();
@@ -62,6 +63,7 @@ function download(text:string,filename:string):void {
 }
 function buildMarkedLatin(p:TextPlacementV1):HTMLElement {
   const paragraph=node('p','edition-latin');
+  paragraph.dataset.placementId=p.id;
   const raw=p.text.latin, marks=[...p.text.markup].sort((a,b)=>a.startUtf16-b.startUtf16);
   let position=0;
   for(const mark of marks){
@@ -157,6 +159,20 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   let migrationConfirmed=false;
   let saving:Promise<boolean>|null=null;
   let saveTimer:ReturnType<typeof setTimeout>|null=null;
+  const academics=createAcademicControls(workspace,{
+    snapshot:()=>current,flush,
+    saved:next=>{
+      current=next;
+      editions=editions.map(e=>e.edition.id===next.edition.id?next:e);
+      draft=structuredClone(next.edition);
+      paint();
+    },
+    status:setMessage,repaint:paint,
+  });
+  document.addEventListener('selectionchange',()=>{
+    const pages=element.querySelector<HTMLElement>('.edition-paper-pages');
+    if(pages)academics.savePaperSelection(pages);
+  });
 
   function setMessage(value:string,isError=false):void {
     message=value;error=isError;
@@ -174,7 +190,12 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   }
   function apply(operation:(edition:NotebookEditionV1,at:string)=>NotebookEditionV1):void {
     if(!draft)return;
-    try{draft=operation(draft,now());markDirty();}
+    try{
+      draft=operation(draft,now());
+      academics.clear();
+      element.querySelector('.edition-academic-review')?.remove();
+      markDirty();
+    }
     catch(e){setMessage('No se ha aplicado el cambio: '+String(e instanceof Error?e.message:e),true);}
   }
   async function flush():Promise<boolean>{
@@ -216,6 +237,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
         if(force && !await flush())return;
         const items=await workspace.listEditions();
         editions=items;
+        academics.clear();
         active=items.some(x=>x.edition.id===active)?active:items[0]?.edition.id??null;
         current=items.find(x=>x.edition.id===active)??null;
         draft=current?structuredClone(current.edition):null;
@@ -235,7 +257,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     return (async()=>{
       if(!await flush())return;
       const snapshot=editions.find(x=>x.edition.id===id);if(!snapshot)return;
-      active=id;current=snapshot;draft=structuredClone(snapshot.edition);
+      academics.clear();active=id;current=snapshot;draft=structuredClone(snapshot.edition);
       session={activeEditionId:id,activePlacementId:draft.placements[0]?.id??null,
         mode:'text',activeMenu:menu,previewZoom:zoom,scrollByPlacementId:{}};
       paint();
@@ -244,7 +266,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   function navigate(command:'previous'|'next'|'whole'|{placementId:string}):Promise<void>{
     return (async()=>{
       if(!draft||!session||!await flush())return;
-      session=moveSession(draft,session,command);
+      academics.clear();session=moveSession(draft,session,command);
       paint();
     })();
   }
@@ -265,6 +287,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       const restored=await workspace.undoLast(current.edition.id,current.revision,now());
       current=restored;editions=editions.map(e=>e.edition.id===restored.edition.id?restored:e);
       draft=structuredClone(restored.edition);
+      academics.clear();
       if(session && !draft.placements.some(p=>p.id===session?.activePlacementId))
         session={...session,activePlacementId:draft.placements[0]?.id??null};
       setMessage('Último cambio deshecho. Revisión '+restored.revision);paint();
@@ -314,11 +337,14 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
       apply((e,at)=>editPlacementText(e,p.id,key,key==='latin'||key==='title'?value:value.trim()||null,at));
     };
+    const latin=textField('Texto latino',p.text.latin,mutate('latin'),true);
     panel.append(textField('Título del texto',p.text.title,mutate('title')),
       textField('Autor',p.text.author??'',mutate('author')),
       textField('Obra',p.text.work??'',mutate('work')),
       textField('Libro, capítulo o referencia',p.text.reference??'',mutate('reference')),
-      textField('Texto latino',p.text.latin,mutate('latin'),true));
+      latin);
+    const textArea=latin.querySelector('textarea');
+    if(textArea)panel.append(academics.renderTextSelect(p,textArea));
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
@@ -341,11 +367,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       section.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
         apply((e,at)=>setQuestionPoints(e,p.id,q.id,Math.round(value*100),at));paint();
       }));
-      if(q.kind==='morphology'){
-        section.append(node('p','hint',q.words.length
-          ? q.words.map(w=>w.surface+(w.reviewState==='needs-review'?' [revisión]':'')).join(', ')
-          : 'Aún no hay apariciones subrayadas. La selección individual verificada se conectará en la siguiente iteración.'));
-      }
+      if(q.kind==='morphology')academics.renderMorph(section,p,q);
       if(q.kind==='choice'){
         const options=q.options;
         for(const [idx,o] of options.entries()){
@@ -359,7 +381,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
           opt.append(head,textField('Enunciado del apartado',o.statement.value,value=>{
             apply((e,at)=>editOptionStatement(e,p.id,q.id,o.id,value,at));
           }));
-          for(const slot of o.slots){
+          for(const [slotIndex,slot] of o.slots.entries()){
             const word=node('div','edition-inline-edit');
             word.append(textField('Palabra',slot.value,value=>{
               apply((e,at)=>editSlotManual(e,p.id,q.id,o.id,slot.id,value,at));
@@ -370,6 +392,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
                   ...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:opt.slots.filter(s=>s.id!==slot.id)}),
                 })})}));paint();
             }));
+            academics.renderSlot(word,p,q,o,slot.id,slotIndex);
             opt.append(word);
           }
           const input=node('input','field-control');input.placeholder='Añadir término manual…';
@@ -383,8 +406,10 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
                 ]})})})}));paint();
           },'btn btn-outline');
           const row=node('div','edition-inline-edit');row.append(input,add);opt.append(row);
+          academics.renderOption(opt,p,q,o);
           section.append(opt);
         }
+        academics.renderQuestion(section,p,q);
         const count=q.options.filter(o=>o.enabled).length;
         section.append(node('p',count<q.requiredCount?'edition-error':'hint',
           choiceHeading(q)+(count<q.requiredCount?' Faltan apartados activos.':'')));
@@ -564,6 +589,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       ()=>navigate(session?.mode==='whole-notebook'?{placementId:selection()?.id??draft!.placements[0]?.id??''}:'whole'));
     whole.disabled=!n;
     nav.append(whole);element.append(nav);
+    const review=academics.review();
+    if(review)element.append(review);
     const mobileSwitch=node('div','edition-mobile-switch');
     for(const [key,label] of [['config','Configurar'],['preview','Vista previa']] as const){
       const b=action(label,()=>{mobile=key;paint();},
@@ -589,11 +616,14 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     else panel.append(node('p','hint','Añade un texto desde el menú «Cuaderno» para comenzar.'));
     editor.append(panel);
     const preview=node('section','edition-preview'+(mobile==='config'?' edition-mobile-hidden':''));
+    const papers=node('div','edition-paper-pages');
+    papers.addEventListener('pointerup',()=>academics.savePaperSelection(papers));
+    papers.addEventListener('touchend',()=>window.setTimeout(()=>academics.savePaperSelection(papers),80),{passive:true});
     const bar=node('div','edition-preview-bar');
     bar.append(node('strong','','Vista A4'));
     bar.append(numberField('Zoom (%)',zoom,50,130,5,value=>{zoom=value;paintPreview();}));
-    preview.append(bar);
-    const papers=node('div','edition-paper-pages');preview.append(papers);
+    bar.append(academics.renderPaperSelect(papers));
+    preview.append(bar,papers);
     preview.append(node('p','edition-preview-note','Vista en pantalla · sin exportación todavía.'));
     layout.append(editor,preview);element.append(layout);
     paintPreview();
