@@ -575,8 +575,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     const editor=node('aside','edition-settings'+(mobile==='preview'?' edition-mobile-hidden':''));
     const navMenus=node('div','edition-menu-nav');
     for(const m of labels){
-      navMenus.append(action(m.label,()=>{menu=m;paint();},
-        'btn '+(menu===m?'btn-primary':'btn-outline')));
+      navMenus.append(action(m.label,()=>{menu=m.key;paint();},
+        'btn '+(menu===m.key?'btn-primary':'btn-outline')));
     }
     editor.append(navMenus);
     const panel=node('div','edition-menu-content');
