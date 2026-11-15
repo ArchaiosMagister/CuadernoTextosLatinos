@@ -83,11 +83,11 @@ export async function readWorkspaceBackup(json: string): Promise<WorkspaceBackup
     throw new WorkspaceBackupError('La copia debe ser un objeto JSON.');
   }
   const r=raw as Record<string,unknown>;
-  if(Object.keys(r).sort().join('|')!==['format','backupVersion','exportedAt','sha256','snapshot'].sort().join('|')){
-    throw new WorkspaceBackupError('Formato de archivo editorial incompleto o desconocido.');
-  }
   if(r.format!==WORKSPACE_BACKUP_FORMAT || r.backupVersion!==WORKSPACE_BACKUP_VERSION){
     throw new WorkspaceBackupError('No es una copia workspace v2 compatible. Las v1 se importan como legado.');
+  }
+  if(Object.keys(r).sort().join('|')!==['format','backupVersion','exportedAt','sha256','snapshot'].sort().join('|')){
+    throw new WorkspaceBackupError('Formato de archivo editorial incompleto o desconocido.');
   }
   if(!utc(r.exportedAt) || typeof r.sha256!=='string'|| !/^[0-9a-f]{64}$/.test(r.sha256)){
     throw new WorkspaceBackupError('Fecha o huella de copia editorial inválida.');

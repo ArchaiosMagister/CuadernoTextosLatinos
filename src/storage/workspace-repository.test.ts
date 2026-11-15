@@ -118,7 +118,7 @@ test('rechaza los metadatos inválidos, el cambio de identidad y la fecha de cre
   await assert.rejects(repo.commitEdition('edition.1',1,
     {command:'edit',targetId:'edition.1',timestamp:LATER},old=>({...old!,id:'ed.other'})),/cambiar el ID/);
   await assert.rejects(repo.commitEdition('edition.1',1,
-    {command:'edit',targetId:'edition.1',timestamp:LATER},old=>({...old!,createdAt:LATER})),/fecha de creación/);
+    {command:'edit',targetId:'edition.1',timestamp:LATER},old=>({...old!,createdAt:LATER,updatedAt:LATER})),/fecha de creación/);
   assert.equal((await repo.history('edition.1')).length,1);
 });
 

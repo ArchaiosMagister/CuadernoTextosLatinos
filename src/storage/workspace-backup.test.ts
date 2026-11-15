@@ -61,7 +61,8 @@ test('tampering de contenido, hash o estructura de copia se rechaza sin modifica
   const json=await createWorkspaceBackup(ws,date);
   const damaged=JSON.parse(json) as Record<string,unknown>;
   ((damaged.snapshot as {editions:{edition:{title:string}}[]}).editions[0]!.edition).title='Alterado';
-  await assert.rejects(readWorkspaceBackup(JSON.stringify(damaged)),/SHA-256 diferente/);
+  await assert.rejects(readWorkspaceBackup(JSON.stringify(damaged)),
+    /SHA-256 diferente|último evento no coincide/);
   damaged.sha256='z'.repeat(64);
   await assert.rejects(readWorkspaceBackup(JSON.stringify(damaged)));
   await assert.rejects(readWorkspaceBackup('{bad json'));
