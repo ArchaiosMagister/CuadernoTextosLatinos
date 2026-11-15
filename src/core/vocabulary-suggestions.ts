@@ -42,6 +42,7 @@ export function suggestVocabulary(placement:TextPlacementV1,bank:VerifiedAcademi
     normalize(v.lemma),normalize(v.headword),normalize(v.headword.split(/[,;:()]/u)[0]??''),
   ]));
   const suggestions:VocabularyProposalV1[]=[];
+  const existingLemmas=new Set(placement.vocabulary.map(v=>normalize(v.lemma)));
   for(const [key,record] of words){
     if(existing.has(key))continue;
     // Consulta el token exacto y la forma de caja baja si se trata de
@@ -56,6 +57,7 @@ export function suggestVocabulary(placement:TextPlacementV1,bank:VerifiedAcademi
     const verified=[...eligible.values()].filter((x):x is NonNullable<typeof x>=>x!==null);
     const lemmas=new Set(verified.map(row=>normalize(row.lemmaId??'')));
     const single=lemmas.size===1&&verified.length>0;
+    if(single&&existingLemmas.has(normalize(verified[0]!.lemmaId??'')))continue;
     suggestions.push({
       surface:record.surface,occurrences:record.count,
       lemma:single?verified[0]!.lemmaId:null,
