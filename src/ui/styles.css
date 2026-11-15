@@ -368,3 +368,84 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .editor-form {grid-template-columns:1fr;}
   .reader-line {grid-template-columns:4rem minmax(0,1fr);gap:.5rem;}
 }
+
+
+/* Primera iteración del compositor editorial. La hoja conserva fondo blanco
+   y tinta oscura incluso en los modos oscuro/OLED del sistema. */
+.edition-shell { margin: 0 0 1.5rem; }
+.edition-toolbar { display: flex; flex-wrap: wrap; align-items:center; justify-content:space-between; gap: .9rem; margin-bottom:1rem; }
+.edition-toolbar h2 { margin: 0; }
+.edition-toolbar-actions { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; width:100%; }
+.edition-toolbar-actions > select { width:min(18rem,100%); flex:1 1 12rem; }
+.edition-save-state { color:var(--subtle); font-size:.88rem; }
+.edition-save-state[data-error="true"] { color:light-dark(#a21e27,#ffc2c2); font-weight:700; }
+.edition-navigation { display:flex; gap:.55rem; flex-wrap:wrap; align-items:center; padding:.65rem;
+  margin-bottom:.75rem; border:1px solid var(--edge); border-radius:.65rem; background:var(--surface); }
+.edition-navigation > select { flex:1 1 13rem; width:auto; min-width:10rem; }
+.edition-counter { white-space:nowrap; }
+.edition-layout { display:grid; grid-template-columns:minmax(18rem,34%) minmax(0,1fr);
+  gap:.85rem; align-items:start; }
+.edition-settings, .edition-preview { min-width:0; border:1px solid var(--edge); border-radius:.75rem; background:var(--surface); }
+.edition-settings { overflow:hidden; }
+.edition-menu-nav { padding:.7rem; display:flex; flex-wrap:wrap; gap:.35rem; background:light-dark(#eff3f7,#252b35); }
+.edition-menu-nav .btn { flex: 1 1 auto; font-size:.88rem; padding:.55rem .7rem; }
+.edition-menu-content { padding:1rem; display:grid; gap:.85rem; max-height:72vh; overflow:auto; }
+.edition-field { min-width:0; display:flex!important; flex-direction:column; gap:.22rem; font-size:.9rem; }
+.edition-field-label { font-weight:650; color:inherit; }
+.edition-field .field-control { margin:0; }
+.edition-field textarea { margin:0; font: .96rem/1.55 Georgia,serif; white-space:pre-wrap; }
+.edition-question-panel { display:grid; gap:.55rem; padding:.75rem; border:1px solid var(--edge); border-radius:.6rem; }
+.edition-question-panel h3 { margin:0; font-size:1rem; }
+.edition-question-top, .edition-option-head { display:flex!important; align-items:center; gap:.55rem; font-weight:650; }
+.edition-question-top input, .edition-option-head input, .edition-vocabulary-control>input { width:1.15rem; height:1.15rem; flex:none; }
+.edition-option { display:grid; gap:.5rem; padding:.7rem .4rem; border-top:1px solid var(--edge); }
+.edition-inline-edit { display:flex; align-items:end; flex-wrap:wrap; gap:.4rem; }
+.edition-inline-edit > .edition-field { flex:1 1 10rem; }
+.edition-inline-edit > input, .edition-inline-edit > select { flex: 1 1 10rem; width:auto; }
+.edition-inline-edit .btn { flex:none; }
+.edition-score { margin:.25rem 0; font-weight:700; color:light-dark(#175f41,#a3f2bf); }
+.edition-error { margin:.25rem 0; font-weight:700; color:light-dark(#952832,#ffc1c1); }
+.edition-vocabulary-control { display:grid; grid-template-columns:1.3rem minmax(0,1fr); align-items:start; gap:.5rem; padding:.65rem; border:1px solid var(--edge); border-radius:.5rem; }
+.edition-vocabulary-control .edition-field, .edition-vocabulary-control .btn { grid-column:2; }
+.edition-vocab-add { display:grid; gap:.4rem; }
+.edition-margin-grid { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
+.edition-notebook-list { margin:0; padding-left:1.15rem; }
+.edition-notebook-row { padding:.55rem 0; border-bottom:1px solid var(--edge); display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; }
+.edition-notebook-row span { flex:1 1 100%; }
+.edition-notebook-row .btn { min-height:2.3rem; }
+.edition-preview { padding:.75rem; background:light-dark(#e9edf2,#222832); overflow:hidden; }
+.edition-preview-bar { display:flex; justify-content:space-between; gap:.6rem; align-items:center; margin-bottom:.5rem; }
+.edition-preview-bar .edition-field { width:8rem; }
+.edition-paper-pages { display:grid; gap:1rem; justify-items:center; overflow-x:auto; padding: .5rem; }
+.edition-paper { box-sizing:border-box; position:relative; width:210mm; min-height:297mm; max-width:none;
+  display:flex; flex-direction:column; padding:54pt; background:#fff; color:#151515;
+  box-shadow:0 2px 12px #0002; overflow-wrap:break-word; }
+.edition-paper-head { text-align:center; border-top: .5pt solid #777; border-bottom:.5pt solid #777; padding:.55em 0 .65em; margin-bottom:.85em; }
+.edition-paper-head h2 { font:700 1.06em/1.32 "Palatino Linotype",Palatino,Georgia,serif; margin:0 0 .24em; }
+.edition-paper-source { font-size:1em; margin:0; line-height:1.4; }
+.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.6em 0 2em; line-height:inherit; }
+.edition-underlined { text-decoration:underline; text-decoration-thickness: .6pt; text-underline-offset:1pt; }
+.edition-roman { font-style:normal; }
+.edition-review { text-decoration-color:#b33333; text-decoration-style:wavy; }
+.edition-vocabulary { border:.75pt solid #3e3e3e; padding:.4em .55em; margin: .4em 0 1em; }
+.edition-vocabulary h3 { font-size:1em; font-weight:700; text-align:center; margin:0 0 .6em; }
+.edition-vocabulary-line { margin:.06em 0; line-height:1.35; }
+.edition-questions { margin: .4em 0 1em; padding-left:2.5em; display:grid; gap:.55em; }
+.edition-question { padding-left:.45em; }
+.edition-question::marker { font-weight:700; }
+.edition-question-points { font-weight:700; white-space:nowrap; }
+.edition-choice-options { margin:.7em 0 0; padding-left:1.7em; list-style-type:lower-alpha; display:grid; gap:.3em; }
+.edition-choice-options li { padding-left:.5em; }
+.edition-choice-options li::marker { content:counter(list-item,lower-alpha) ".  "; }
+.edition-paper-footer { margin-top:auto; padding-top:2em; text-align:center; font-size:.84em; color:#333; }
+.edition-preview-note { color:var(--subtle); font-size:.82rem; margin:.7rem .2rem 0; }
+.edition-mobile-switch { display:none; }
+.edition-empty { max-width:45rem; padding:2rem; border:1px solid var(--edge); border-radius:.85rem; background:var(--surface); }
+.edition-empty h3 { margin:0 0 .4rem; }
+@media(max-width:920px) {
+  .edition-layout { grid-template-columns:1fr; }
+  .edition-mobile-switch { display:flex; gap:.45rem; margin-bottom:.65rem; }
+  .edition-mobile-hidden { display:none; }
+  .edition-menu-content { max-height:none; }
+  .edition-paper-pages { overflow-x:auto; justify-items:start; -webkit-overflow-scrolling:touch; }
+}
