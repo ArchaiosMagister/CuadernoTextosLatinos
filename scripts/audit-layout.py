@@ -43,6 +43,18 @@ for case in ['breve','largo','varios']:
             for key in ['Helvetii','secuti','contulerunt','phălanx','transgressionem','peccata minuta']:
                 if key not in txt:
                     raise RuntimeError(f'{case} {engine}: falta contenido {key}')
+        # Cuando la batería corta de preguntas cabe, evitar una pregunta 1
+        # aislada al pie de una hoja distinta de la pregunta 4.
+        question_pages=[i for i,content in enumerate(pages,1) if 'Traducción del texto.' in content]
+        choice_pages=[i for i,content in enumerate(pages,1) if 'Elige dos de estas cuatro preguntas' in content]
+        if question_pages!=choice_pages:
+            raise RuntimeError(f'{case} {engine}: preguntas huérfanas: {question_pages} frente a {choice_pages}')
+        # No aceptar numeración de aparición como si fuese número físico.
+        if engine=='browser':
+            for i,content in enumerate(pages,1):
+                footer=f'{i}|{count}'
+                if footer not in content.replace(' ',''):
+                    raise RuntimeError(f'{case}: falta numeración física {footer} en página {i}')
         bbox=subprocess.run(['pdftotext','-f','1','-l','1','-bbox',str(path),'-'],
                             capture_output=True,text=True,check=True).stdout
         doc=ET.fromstring(bbox)
