@@ -274,7 +274,9 @@ export function validateEdition(input:unknown):NotebookEditionV1 {
     for(const f of p.reviewFlags)localIds.add(f.id);
     for(const f of p.reviewFlags){
       if(!localIds.has(f.scopeId)){
-        fail('reviewFlags.scopeId','el ámbito no pertenece a esta aparición');
+        fail('reviewFlags.scopeId',ids.has(f.scopeId)
+          ? 'el ámbito no pertenece a esta aparición'
+          : 'referencia a entidad inexistente');
       }
     }
   }
