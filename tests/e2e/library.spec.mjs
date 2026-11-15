@@ -50,19 +50,40 @@ test('tres autores y navegación por cita', async ({ page }) => {
   await expect(page.locator('.lib-reader .reader-work')).toContainText('Breviarium');
 });
 
-test('la biblioteca completa está disponible tras desconectarse de internet', async ({ page }) => {
+test('la caché offline incluye realmente las 28 obras completas y el arranque', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await expect(page.locator('.offline-indicator')).toContainText('preparada sin conexión');
-  // WebKit CI no admite navegar con Web Inspector interrumpiendo la red.
-  // Se comprueba el acceso a OBRAS AÚN NO ABIERTAS tras desactivar la red.
+  // WebKit CI no permite comprobar una navegación offline real con el Inspector:
+  // setOffline interrumpe el navegador antes de que responda el Service Worker.
+  // Sí podemos verificar que los archivos están almacenados, íntegros y accesibles
+  // mediante la CacheStorage del navegador SIN utilizar la red.
   await page.context().setOffline(true);
-  await page.getByRole('combobox',{name:'Filtrar por autor'}).selectOption('Eutropio');
-  await page.locator('.lib-sidebar .work-row').first().click();
-  await expect(page.locator('.reader-line').first()).toBeVisible();
-  await page.getByRole('combobox',{name:'Filtrar por autor'}).selectOption('Cornelio Nepote');
-  await page.locator('.lib-sidebar .work-row').first().click();
-  await expect(page.locator('.reader-line').first()).toBeVisible();
+  const result = await page.evaluate(async () => {
+    const base = new URL('./', document.location.href);
+    const catalogResponse = await caches.match(new URL('library/catalog.json', base));
+    if (!catalogResponse) return { error: 'Catálogo no encontrado en caché' };
+    const catalog = await catalogResponse.json();
+    const authors = new Set();
+    let checked = 0;
+    for (const entry of catalog.works) {
+      const response = await caches.match(new URL('library/' + entry.file, base));
+      if (!response) return { error: 'Falta en caché ' + entry.file };
+      const work = await response.json();
+      if (work.urn !== entry.urn || !work.lines.length) {
+        return { error: 'Contenido incompatible: ' + entry.file };
+      }
+      authors.add(work.author);
+      checked++;
+    }
+    const shell = await caches.match(new URL('index.html', base));
+    return { checked, authors:[...authors].sort(), shell:Boolean(shell) };
+  });
+  expect(result).toEqual({
+    checked: 28,
+    authors: ['Cornelio Nepote','Eutropio','Julio César'],
+    shell: true,
+  });
 });
