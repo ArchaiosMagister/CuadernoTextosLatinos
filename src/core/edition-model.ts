@@ -1,0 +1,190 @@
+/**
+ * Contrato editorial V1. Independiente del CorpusV1 publicado.
+ * Especificaciones fuente: arquitectura_datos_cuaderno_v10, §§3-4.
+ * Este módulo NO persiste, genera análisis filológicos ni renderiza HTML.
+ */
+export const EDITION_SCHEMA_VERSION = 1 as const;
+export const TEMPLATE_POINTS_HUNDREDTHS = 800 as const;
+export type EntityId = string;
+
+export interface EditableFieldV1 {
+  value: string;
+  origin: 'template' | 'generated' | 'manual';
+  locked: boolean;
+  lastEditAt: string | null;
+}
+
+export interface EvidenceV1 {
+  provider: string;
+  recordId: string;
+  bankRevision: string;
+  decisionId: string | null;
+}
+
+export interface QuestionStyleV1 {
+  beforePt: number;
+  afterPt: number;
+  subquestionGapPt: number;
+}
+
+export interface PageFormatV1 {
+  paper: 'A4';
+  fontFamily: string;
+  fontSizePt: number;
+  marginsPt: { top: number; right: number; bottom: number; left: number };
+  lineSpacingPt: number;
+  questionGapPt: number;
+  showPoints: boolean;
+  pageFooter: 'page | total';
+}
+
+export interface TextMarkV1 {
+  id: EntityId;
+  kind: 'morph-underline' | 'editorial-roman';
+  startUtf16: number;
+  endUtf16: number;
+  exact: string;
+  textFingerprint: string;
+  reviewRequired: boolean;
+}
+
+export interface EditableTextV1 {
+  title: string;
+  author: string | null;
+  work: string | null;
+  reference: string | null;
+  latin: string;
+  markup: TextMarkV1[];
+}
+
+export interface MorphWordV1 {
+  id: EntityId;
+  markId: EntityId;
+  surface: string;
+  lemmaId: string | null;
+  analysis: string | null;
+  provenance: EvidenceV1 | null;
+  reviewState: 'verified' | 'needs-review' | 'manual';
+  locked: boolean;
+}
+
+export interface QuestionWordSlotV1 {
+  id: EntityId;
+  value: string;
+  proposedLemmaId: string | null;
+  origin: 'generated' | 'manual';
+  locked: boolean;
+  provenance: EvidenceV1 | null;
+}
+
+export interface ChoiceOptionV1 {
+  id: EntityId;
+  kind: 'preverb' | 'phonetics' | 'prefix' | 'latinism';
+  enabled: boolean;
+  statement: EditableFieldV1;
+  slots: QuestionWordSlotV1[];
+}
+
+export type QuestionKindV1 = 'translation' | 'syntax' | 'morphology' | 'choice';
+
+export interface QuestionBaseV1 {
+  id: EntityId;
+  kind: QuestionKindV1;
+  enabled: boolean;
+  statement: EditableFieldV1;
+  pointsHundredths: number;
+  styleOverride: QuestionStyleV1 | null;
+}
+
+export type QuestionV1 =
+  | (QuestionBaseV1 & { kind: 'translation' | 'syntax' })
+  | (QuestionBaseV1 & { kind: 'morphology'; words: MorphWordV1[] })
+  | (QuestionBaseV1 & {
+    kind: 'choice';
+    requiredCount: number;
+    options: ChoiceOptionV1[];
+  });
+
+export interface VocabularyEntryV1 {
+  id: EntityId;
+  lemma: string;
+  headword: string;
+  meaning: string | null;
+  note: string | null;
+  included: boolean;
+  order: number;
+  provenance: EvidenceV1 | null;
+  reviewState: 'verified' | 'needs-review' | 'manual';
+  origin: 'generated' | 'manual';
+  locked: boolean;
+}
+
+export interface ReviewFlagV1 {
+  id: EntityId;
+  scopeId: EntityId;
+  reason: string;
+}
+
+export interface SourceLinkV1 {
+  kind: 'corpus' | 'library' | 'manual';
+  sourceId: string | null;
+  urn: string | null;
+  importedAt: string;
+}
+
+export interface TextPlacementV1 {
+  id: EntityId;
+  source: SourceLinkV1;
+  text: EditableTextV1;
+  questions: QuestionV1[];
+  vocabulary: VocabularyEntryV1[];
+  grammaticalTagIds: string[];
+  reviewFlags: ReviewFlagV1[];
+}
+
+export interface NotebookEditionV1 {
+  editionSchemaVersion: typeof EDITION_SCHEMA_VERSION;
+  id: EntityId;
+  legacyNotebookId: string | null;
+  title: string;
+  locale: 'es';
+  createdAt: string;
+  updatedAt: string;
+  format: PageFormatV1;
+  placements: TextPlacementV1[];
+}
+
+/** El control de sesión NO forma parte de la copia académica. */
+export interface EditorSessionV1 {
+  activeEditionId: EntityId;
+  activePlacementId: EntityId | null;
+  mode: 'text' | 'whole-notebook';
+  activeMenu: string;
+  previewZoom: number;
+  scrollByPlacementId: Record<string, number>;
+}
+
+/** Contrato de integración para el motor futuro; no implica que ya haya bancos conectados. */
+export interface RegenerationRequestV1 {
+  kind: 'regenerate';
+  editionId: EntityId;
+  placementId: EntityId;
+  target: 'word' | 'subquestion' | 'question';
+  targetId: EntityId;
+  expectedRevision: number;
+  candidateId: string;
+}
+
+/** Contrato para la siguiente PR de almacenamiento e historial. */
+export interface OperationEventV1 {
+  id: EntityId;
+  editionId: EntityId;
+  sequence: number;
+  command: string;
+  targetId: EntityId;
+  timestamp: string;
+  revisionBefore: number;
+  revisionAfter: number;
+  before: unknown;
+  after: unknown;
+}
