@@ -96,7 +96,7 @@ test('academia: no certifica formas sin candidatos ni escribe datos',async({page
   await start(page,'xyzlexema.');
   await page.getByRole('button',{name:'Texto',exact:true}).click();
   const before=await readEdition(page);
-  await page.getByRole('textbox',{name:'Texto latino'}).evaluate(el=>el.setSelectionRange(0,10));
+  await page.getByRole('textbox',{name:'Texto latino'}).evaluate(el=>el.setSelectionRange(0,9));
   await page.getByRole('button',{name:'Subrayar palabra seleccionada'}).click();
   await expect(page.locator('.edition-save-state')).toContainText('No hay candidatos elegibles');
   expect(await readEdition(page)).toEqual(before);
