@@ -247,7 +247,7 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(index<0){message('No existe el pasaje «'+citation.value+'».',true);return;}
         const row=Array.from(root.querySelectorAll<HTMLElement>('.reader-line'))
           .find(element=>element.dataset.index===String(index));
-        row?.scrollIntoView({block:'center',behavior:'instant'});
+        row?.scrollIntoView({block:'center',behavior:'auto'});
         message('Mostrando el pasaje '+citation.value+'.');
       },'btn btn-outline');
       citation.addEventListener('keydown',event=>{if(event.key==='Enter')go.click();});
@@ -279,6 +279,7 @@ export function mountLibraryApp(root: HTMLElement): void {
       // previamente extraído antes de que cambie el foco.
       add.addEventListener('pointerdown',()=>{preservingSelection=true;});
       add.addEventListener('click',()=>{preservingSelection=false;});
+      add.addEventListener('pointercancel',()=>{preservingSelection=false;});
       const clear=button('Limpiar',()=>{
         selectedFragment=null;
         preservingSelection=false;
@@ -483,8 +484,13 @@ export function mountLibraryApp(root: HTMLElement): void {
   const originEvent=async()=>{
     try {
       const next=await repository.load();
-      if(!dirty){snapshot=next;render();}
-      else message('El almacenamiento ha cambiado: guarda o descarta tu borrador antes de releer.',true);
+      // Cambiar el foco (p. ej., al mostrar los tiradores de Safari) no debe
+      // repintar todo el lector y destruir la selección nativa.
+      if(!dirty){
+        if(!snapshot || next.revision!==snapshot.revision){snapshot=next;render();}
+      } else if(!snapshot || next.revision!==snapshot.revision) {
+        message('El almacenamiento ha cambiado: guarda o descarta tu borrador antes de releer.',true);
+      }
     }catch(err){message(err instanceof Error?err.message:String(err),true);}
   };
   document.addEventListener('selectionchange',syncReaderSelection);
@@ -521,7 +527,9 @@ export function mountLibraryApp(root: HTMLElement): void {
   if('serviceWorker' in navigator && window.isSecureContext){
     void navigator.serviceWorker.register('./service-worker.js').then(async()=>{
       await navigator.serviceWorker.ready;
-      offlinePrepared=true;render();
+      offlinePrepared=true;
+      const indicator=root.querySelector<HTMLElement>('.offline-indicator');
+      if(indicator)indicator.textContent='Biblioteca preparada sin conexión';
     }).catch(e=>message('Los textos se pueden consultar en línea, pero no se ha podido preparar la caché sin conexión: '+String(e),true));
   }
 }
