@@ -139,7 +139,7 @@ export function mountLibraryApp(root: HTMLElement): void {
     try {
       let work=cachedWorks.get(meta.urn);
       if(!work){
-        const url=new URL('./library/'+meta.file,import.meta.url);
+        const url=new URL('../library/'+meta.file,import.meta.url);
         const response=await fetch(url);
         if(!response.ok)throw new Error('No está disponible la obra ('+response.status+').');
         const value:unknown=await response.json();
@@ -477,7 +477,7 @@ export function mountLibraryApp(root: HTMLElement): void {
     try {
       const [s,response]=await Promise.all([
         repository.load(),
-        fetch(new URL('./library/catalog.json',import.meta.url)),
+        fetch(new URL('../library/catalog.json',import.meta.url)),
       ]);
       if(!response.ok)throw new Error('La biblioteca offline no se ha incluido en la publicación ('+response.status+').');
       const catalog:unknown=await response.json();
