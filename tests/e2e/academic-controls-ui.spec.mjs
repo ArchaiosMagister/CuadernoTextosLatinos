@@ -20,6 +20,8 @@ async function start(page,latin='arate arate.'){
   await page.getByRole('button',{name:'Cuaderno',exact:true}).click();
   await page.getByRole('button',{name:'Añadir desde Mis textos'}).click();
   await expect(page.getByText('Texto 1 de 1')).toBeVisible();
+  await page.getByRole('button',{name:'Guardar',exact:true}).click();
+  await expect(page.locator('.edition-save-state')).toContainText('Guardado · revisión');
 }
 async function readEdition(page){
   return page.evaluate(async()=>{
