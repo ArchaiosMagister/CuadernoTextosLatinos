@@ -94,3 +94,34 @@ test('Exportación PDF: usa impresión nativa con hojas A4 completas, no captura
   await expect(paper).toContainText('Elige dos de estas cuatro preguntas');
   expect(await paper.evaluate(e=>getComputedStyle(e).width)).not.toBe('0px');
 });
+
+
+test('iPad vertical: Configurar y Vista previa alternan sin perder preguntas ni vocabulario',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await setup(page);
+  await page.getByRole('button',{name:'Preguntas'}).click();
+  const before=await readEdition(page);
+  await expect(page.locator('.edition-settings')).toBeVisible();
+  await expect(page.locator('.edition-preview')).toBeHidden();
+  await page.getByRole('button',{name:'Vista previa',exact:true}).click();
+  await expect(page.locator('.edition-settings')).toBeHidden();
+  await expect(page.locator('.edition-preview')).toBeVisible();
+  const paper=page.locator('.edition-preview .edition-paper');
+  await expect(paper).toContainText('Elige dos de estas cuatro preguntas (2p.):');
+  await expect(paper).toContainText('Arate arate ignota.');
+  await page.getByRole('button',{name:'Configurar',exact:true}).click();
+  await expect(page.locator('.edition-settings')).toBeVisible();
+  expect(await readEdition(page)).toEqual(before);
+});
+
+test('Oscuro/OLED: papel editorial de fondo blanco y tinta legible',async({page})=>{
+  await page.setViewportSize({width:1180,height:820});
+  await page.emulateMedia({colorScheme:'dark'});
+  await setup(page);
+  const result=await page.locator('.edition-preview .edition-paper').evaluate(node=>{
+    const style=getComputedStyle(node);
+    return {background:style.backgroundColor,color:style.color};
+  });
+  expect(result.background).toBe('rgb(255, 255, 255)');
+  expect(result.color).toBe('rgb(21, 21, 21)');
+});
