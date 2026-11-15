@@ -43,7 +43,7 @@ function samplePlacement(kind='short'){
   p.vocabulary.push(vocab('Helvētĭi, –ōrum','los helvecios',1,'pueblo galo'));
   p.vocabulary.push(vocab('phălanx, phălangis','falange',2,'formación militar'));
   const q=p.questions.find(q=>q.kind==='choice');
-  q.options[0].statement.value='Modificación preverbial a partir de instruxit (3) y de successerunt (2). Cinco derivados en total en lengua propia.';
+  q.options[0].statement.value='Modificación preverbial a partir de *instruxit* (3) y de *successerunt* (2). Cinco derivados en total en lengua propia.';
   q.options[1].statement.value='Evolución fonética de';
   q.options[2].statement.value='Señala el prefijo y el significado que aporta a estas palabras:';
   q.options[3].statement.value='Latinismos:';
