@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 async function seedTexts(page){
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
