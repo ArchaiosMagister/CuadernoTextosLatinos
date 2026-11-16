@@ -175,10 +175,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const rec=report.bank.findVerified(item.candidateId);
         if(!rec)throw new Error('Candidato inexistente o no elegible.');
         const audit=teacherAuditRecord(report,item.candidateId);
-        const seenBefore=old.placements.some(placement=>placement.questions.some(question=>
-          question.kind==='choice'&&question.options.some(other=>other.slots.some(slot=>
-            slot.id!==item.slotId&&slot.value.normalize('NFC').toLocaleLowerCase('es')===
-              rec.value.normalize('NFC').toLocaleLowerCase('es'))));
+        const existingSlots=old.placements.flatMap(placement=>placement.questions.flatMap(question=>
+          question.kind==='choice'?question.options.flatMap(other=>other.slots):[]));
+        const seenBefore=existingSlots.some(slot=>slot.id!==item.slotId&&
+          slot.value.normalize('NFC').toLocaleLowerCase('es')===
+            rec.value.normalize('NFC').toLocaleLowerCase('es'));
         details.push(optionName(option.kind)+': '+previous+' → '+rec.value+
           (seenBefore?' (reutilizada: no quedan nuevas candidatas compatibles)':'')+
           (audit?.semanticReviewRequired?' (significado orientativo; revisar)':''));
