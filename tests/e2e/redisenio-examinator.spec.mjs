@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 
 async function seedTwoTexts(page){
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     const repo=new IndexedDbCorpusRepository();
@@ -34,7 +34,7 @@ async function editionData(page){
 }
 
 test('Biblioteca Examinator2: busca autores y títulos, conserva filtros y cita',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await expect(page.locator('.lib-author-group')).toHaveCount(3);
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(28);
