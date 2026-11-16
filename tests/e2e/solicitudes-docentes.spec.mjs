@@ -62,14 +62,16 @@ test('modificación preverbial toma dos verbos del texto y aplica 3 + 2 derivado
   await panel.getByRole('button',{name:'Generar Modificación preverbial'}).click();
   await expect(panel.getByRole('textbox',{name:'Enunciado del apartado'}))
     .toHaveValue(/instruxit.*\(3\).*successerunt.*\(2\)/);
-  await expect(panel.getByRole('textbox',{name:'Palabra'})).toHaveCount(5);
+  // Los cinco derivados son respuestas del alumno: el motor puede
+  // prepararlos internamente, pero nunca deben imprimirse en el ejercicio.
+  await expect(panel.getByRole('textbox',{name:'Palabra'})).toHaveCount(0);
   await expect(page.locator('.edition-academic-review')).toHaveCount(0);
   const editions=await getEditions(page);
   const p=editions.find(x=>x.id==='ed.seleccion-textos')?.placements[0];
   const q=p.questions.find(x=>x.kind==='choice');
   const preverb=q.options.find(o=>o.kind==='preverb');
-  expect(preverb.slots).toHaveLength(5);
-  expect(new Set(preverb.slots.map(x=>x.value)).size).toBe(5);
+  expect(preverb.slots).toHaveLength(0);
+  expect(preverb.statement.value).toMatch(/instruxit.*\(3\).*successerunt.*\(2\)/);
   await page.reload();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await expect(page.locator('.edition-option').filter({hasText:'Modificación preverbial'})
