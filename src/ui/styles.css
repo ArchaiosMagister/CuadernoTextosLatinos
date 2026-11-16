@@ -504,6 +504,38 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-vocab-candidate>.hint{margin:0;}
 .edition-export-review{margin:1rem 0;}
 .edition-export-review>.edition-academic-diff{max-height:14rem;overflow:auto;}
+/* Etiquetas docentes: jerarquía plegable legible y navegable desde iPad.
+   Los cambios de estilos no afectan a la página A4 impresa. */
+.grammar-filter {border:1px solid var(--edge);border-radius:.5rem;
+  margin:.5rem 0;background:var(--surface);font-size:.86rem;}
+.grammar-filter>summary {cursor:pointer;font-weight:700;color:var(--accent);padding:.65rem .7rem;}
+.grammar-filter-inner {display:grid;gap:.55rem;padding:.65rem .7rem;border-top:1px solid var(--edge);}
+.grammar-filter-choices,.grammar-editor-choices {display:grid;gap:.5rem;min-width:0;}
+.grammar-group {border:1px solid var(--edge);border-radius:.5rem;background:var(--surface);}
+.grammar-group>summary {font-weight:650;color:var(--accent);cursor:pointer;padding:.55rem .7rem;}
+.grammar-group-body {padding:.2rem .4rem .65rem;display:grid;gap:.2rem;}
+.grammar-item {display:flex!important;align-items:start;gap:.5rem;
+  padding:.35rem .35rem .35rem calc(.45rem + var(--level,0)*.65rem);
+  font-size:.86rem;line-height:1.4;font-weight:450!important;cursor:pointer;}
+.grammar-item:hover {background:light-dark(#ecf3f0,#2c3b43);}
+.grammar-item input {width:1.1rem;height:1.1rem;flex:none;margin:.1rem 0 0;accent-color:var(--accent);}
+.grammar-root {font-weight:650!important;border-bottom:1px solid var(--edge);}
+.grammar-editor {grid-column:1/-1;border:1px solid var(--edge);
+  border-radius:.65rem;padding:.85rem;display:grid;gap:.55rem;
+  background:light-dark(#f8f9f6,#202c34);}
+.grammar-editor h3 {font-size:1.05rem;margin:0;color:var(--accent);}
+.grammar-custom-row {display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;}
+.grammar-custom-row .field-control {flex:1 1 12rem;margin:0;}
+.grammar-custom-row .btn {flex:0 0 auto;}
+.work-tags {display:block;font-size:.73rem;line-height:1.4;
+  margin-top:.12rem;color:light-dark(#245e52,#afe1cf);}
+.workflow-finish {flex:1 1 12rem;min-height:3rem;}
+.workflow-finish:not(:disabled) {box-shadow:0 0 0 2px light-dark(#a4cfbb,#3f7367);}
+@media(max-width:780px){
+  .grammar-group-body {max-height:17rem;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .grammar-custom-row .btn {flex:1 1 auto;}
+}
+
 /* Diseño editorial inspirado en el comportamiento real de Examinator2:
    catálogo izquierdo, lector derecho, tarjetas de preguntas y hoja A4.
    Son reglas exclusivamente de interfaz; la maqueta imprimible permanece
