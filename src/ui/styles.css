@@ -856,10 +856,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 /* En Textos solo son visibles los controles de edición individual. */
 .simple-app[data-stage="texts"] .edition-toolbar-actions>select,
 .simple-app[data-stage="texts"] .edition-toolbar-actions>button:nth-of-type(1),
+.simple-app[data-stage="texts"] .edition-toolbar-actions>button:nth-of-type(4),
 .simple-app[data-stage="texts"] .edition-toolbar-actions>button:nth-of-type(5),
 .simple-app[data-stage="texts"] .edition-toolbar-actions>button:nth-of-type(6),
 .simple-app[data-stage="texts"] .edition-menu-nav>button:nth-of-type(4),
 .simple-app[data-stage="texts"] .edition-menu-nav>button:nth-of-type(5) {display:none;}
+.simple-app[data-stage="prepare"] .edition-toolbar-actions>select,
+.simple-app[data-stage="prepare"] .edition-toolbar-actions>button:nth-of-type(1),
+.simple-app[data-stage="prepare"] .edition-menu-nav>button:nth-of-type(5) {display:none;}
 .simple-app .edition-mobile-switch {display:none;}
 .simple-app .edition-mobile-hidden {display:block!important;}
 .simple-app .edition-toolbar {margin-bottom:.65rem;}
