@@ -63,7 +63,7 @@ export function mountSimpleApp(root:HTMLElement):void{
   let selectedEditionId:string|null=null;
   let selectedIds:string[]=[];
   let selectionInitialized=false;
-  let ready=false,working=false,tagPanelOpen=false;
+  let working=false,tagPanelOpen=false;
   let feedback='Selecciona un texto para empezar.',isError=false;
   let textSearch='',authorSearch='',authorFilter='all';
   let collectionSearch='';
@@ -77,10 +77,6 @@ export function mountSimpleApp(root:HTMLElement):void{
     feedback=value;isError=error;
     const target=root.querySelector<HTMLElement>('.simple-status');
     if(target){target.textContent=feedback;target.dataset.error=String(isError);}
-  }
-  async function reloadCorpus():Promise<void>{
-    snapshot=await corpusRepository.load();
-    editions=await workspace.listEditions();
   }
   function getActiveText():LatinText|undefined{
     return snapshot?.corpus.texts.find(t=>t.id===activeTextId);
@@ -640,10 +636,10 @@ export function mountSimpleApp(root:HTMLElement):void{
       if(source&&snapshot.corpus.texts.some(t=>t.id===source)){
         if(await composer.openSourceText(source))activeTextId=source;
       }
-      ready=true;render();
+      render();
       message('Listo. Selecciona un texto; el editor se abrirá automáticamente.');
     }catch(err){
-      ready=false;render();
+      render();
       message('No se pudo cargar la biblioteca: '+(err instanceof Error?err.message:String(err)),true);
     }
   })();
