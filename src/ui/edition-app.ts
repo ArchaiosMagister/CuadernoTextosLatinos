@@ -20,6 +20,7 @@ import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
 import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
+import {quotedMeaning} from '../core/vocabulary-format.js';
 
 const workspace = new WorkspaceRepository();
 const legacy = new IndexedDbCorpusRepository();
@@ -102,7 +103,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
     for(const v of included){
       const item=node('p','edition-vocabulary-line');
       item.append(node('em','',v.headword));
-      item.append(document.createTextNode(v.meaning?': '+v.meaning:': [significado pendiente]'));
+      item.append(document.createTextNode(v.meaning?': '+quotedMeaning(v.meaning):': [significado pendiente]'));
       if(v.note)item.append(document.createTextNode(' ('+v.note+')'));
       box.append(item);
     }
