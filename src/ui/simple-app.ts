@@ -437,11 +437,11 @@ export function mountSimpleApp(root:HTMLElement):void{
   async function prepare():Promise<void>{
     if(!selectedIds.length){message('Marca al menos un texto.',true);return;}
     if(!notebookTitle.trim()){message('Escribe el título del cuaderno.',true);return;}
+    const before=new Set(editions.map(e=>e.edition.id));
     if(!await composer.prepareFromIds(selectedIds,notebookTitle))return;
     editions=await workspace.listEditions();
-    const latest=[...editions].filter(x=>x.edition.id!==WORKING_EDITION_ID)
-      .sort((a,b)=>b.edition.createdAt.localeCompare(a.edition.createdAt))[0];
-    selectedEditionId=latest?.edition.id??null;
+    const created=editions.find(e=>!before.has(e.edition.id));
+    selectedEditionId=created?.edition.id??null;
     render();
     message('Cuaderno con '+selectedIds.length+' textos listo. Puedes ajustar preguntas y exportar Word/PDF.');
   }
