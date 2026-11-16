@@ -1,4 +1,5 @@
 import { mountLibraryApp } from './ui/library-app.js';
+import { mountSimpleApp } from './ui/simple-app.js';
 import { createBackup, MAX_BACKUP_CHARACTERS, readBackup } from './core/backup.js';
 import { serializeCorpus } from './core/archive.js';
 import type { LatinText } from './core/model.js';
@@ -267,7 +268,11 @@ void (async () => {
 })();
 
 /** El banco y el editor comparten la misma persistencia de la fase 1. */
-mountLibraryApp(required<HTMLElement>('phase2'));
+if(new URLSearchParams(window.location.search).get('classic')==='1'){
+  mountLibraryApp(required<HTMLElement>('phase2'));
+}else{
+  mountSimpleApp(required<HTMLElement>('phase2'));
+}
 window.addEventListener('corpus-updated', () => {
   if (busy) return;
   void (async () => {
