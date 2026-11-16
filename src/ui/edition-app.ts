@@ -375,7 +375,7 @@ export function createEditionPane():{
       const corpus=(await legacy.load()).corpus;
       const byId=new Map(corpus.texts.map(t=>[t.id,t]));
       for(const id of chosen)if(!byId.has(id))throw new Error('Texto no encontrado: '+id);
-      const working=await workspace.getEdition(WORKING_EDITION_ID);
+      const working=await workspace.loadEdition(WORKING_EDITION_ID);
       const drafts=new Map(working?.edition.placements.filter(p=>p.source.kind==='corpus'&&p.source.sourceId)
         .map(p=>[p.source.sourceId!,p])??[]);
       const at=now();
@@ -418,7 +418,7 @@ export function createEditionPane():{
   async function syncSourceTags(textId:string,tagIds:readonly string[]):Promise<boolean>{
     if(!await flush())return false;
     try{
-      const currentWorking=await workspace.getEdition(WORKING_EDITION_ID);
+      const currentWorking=await workspace.loadEdition(WORKING_EDITION_ID);
       if(!currentWorking)return true;
       const p=currentWorking.edition.placements.find(p=>p.source.kind==='corpus'&&p.source.sourceId===textId);
       if(!p || JSON.stringify(p.grammaticalTagIds)===JSON.stringify(tagIds))return true;
