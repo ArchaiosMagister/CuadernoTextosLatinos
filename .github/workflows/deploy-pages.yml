@@ -1,4 +1,4 @@
-name: Publicar Cuaderno — estable + prueba temporal PR10
+name: Publicar Cuaderno de textos latinos estable
 
 on:
   push:
@@ -14,131 +14,52 @@ concurrency:
 
 jobs:
   build:
-    name: Conservar web actual y añadir /prueba/
     runs-on: ubuntu-24.04
     timeout-minutes: 22
     steps:
-      - name: Descargar la web publicada original (main)
+      - name: Obtener exclusivamente la versión estable desde main
         uses: actions/checkout@v4
-        with:
-          ref: main
-          path: estable
-      - name: Descargar versión experimental PR10 sin fusionar
-        uses: actions/checkout@v4
-        with:
-          ref: feat/interfaz-editorial-primera-iteracion
-          path: experimental
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Generar la versión estable tal cual
-        working-directory: estable
+      - name: Instalar dependencias declaradas
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Compilar y ejecutar pruebas de tipos y contratos
+        run: npm run check
+      - name: Instalar WebKit para compatibilidad con iPad Safari
+        run: npx playwright install --with-deps webkit
+      - name: Probar exportación, edición, guardado y restauración
+        run: npm run test:e2e
+      - name: Mantener una vía segura para descargar datos creados en /prueba/
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          npm run check
-      - name: Generar la versión PR10
-        working-directory: experimental
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          npm run check
-      - name: Probar en WebKit la versión PR10
-        working-directory: experimental
-        run: |
-          npx playwright install --with-deps webkit
-          npm run test:e2e
-      - name: Construir sitio conjunto sin modificar la web habitual
-        run: |
-          mkdir -p publicar
-          cp -a estable/dist/. publicar/
-          mkdir -p publicar/prueba
-          cp -a experimental/dist/. publicar/prueba/
-          python3 - <<'PY'
-          from pathlib import Path
-          root = Path('publicar')
-          example = root/'prueba'
-          html = example/'index.html'
-          text = html.read_text()
-          marker = (
-              '<div role="note" style="font:14px system-ui;padding:10px 14px;'
-              'background:#fff3ce;color:#332700;border-bottom:1px solid #ba9941">'
-              '<strong>VISTA DE PRUEBA TEMPORAL — PR #10</strong> · '
-              'No es la versión publicada definitiva. '
-              'Guarda una copia JSON de tus textos de prueba.</div>'
-          )
-          assert '<body>' in text
-          html.write_text(text.replace(
-            '<body>', '<body>\n    '+marker, 1
-          ).replace(
-            '<meta name="viewport" content="width=device-width, initial-scale=1" />',
-            '<meta name="viewport" content="width=device-width, initial-scale=1" />\n'
-            '    <meta name="robots" content="noindex, nofollow" />',1
-          ))
-
-          # GitHub Pages usa el mismo origen en / y /prueba/. IndexedDB
-          # no se aísla por rutas: usar nombres distintos es OBLIGATORIO.
-          idb_files = {
-            'storage/indexeddb-corpus-repository.js': (
-              "'cuaderno-textos-latinos'",
-              "'cuaderno-textos-latinos-prueba-pr10'"
-            ),
-            'storage/workspace-repository.js': (
-              "'cuaderno-textos-latinos-workspace'",
-              "'cuaderno-textos-latinos-workspace-prueba-pr10'"
-            ),
-          }
-          for filename,(original,replacement) in idb_files.items():
-            file = example/filename
-            code = file.read_text()
-            assert original in code, 'No se encontró nombre IndexedDB en '+filename
-            assert code.count(original) == 1, 'Nombre IndexedDB inesperado '+filename
-            file.write_text(code.replace(original,replacement,1))
-
-          # No permitir que el SW experimental borre la caché de la
-          # aplicación estable: ambos comparten origen aunque no ruta.
-          sw = example/'service-worker.js'
-          code = sw.read_text()
-          assert 'cuaderno-textos-' in code
-          sw.write_text(code.replace('cuaderno-textos-','cuaderno-preview-pr10-'))
-
-          # Regresión de Safari: no volver a imponer alto A4 exacto ni salto
-          # obligatorio después de cada aparición; generaría hojas vacías.
-          css=(example/'styles.css').read_text()
-          assert 'min-height:0!important;height:auto!important' in css, (
-            'Impresión PDF: se ha perdido la eliminación de alto mínimo')
-          assert '.edition-print-root .edition-paper + .edition-paper' in css, (
-            'Impresión PDF: falta salto solo antes de los siguientes textos')
-          assert 'break-after:auto;page-break-after:auto;' in css, (
-            'Impresión PDF: hay saltos obligatorios al final de cada texto')
-
-          # Verificar que la raíz conserva todos sus archivos byte a byte.
-          for stable_file in Path('estable/dist').rglob('*'):
-            if not stable_file.is_file():
-              continue
-            rel=stable_file.relative_to('estable/dist')
-            published_file=root/rel
-            assert published_file.read_bytes()==stable_file.read_bytes(), (
-              'Se modificó la web habitual: '+str(rel))
-          print('Raíz original preservada; vista aislada en /prueba/')
-          print('Ficheros original:',sum(p.is_file() for p in Path('estable/dist').rglob('*')))
-          print('Ficheros vista:',sum(p.is_file() for p in example.rglob('*')))
-          PY
-      - uses: actions/configure-pages@v5
-      - name: Preparar paquete único de Pages
+          test -f dist/storage/workspace-repository.js
+          test -f dist/storage/indexeddb-corpus-repository.js
+          test -f dist/storage/workspace-backup.js
+          test -f dist/core/backup.js
+          mkdir -p dist/recuperar-prueba
+          cp static/recuperar-prueba/index.html dist/recuperar-prueba/index.html
+          # La aplicación experimental ya no forma parte del despliegue.
+          test ! -e dist/prueba
+      - name: Verificar en WebKit que ambas copias JSON de /prueba/ son recuperables
+        run: node scripts/smoke-recovery.mjs
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Empaquetar exclusivamente la versión estable y recuperación
         uses: actions/upload-pages-artifact@v3
         with:
-          path: publicar
+          path: dist
+
   deploy:
-    name: Publicar raíz intacta y /prueba/
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}prueba/
     steps:
-      - name: Publicar la demo en GitHub Pages
-        uses: actions/deploy-pages@v4
+      - name: Publicar la aplicación estable
         id: deployment
+        uses: actions/deploy-pages@v4
