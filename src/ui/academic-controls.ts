@@ -14,6 +14,8 @@ import {
 } from '../core/academic-morph-selection.js';
 import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/academic-teacher-bank.js';
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
+import { choosePreverbBases,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
+import {validateEdition} from '../core/edition-validation.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -71,13 +73,16 @@ function rangeInParagraph(p:HTMLElement,selection:Selection):{start:number;end:n
   return safeToken(p.textContent??'',start,end)?{start,end}:null;
 }
 
-export function createAcademicControls(repository:WorkspaceRepository,bind:Bindings){
+export function createAcademicControls(repository:WorkspaceRepository,bind:Bindings,
+  options:{autoApply?:boolean}={}){
   // El banco congelado no se modifica y se instancia únicamente cuando se abre un control.
   let services:ReturnType<typeof createOfflineTeacherBankV1>|null=null;
   let engine:AcademicQuestionEngineV1|null=null,selector:AcademicMorphTokenSelectorV1|null=null;
   const bases=teacherPreverbBases(academicTeacherSnapshotV1);
+  const autoApply=options.autoApply===true;
   const counts=new Map<string,number>();
   const sourceForms=new Map<string,string[]>();
+  const selectedBases=new Map<string,PreverbSelection>();
   const ruleFilters=new Map<string,Set<string>>();
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
@@ -103,7 +108,17 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function countFor(o:ChoiceOptionV1):number{
     return counts.get(o.id)??(o.slots.length||defaults[o.kind]);
   }
-  function sourceFor(o:ChoiceOptionV1,count=countFor(o)):string[]{
+  function preverbBasesFor(o:ChoiceOptionV1,p:TextPlacementV1):PreverbSelection{
+    let selected=selectedBases.get(o.id);
+    if(!selected){
+      selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin);
+      selectedBases.set(o.id,selected);
+      sourceForms.set(o.id,[...selected.sourceKeys]);
+    }
+    return selected;
+  }
+  function sourceFor(o:ChoiceOptionV1,count=countFor(o),p?:TextPlacementV1):string[]{
+    if(o.kind==='preverb'&&p)preverbBasesFor(o,p);
     const values=sourceForms.get(o.id)??[];
     return Array.from({length:count},(_,i)=>values[i]??'');
   }
@@ -111,11 +126,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     return rulesEnabled.has(q.id)?[...(ruleFilters.get(q.id)??new Set(allRules))]:undefined;
   }
   function replaceFor(id:string):boolean{return replaceGroups.has(id);}
-  function fieldsFor(o:ChoiceOptionV1){
-    const count=countFor(o);
+  function fieldsFor(o:ChoiceOptionV1,p?:TextPlacementV1){
+    const count=o.kind==='preverb'?5:countFor(o);
     return {
       count,
-      sourceForms:o.kind==='preverb'?sourceFor(o,count):undefined,
+      sourceForms:o.kind==='preverb'?sourceFor(o,count,p):undefined,
       newSlotIds:Array.from({length:Math.max(0,count-o.slots.length)},()=> 'slot.'+crypto.randomUUID()),
     };
   }
@@ -198,7 +213,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   }
   function requestGroup(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1):void{
     void withSaved(s=>{
-      const f=fieldsFor(o);
+      const f=fieldsFor(o,p);
       const plan=service().engine.prepareSubquestion(s.edition,{
         placementId:p.id,questionId:q.id,optionId:o.id,expectedRevision:s.revision,
         desiredCount:f.count,newSlotIds:f.newSlotIds,
@@ -220,7 +235,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const sourceFormsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
       const newSlotIdsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
       for(const o of q.options.filter(x=>x.enabled)){
-        const f=fieldsFor(o);
+        const f=fieldsFor(o,p);
         desiredCountByKind[o.kind]=f.count;
         newSlotIdsByKind[o.kind]=f.newSlotIds;
         if(f.sourceForms)sourceFormsByKind[o.kind]=f.sourceForms;
@@ -334,27 +349,40 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     tools.append(accept,cancel);box.append(tools);
     return box;
   }
-  function setSourcesUi(section:HTMLElement,o:ChoiceOptionV1):void{
+  function setSourcesUi(section:HTMLElement,p:TextPlacementV1,o:ChoiceOptionV1):void{
     if(o.kind!=='preverb')return;
-    const count=countFor(o);
+    const picked=preverbBasesFor(o,p);
     const wrap=el('fieldset','edition-source-forms');
-    wrap.append(el('legend','','Base para cada derivado preverbial'));
-    const sourceValues=sourceFor(o,count);
-    for(let i=0;i<count;i++){
+    wrap.append(el('legend','','Dos verbos de partida: tres derivados + dos derivados'));
+    const values=sourceFor(o,5,p);
+    for(const [index,count] of [[0,3],[1,2]] as const){
       const label=el('label','edition-field');
-      label.append(el('span','edition-field-label','Derivado '+(i+1)));
+      label.append(el('span','edition-field-label',
+        'Verbo '+(index+1)+' · '+count+' derivados'+
+        (picked.forms[index]?' · '+picked.forms[index]:'') ));
       const select=el('select','field-control');
-      const blank=el('option','','Elegir base documentada');blank.value='';select.append(blank);
       for(const base of bases){
         const opt=el('option','',base.enunciado+(base.requiresDisambiguation?' · homónimo':''));opt.value=base.selectionKey;
         select.append(opt);
       }
-      select.value=sourceValues[i]??'';
+      select.value=values[index===0?0:3]??'';
       select.addEventListener('change',()=>{
-        const arr=sourceFor(o,count);arr[i]=select.value;sourceForms.set(o.id,arr);
+        const first=index===0?select.value:values[0]!;
+        const second=index===1?select.value:values[3]!;
+        sourceForms.set(o.id,[first,first,first,second,second]);
+        // Una elección manual sustituye la forma tomada del pasaje
+        // por el lema del banco, sin declarar que aparece en el texto.
+        const baseA=bases.find(x=>x.selectionKey===first);
+        const baseB=bases.find(x=>x.selectionKey===second);
+        if(baseA&&baseB){
+          selectedBases.set(o.id,{sourceKeys:[first,first,first,second,second],
+            forms:[baseA.lemma,baseB.lemma],source:'bank'});
+        }
+        bind.repaint();
       });
       label.append(select);wrap.append(label);
     }
+    wrap.append(el('p','hint','Se priorizan formas documentadas del pasaje; si faltan, se eligen bases distintas del banco docente.'));
     section.append(wrap);
   }
   function phoneticControls(section:HTMLElement,q:Choice):void{
@@ -400,14 +428,15 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const label=el('label','edition-field');
     label.append(el('span','edition-field-label','Cantidad para este apartado (sin regenerar automáticamente)'));
     const count=el('input','field-control');count.type='number';count.min='1';count.max='30';
-    count.value=String(countFor(o));
+    count.value=String(o.kind==='preverb'?5:countFor(o));
+    if(o.kind==='preverb')count.disabled=true;
     count.addEventListener('change',()=>{
       const n=Number(count.value);
       if(!Number.isInteger(n)||n<1||n>30){count.value=String(countFor(o));return;}
       counts.set(o.id,n);bind.repaint();
     });
     label.append(count);ui.append(label);
-    setSourcesUi(ui,o);
+    setSourcesUi(ui,p,o);
     consent(ui,o.id);
     ui.append(button('Proponer apartado '+optionName(o.kind),()=>requestGroup(p,q,o)));
     section.append(ui);
