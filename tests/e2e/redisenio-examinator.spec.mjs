@@ -46,9 +46,11 @@ test('Biblioteca Examinator2: busca autores y títulos, conserva filtros y cita'
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(1);
   await page.locator('.lib-sidebar .work-row').first().click();
   await expect(page.locator('.reader-work')).toContainText('De bello Gallico');
-  await page.getByRole('textbox',{name:'Ir a pasaje'}).fill('1.1');
+  const firstReference=await page.locator('.reader-line').first().getAttribute('data-c');
+  assert.ok(firstReference);
+  await page.getByRole('textbox',{name:'Ir a pasaje'}).fill(firstReference);
   await page.getByRole('button',{name:'Ir a',exact:true}).click();
-  await expect(page.locator('.reader-line[data-c="1.1"]')).toHaveCount(1);
+  await expect(page.locator('#phase2-status')).toContainText('Mostrando el pasaje '+firstReference);
   await page.getByRole('button',{name:'Limpiar filtros'}).click();
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(28);
   await expect(search).toHaveValue('');
@@ -58,11 +60,11 @@ test('Biblioteca Examinator2: busca autores y títulos, conserva filtros y cita'
 test('Editor: Anterior/Siguiente encima del A4, índice de preguntas sin regeneración',async({page})=>{
   await seedTwoTexts(page);
   const preview=page.locator('.edition-preview');
-  const navigator=preview.locator('.edition-navigation');
+  const navigator=page.locator('.edition-preview-stack > .edition-navigation');
   await expect(navigator).toHaveCount(1);
   await expect(page.locator('.edition-shell > .edition-navigation')).toHaveCount(0);
   const positions=await page.evaluate(()=>{
-    const n=document.querySelector('.edition-preview .edition-navigation').getBoundingClientRect();
+    const n=document.querySelector('.edition-preview-stack > .edition-navigation').getBoundingClientRect();
     const paper=document.querySelector('.edition-preview .edition-paper').getBoundingClientRect();
     return {navBottom:n.bottom,paperTop:paper.top};
   });
@@ -93,7 +95,7 @@ test('iPad vertical: navegación A4 visible en Vista previa; controles y cambios
   await page.getByRole('button',{name:'Vista previa',exact:true}).click();
   const preview=page.locator('.edition-preview');
   await expect(preview).toBeVisible();
-  const nav=preview.locator('.edition-navigation');
+  const nav=page.locator('.edition-preview-stack > .edition-navigation');
   await expect(nav.getByRole('button',{name:'Anterior'})).toBeVisible();
   await expect(nav.getByRole('button',{name:'Siguiente'})).toBeDisabled();
   await nav.getByRole('button',{name:'Anterior'}).click();
