@@ -795,6 +795,10 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     else if(placement && menu==='vocabulary')menuVocabulary(panel,placement);
     else panel.append(node('p','hint','Añade un texto desde el menú «Cuaderno» para comenzar.'));
     editor.append(panel);
+    // La barra pertenece a la columna de la hoja, pero permanece visible
+    // cuando la vista previa está temporalmente oculta en iPad vertical.
+    const previewStack=node('div','edition-preview-stack');
+    previewStack.append(nav);
     const preview=node('section','edition-preview'+(mobile==='config'?' edition-mobile-hidden':''));
     const papers=node('div','edition-paper-pages');
     papers.addEventListener('pointerup',()=>academics.savePaperSelection(papers));
@@ -805,9 +809,10 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     bar.append(academics.renderPaperSelect(papers));
     // Los controles Anterior / Siguiente van justo encima del papel; no se
     // reproducen en la cabecera ni alteran el modelo al cambiar de posición.
-    preview.append(nav,bar,papers);
+    preview.append(bar,papers);
     preview.append(node('p','edition-preview-note','Vista en pantalla · sin exportación todavía.'));
-    layout.append(editor,preview);element.append(layout);
+    previewStack.append(preview);
+    layout.append(editor,previewStack);element.append(layout);
     paintPreview();
   }
   return {element,open:()=>refresh(),flush};
