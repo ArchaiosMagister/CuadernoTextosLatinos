@@ -23,7 +23,7 @@ async function seedTwoTexts(page){
   await page.getByRole('button',{name:'Cuaderno',exact:true}).click();
   await page.getByRole('button',{name:'Añadir desde Mis textos'}).click();
   await page.getByRole('button',{name:'Añadir desde Mis textos'}).click();
-  await expect(page.getByText('Texto 2 de 2')).toBeVisible();
+  await expect(page.locator('.edition-counter')).toHaveText('Texto 2 de 2');
   await page.getByRole('button',{name:'Guardar',exact:true}).click();
 }
 async function editionData(page){
