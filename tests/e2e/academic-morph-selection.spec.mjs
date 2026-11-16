@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('WebKit: selecciona solo un homógrafo con análisis explícito, persiste y deshace', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const result = await page.evaluate(async () => {
     const [{createPlacement,createEdition},{WorkspaceRepository},{createOfflineTeacherBankV1},{AcademicMorphTokenSelectorV1}]=await Promise.all([
       import('/core/edition-factory.js'),import('/storage/workspace-repository.js'),
