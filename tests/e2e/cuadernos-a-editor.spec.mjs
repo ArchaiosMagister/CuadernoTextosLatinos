@@ -117,6 +117,7 @@ test('se puede importar otro cuaderno histórico a un workspace con edición ya 
     label:'Material previo (1 texto(s))'
   });
   await page.getByRole('button',{name:'Preparar cuaderno seleccionado'}).click();
+  await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
   const all=await editions(page);
   expect(all).toHaveLength(2);
   expect(all.find(e=>e.title==='Edición nueva independiente')?.placements).toHaveLength(0);
