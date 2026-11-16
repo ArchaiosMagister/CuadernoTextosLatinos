@@ -55,7 +55,7 @@ function backupDownload(content:string,name:string):void{
 }
 
 export function mountSimpleApp(root:HTMLElement):void{
-  const composer=createEditionPane();
+  const composer=createEditionPane({autoApply:true});
   let stage:Stage='texts',textMode:TextMode='editor';
   let snapshot:CorpusSnapshot|null=null,catalogue:LibraryEntry[]=[];
   let editions:EditionSnapshotV1[]=[];
