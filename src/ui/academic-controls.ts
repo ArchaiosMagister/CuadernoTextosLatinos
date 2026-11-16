@@ -197,7 +197,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const question=placement?.questions.find(q=>q.id===preverb.questionId);
       const option=question?.kind==='choice'
         ?question.options.find(o=>o.id===preverb.optionId):null;
-      if(option&&(!option.statement.locked||option.statement.origin==='template')){
+      // El ejercicio pide al alumnado CINCO derivados: no deben aparecer
+      // impresos en el examen. El motor utiliza cinco candidatos internos,
+      // pero la hoja muestra solo los dos verbos de partida (3 + 2).
+      // Las entradas añadidas manualmente por el profesor no se eliminan.
+      if(option){
         saved=await repository.commitEdition(saved.edition.id,saved.revision,
           {command:'ui.preverb-statement',targetId:preverb.optionId,timestamp:at},original=>{
             if(!original)throw new Error('Se ha perdido el cuaderno editorial.');
@@ -205,7 +209,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
               placements:original.placements.map(p=>p.id!==preverb.placementId?p:{
                 ...p,questions:p.questions.map(q=>q.id!==preverb.questionId||q.kind!=='choice'?q:{
                   ...q,options:q.options.map(o=>o.id!==preverb.optionId?o:{
-                    ...o,statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
+                    ...o,
+                    ...(o.statement.locked&&o.statement.origin==='manual'?{}:{
+                      statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
+                    }),
+                    slots:o.slots.filter(slot=>slot.origin==='manual'),
                   }),
                 }),
               }),
