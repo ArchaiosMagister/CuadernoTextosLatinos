@@ -307,3 +307,48 @@ test('la confirmación CAS no admite una ficha fonética de una ley excluida por
   const success=await e.commit(db,plan,LATER);
   assert.equal(choice(success.edition).options[1]!.slots[0]!.value,'phonetics-0');
 });
+
+test('un texto nuevo no reutiliza términos presentes en otros textos mientras quede banco nuevo',()=>{
+  const ed=corpus(),other=ed.placements[1]!.questions.find(x=>x.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Falta la pregunta de elección');
+  other.options.find(o=>o.kind==='prefix')!.slots=[
+    slot('another.prefix.0','prefix-0'),slot('another.prefix.1','prefix-1'),
+  ];
+  const valid=validateEdition(ed),e=engine(),t=target(valid,'prefix');
+  const view=e.previewSlot(valid,t);
+  assert.ok(view.candidates.length>0);
+  assert.equal(view.candidates.some(x=>x.value==='prefix-0'),false);
+  assert.equal(view.candidates.some(x=>x.value==='prefix-1'),false);
+  const group=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:2,seed:0});
+  const values=group.assignments[0]!.items.map(x=>e.bank.findVerified(x.candidateId!)!.value);
+  assert.equal(new Set(values).size,2);
+  assert.ok(values.every(v=>v!=='prefix-0'&&v!=='prefix-1'));
+});
+
+test('agotar las palabras nuevas del banco permite reutilizar las de otros textos, nunca inventarlas',()=>{
+  const ed=corpus(),other=ed.placements[1]!.questions.find(x=>x.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Falta la pregunta de elección');
+  other.options.find(o=>o.kind==='prefix')!.slots=Array.from({length:12},(_,i)=>
+    slot('other.all.prefix.'+i,'prefix-'+i));
+  const valid=validateEdition(ed),e=engine(),t=target(valid,'prefix');
+  const choices=e.previewSlot(valid,t);
+  assert.equal(choices.status,'ready');
+  assert.equal(choices.candidates.length,12);
+  const picked=e.prepareSlot(valid,t,null,3);
+  assert.ok(picked.assignments[0]!.items[0]!.candidateId?.startsWith('prefix.'));
+});
+
+test('la selección de una pregunta completa evita repetir palabras entre textos y conserva el resto',async()=>{
+  const ed=corpus(),other=ed.placements[1]!.questions.find(x=>x.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Falta la pregunta de elección');
+  other.options.find(o=>o.kind==='latinism')!.slots=[slot('other.latinism.used','latinism-0')];
+  const valid=validateEdition(ed),q=choice(valid),e=engine(),db=repo();
+  await db.commitEdition(valid.id,0,{command:'create',targetId:valid.id,timestamp:NOW},()=>valid);
+  const plan=e.prepareChoiceQuestion(valid,{placementId:'place.1',questionId:q.id,
+    expectedRevision:1,seed:0,desiredCountByKind:{preverb:2,phonetics:2,prefix:2,latinism:2},
+    sourceFormsByKind:{preverb:['instruxit','successerunt']}});
+  const after=await e.commit(db,plan,LATER);
+  const latinisms=choice(after.edition).options.find(o=>o.kind==='latinism')!.slots.map(x=>x.value);
+  assert.ok(latinisms.every(v=>v!=='latinism-0'));
+  assert.deepEqual(after.edition.placements[1],valid.placements[1]);
+});
