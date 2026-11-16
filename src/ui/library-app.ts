@@ -460,7 +460,15 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar el cuaderno? Los textos continuarán guardados en Mis textos.'))return;
         if(await transaction(corpus=>removeNotebook(corpus,notebook.id))){currentNotebook='';render();}
       },'btn btn-danger'));
+      actions.append(button('Preparar este cuaderno',async()=>{
+        if(!ready()||!confirmDiscard())return;
+        await composer.open();
+        if(!await composer.importLegacyNotebook(notebook.id))return;
+        tab='compose';render();
+      },'btn btn-primary'));
       editor.append(rename,actions);
+      editor.append(el('p','hint',
+        '«Preparar este cuaderno» abre el editor A4 con estos textos. Los originales continúan aquí; si añades otros después, vuelve a pulsarlo para incorporar solo los nuevos.'));
       const available=snapshot?.corpus.texts.filter(t=>!notebook.textIds.includes(t.id))??[];
       if(available.length){
         const row=el('div','editor-actions');
