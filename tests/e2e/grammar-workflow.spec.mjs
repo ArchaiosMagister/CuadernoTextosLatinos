@@ -7,7 +7,7 @@ async function openGroup(page,scope,label){
 }
 
 test('etiquetas jerárquicas: función/forma, agente distinto de pasiva y búsqueda AND',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.getByRole('button',{name:'Mis textos'}).click();
   await page.getByRole('textbox',{name:'Título',exact:true}).fill('César con AcI');
@@ -61,7 +61,7 @@ test('etiquetas jerárquicas: función/forma, agente distinto de pasiva y búsqu
 });
 
 test('cuaderno terminado activa preparación y conserva etiquetas en la aparición',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.getByRole('button',{name:'Mis textos'}).click();
   await page.getByRole('textbox',{name:'Título',exact:true}).fill('Texto con relativo');
