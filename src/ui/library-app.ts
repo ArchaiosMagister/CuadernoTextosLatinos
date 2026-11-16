@@ -12,7 +12,7 @@ import { IndexedDbCorpusRepository, RevisionConflictError } from '../storage/ind
 import { createEditionPane } from './edition-app.js';
 import type { GrammarTag } from '../core/model.js';
 import { allGrammarTags, attachGrammarTags, catalogDepth, findTagByLabel,
-  GRAMMAR_GROUP_IDS, isCustomTagLabelValid, matchesGrammarFilters,
+  GRAMMAR_GROUP_IDS, isCustomTagLabelValid, matchesGrammarFilters, matchesGrammarTag,
 } from '../core/grammar-tags.js';
 
 type Tab = 'library' | 'texts' | 'notebooks' | 'compose';
@@ -75,7 +75,7 @@ function grammarPicker(tags:readonly GrammarTag[],selected:ReadonlySet<string>,
     if(!group)continue;
     const details=el('details','grammar-group');
     details.open=tags.some(tag=>selected.has(tag.id) &&
-      (tag.id===groupId || tag.parentId===groupId));
+      matchesGrammarTag(tag.id,groupId,tags));
     details.append(el('summary','',group.label));
     const body=el('div','grammar-group-body');
     // El nodo padre es seleccionable por sí mismo.
