@@ -72,11 +72,18 @@ function rankedPassageBases(snapshot:TeacherAcademicSourceSnapshotV1,latin:strin
   }
   return result;
 }
+/** Resuelve una forma documentable a una base inequívoca, sin inventar lemas. */
+export function preverbBaseKeyForForm(snapshot:TeacherAcademicSourceSnapshotV1,form:string):string|null {
+  const token=normalize(form).trim();
+  const matches=rankedPassageBases(snapshot,token).filter(x=>x.word===token);
+  return matches.length===1?matches[0]!.base.key:null;
+}
 export function choosePreverbBases(snapshot:TeacherAcademicSourceSnapshotV1,
-  latin:string,random=Math.random):PreverbSelection{
+  latin:string,random=Math.random,usedBaseKeys:readonly string[]=[]):PreverbSelection{
   const available=bases(snapshot);
   if(available.length<2)throw new Error('Se necesitan al menos dos bases documentadas.');
   const chosen:{base:Base;word:string;fromPassage:boolean}[]=[];
+  const alreadyUsed=new Set(usedBaseKeys);
   const fromText=rankedPassageBases(snapshot,latin);
   // Para la primera base hacen falta tres derivados; para la segunda dos.
   const clashes=(a:Base,b:Base):boolean=>{
@@ -85,13 +92,22 @@ export function choosePreverbBases(snapshot:TeacherAcademicSourceSnapshotV1,
     return b.derivatives.some(d=>derivatives.has(d));
   };
   for(const minimum of [3,2]){
-    const found=fromText.find(x=>x.base.derivatives.length>=minimum&&
+    const passage=fromText.filter(x=>x.base.derivatives.length>=minimum&&
       !chosen.some(c=>clashes(c.base,x.base)));
-    if(found){chosen.push({...found,fromPassage:true});continue;}
-    const candidates=available.filter(x=>x.derivatives.length>=minimum&&
+    const bank=available.filter(x=>x.derivatives.length>=minimum&&
       !chosen.some(c=>clashes(c.base,x)));
-    const draw=Math.max(0,Math.min(candidates.length-1,Math.floor(random()*candidates.length)));
-    const base=candidates[draw]!;
+    // Una base del pasaje ya utilizada pierde prioridad frente a cualquier
+    // base nueva del banco; solo se reutiliza si ninguna nueva es compatible.
+    const freshPassage=passage.find(x=>!alreadyUsed.has(x.base.key));
+    if(freshPassage){chosen.push({...freshPassage,fromPassage:true});continue;}
+    const freshBank=bank.filter(x=>!alreadyUsed.has(x.key));
+    const candidatePool=freshBank.length?freshBank:bank;
+    if(!candidatePool.length)throw new Error('No hay dos bases preverbiales compatibles en el banco.');
+    if(!freshBank.length&&passage.length){
+      chosen.push({...passage[0]!,fromPassage:true});continue;
+    }
+    const draw=Math.max(0,Math.min(candidatePool.length-1,Math.floor(random()*candidatePool.length)));
+    const base=candidatePool[draw]!;
     chosen.push({base,word:base.prompt,fromPassage:false});
   }
   const a=chosen[0]!,b=chosen[1]!;
