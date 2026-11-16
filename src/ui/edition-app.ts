@@ -202,7 +202,7 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       paint();
     },
     status:setMessage,repaint:paint,
-  });
+  },{autoApply});
   document.addEventListener('selectionchange',()=>{
     const pages=element.querySelector<HTMLElement>('.edition-paper-pages');
     if(pages)academics.savePaperSelection(pages);
