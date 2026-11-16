@@ -110,3 +110,24 @@ test('La exportación reporta observaciones académicas sin modificar ni ocultar
   createNotebookDocx(edition);
   assert.equal(JSON.stringify(edition),snapshot);
 });
+
+test('DOCX incluye exclusivamente preguntas: no exporta derivados-respuesta ni análisis morfológicos',()=>{
+  const ed=fixture(),placement=ed.placements[0]!;
+  const choice=placement.questions.find(q=>q.kind==='choice');
+  const morph=placement.questions.find(q=>q.kind==='morphology');
+  if(!choice||choice.kind!=='choice'||!morph||morph.kind!=='morphology')
+    throw Error('Plantilla inesperada');
+  const preverb=choice.options.find(o=>o.kind==='preverb')!;
+  preverb.statement.value='Modificación preverbial a partir de *struo* (3) y de *cedo* (2).';
+  preverb.slots=[{id:'private.preverb.answer',value:'RESPUESTA_OCULTA',proposedLemmaId:null,
+    origin:'manual',locked:true,provenance:null}];
+  morph.words=[{id:'private.morph.answer',markId:'mark.1',surface:'Rōma',
+    lemmaId:'Roma',analysis:'ANALISIS_OCULTO',provenance:null,
+    reviewState:'manual',locked:true}];
+  const xml=files(createNotebookDocx(ed)).get('word/document.xml')!;
+  assert.match(xml,/Modificación preverbial/);
+  assert.match(xml,/struo/);
+  assert.doesNotMatch(xml,/RESPUESTA_OCULTA/);
+  assert.doesNotMatch(xml,/ANALISIS_OCULTO/);
+  assert.match(xml,/Rōma/);
+});
