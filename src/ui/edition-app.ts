@@ -832,8 +832,22 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       ()=>prepareVocabulary(p),'btn btn-primary'));
     renderVocabularySuggestions(panel,p);
     const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
+    const documented=items.filter(v=>v.provenance!==null).length;
+    const provisional=items.filter(v=>v.origin==='generated'&&v.provenance===null).length;
+    const manual=items.filter(v=>v.origin==='manual').length;
+    if(items.length){
+      panel.append(node('p','hint','Lematización parcial del texto: '+documented+
+        ' lemas documentados · '+provisional+' formas provisionales · '+manual+
+        ' entradas o decisiones manuales. Los significados no se deducen automáticamente.'));
+    }
     for(const v of items){
       const group=node('div','edition-vocabulary-control');
+      const evidenceLabel=v.provenance!==null
+        ?'Lema documentado; significado pendiente de revisión docente'
+        :v.origin==='generated'
+          ?'Forma provisional: lema sin respaldo inequívoco; revisar'
+          :'Entrada editada manualmente; no presentada como lema verificado';
+      group.append(node('p','hint',evidenceLabel));
       const check=node('input');check.type='checkbox';check.checked=v.included;
       check.setAttribute('aria-label','Incluir '+v.headword);
       check.addEventListener('change',()=>{apply((e,at)=>editVocabulary(e,p.id,v.id,'included',check.checked,at));paint();});
