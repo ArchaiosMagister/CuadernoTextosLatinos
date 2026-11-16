@@ -565,8 +565,8 @@ export function mountLibraryApp(root: HTMLElement): void {
   function renderNotebooks(): HTMLElement {
     const shell=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
-    sidebar.append(el('h2','','Cuadernos anteriores'),
-      el('p','hint','Organización original de textos. Para preparar las preguntas y el documento A4, abre «Preparar cuaderno».'));
+    sidebar.append(el('h2','','1. Seleccionar textos'),
+      el('p','hint','Crea un cuaderno, incorpora textos y ordénalos. Después pulsa «Cuaderno terminado» para entrar en la preparación A4.'));
     const createName=el('input','field-control');
     createName.placeholder='Nombre del cuaderno';createName.maxLength=250;
     sidebar.append(createName);
@@ -589,8 +589,8 @@ export function mountLibraryApp(root: HTMLElement): void {
     const editor=el('section','editor-pane');
     const notebook=snapshot?.corpus.notebooks.find(b=>b.id===currentNotebook);
     if(!notebook) {
-      editor.append(el('h2','','Organiza tus materiales'));
-      editor.append(el('p','hint','Crea un cuaderno y añade textos guardados. Puedes cambiar su orden sin alterar la biblioteca.'));
+      editor.append(el('h2','','Selección de textos'));
+      editor.append(el('p','hint','Crea un cuaderno y añade los textos que quieras. «Cuaderno terminado» abrirá las preguntas, el vocabulario y la vista previa A4.'));
     } else {
       editor.append(el('h2','',notebook.title));
       const rename=el('input','field-control');rename.value=notebook.title;rename.maxLength=250;rename.setAttribute('aria-label','Cambiar nombre del cuaderno');
@@ -602,15 +602,19 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar el cuaderno? Los textos continuarán guardados en Mis textos.'))return;
         if(await transaction(corpus=>removeNotebook(corpus,notebook.id))){currentNotebook='';render();}
       },'btn btn-danger'));
-      actions.append(button('Preparar este cuaderno',async()=>{
+      const finish=button('Cuaderno terminado · preparar',async()=>{
         if(!ready()||!confirmDiscard())return;
         await composer.open();
         if(!await composer.importLegacyNotebook(notebook.id))return;
         tab='compose';render();
-      },'btn btn-primary'));
+      },'btn btn-primary workflow-finish');
+      finish.disabled=!notebook.textIds.length;
+      actions.append(finish);
       editor.append(rename,actions);
       editor.append(el('p','hint',
-        '«Preparar este cuaderno» abre el editor A4 con estos textos. Los originales continúan aquí; si añades otros después, vuelve a pulsarlo para incorporar solo los nuevos.'));
+        notebook.textIds.length
+          ? 'Al pulsar «Cuaderno terminado» se abre la preparación A4. Puedes volver aquí, añadir nuevos textos y pulsarlo otra vez; se conservan las preguntas y el vocabulario.'
+          : 'Añade al menos un texto para habilitar «Cuaderno terminado».'));
       const available=snapshot?.corpus.texts.filter(t=>!notebook.textIds.includes(t.id))??[];
       if(available.length){
         const row=el('div','editor-actions');
@@ -647,14 +651,15 @@ export function mountLibraryApp(root: HTMLElement): void {
     root.replaceChildren();
     const head=el('div','workspace-header');
     const brand=el('div','workspace-brand');
-    brand.append(el('p','phase','BIBLIOTECA · EDICIÓN · DOCUMENTOS A4'),
+    brand.append(el('p','phase','BIBLIOTECA · SELECCIÓN DE TEXTOS → PREPARACIÓN A4'),
       el('h1','','Cuaderno de textos latinos'),
       el('p','workspace-subtitle','Selecciona pasajes, prepara preguntas y compón tus cuadernos.'));
     const tag=el('span','offline-indicator',offlinePrepared?'Biblioteca preparada sin conexión':'Preparando biblioteca sin conexión');
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
     tabs.setAttribute('aria-label','Apartados del cuaderno');
-    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],['notebooks','Cuadernos'],['compose','Preparar cuaderno']];
+    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],
+      ['notebooks','1. Seleccionar textos'],['compose','2. Preparar cuaderno']];
     for(const [key,title] of buttons) {
       const b=button(title,()=>setTab(key),'workspace-tab'+(tab===key?' current':''));
       b.setAttribute('aria-current',tab===key?'page':'false');
