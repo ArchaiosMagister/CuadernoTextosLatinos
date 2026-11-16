@@ -2,18 +2,19 @@
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color-scheme: light dark;
   line-height: 1.55;
-  --accent: #175b85;
-  --edge: light-dark(#d9dfe6, #414751);
-  --surface: light-dark(#ffffff, #22252b);
-  --subtle: light-dark(#4c5865, #b8c1cf);
-  --focus: light-dark(#126cba, #8ac8ff);
+  /* Paleta editorial de Examinator2: papel cálido y tinta verde azulado. */
+  --accent: light-dark(#1d5466, #a8d9e8);
+  --edge: light-dark(#d7d2c6, #45515b);
+  --surface: light-dark(#fbfaf6, #222a31);
+  --subtle: light-dark(#4d6067, #bfcbd1);
+  --focus: light-dark(#1a738f, #8ac8ff);
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: light-dark(#f5f7fa, #17191e);
+  background: light-dark(#f2f0e9, #171d23);
   color: light-dark(#161b21, #f5f6f8);
 }
 
@@ -503,6 +504,184 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-vocab-candidate>.hint{margin:0;}
 .edition-export-review{margin:1rem 0;}
 .edition-export-review>.edition-academic-diff{max-height:14rem;overflow:auto;}
+/* Diseño editorial inspirado en el comportamiento real de Examinator2:
+   catálogo izquierdo, lector derecho, tarjetas de preguntas y hoja A4.
+   Son reglas exclusivamente de interfaz; la maqueta imprimible permanece
+   regida por @media print, para evitar regresiones de paginación. */
+.workspace-container { max-width:91rem; padding:1.2rem 1.15rem 2rem; }
+.workspace-header {
+  padding:.95rem 1.1rem; margin-bottom:.65rem;
+  background:var(--surface); border:1px solid var(--edge); border-radius:.8rem;
+}
+.workspace-brand h1 {
+  font-family:"Palatino Linotype",Palatino,Georgia,serif;
+  font-variant:small-caps; font-weight:700;
+  letter-spacing:.02em; color:var(--accent);
+  font-size:clamp(1.55rem,3.2vw,2.05rem); line-height:1.2;
+}
+.workspace-brand .phase {color:var(--subtle);font-size:.68rem;letter-spacing:.11em;}
+.workspace-subtitle { margin:.2rem 0 0;font-size:.9rem;color:var(--subtle);}
+.workspace-tabs {
+  position:sticky;top:0;z-index:8;
+  background:light-dark(#f2f0e9,#171d23);
+  margin-bottom:.75rem; gap:.3rem; padding:.2rem 0;
+  scrollbar-width:thin;
+}
+.workspace-tab {border:1px solid transparent;border-bottom:0;min-height:2.75rem;font-size:.94rem;}
+.workspace-tab.current {
+  background:var(--surface);color:var(--accent);
+  border-color:var(--edge); box-shadow:inset 0 -3px var(--accent);
+}
+.library-columns {
+  grid-template-columns:minmax(18rem,30%) minmax(0,1fr);
+  border-color:var(--edge); border-radius:.75rem;
+  box-shadow:0 2px 10px light-dark(#2f37290a,#0002);
+}
+.lib-sidebar {
+  padding:0; background:light-dark(#f5f2eb,#1b252c);
+  display:flex;flex-direction:column;min-height:0;
+}
+.lib-sidebar-heading {padding:.95rem 1rem .4rem;}
+.lib-sidebar-heading h2 { margin:0;color:var(--accent);font-size:1.06rem; }
+.lib-sidebar-heading .hint {margin:.25rem 0 .35rem;}
+.lib-filters {gap:.55rem;padding:.45rem .85rem .7rem;}
+.lib-filter-row {display:grid;grid-template-columns:1fr 1fr;gap:.5rem;min-width:0;}
+.lib-filter-row select {min-width:0;font-size:.83rem;}
+.lib-filter-feedback {display:flex;align-items:center;justify-content:space-between;gap:.3rem;}
+.lib-result-count {font-size:.8rem;color:var(--subtle);font-weight:650;}
+.lib-clear-filters {min-height:2rem;font-size:.75rem;padding:.3rem .5rem;}
+.work-list {margin:0;gap:0;max-height:66vh;overflow-y:auto;
+  border-top:1px solid var(--edge);background:var(--surface);}
+.lib-author-group {padding:0 0 .3rem;border-bottom:1px solid var(--edge);}
+.lib-author-label {
+  position:sticky;top:0;z-index:1;
+  display:flex;gap:.45rem;align-items:center;
+  padding:.5rem .85rem;background:light-dark(#efede5,#26313a);
+  border-bottom:1px solid var(--edge);
+}
+.lib-author-label h3 {font-size:.84rem;margin:0;font-weight:700;color:var(--accent);}
+.lib-author-count {font-size:.75rem;color:var(--subtle);}
+.work-row {
+  display:flex;gap:.17rem;padding:.6rem .75rem .6rem 1rem;
+  border:0;border-left:3px solid transparent;border-radius:0;
+  border-bottom:1px solid light-dark(#e9e6dc,#34414a);
+  min-height:3.6rem;background:transparent;transition:background-color .1s;
+}
+.work-row:hover {background:light-dark(#f0f4f4,#2b3a43);}
+.work-row.active {
+  background:light-dark(#dce9ea,#30444e);
+  border-color:var(--accent); box-shadow:none;
+}
+.work-title {font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:1rem;}
+.work-offline {font-size:.68rem;font-weight:600;color:light-dark(#356848,#a4e3bc);}
+.lib-reader {padding:1rem 1.15rem 1.3rem;min-height:0;}
+.reader-head {align-items:center;gap:.8rem;padding-bottom:.65rem;border-bottom:1px solid var(--edge);}
+.reader-heading {min-width:0;flex:1 1 12rem;}
+.reader-heading h2 {color:var(--accent);font-family:"Palatino Linotype",Palatino,Georgia,serif;font-size:1.25rem;}
+.reader-tools {display:flex;align-items:center;gap:.4rem;flex:0 1 15rem;}
+.reader-tools .citation-input {min-width:8rem;width:100%;margin:0;}
+.reader-tools .btn {white-space:nowrap;}
+.reader-lines {border-color:var(--edge);max-height:67vh;border-radius:.45rem;}
+.reader-line {border-bottom-color:light-dark(#e9e4d9,#35414a);padding:.55rem .75rem;}
+.reader-ref {font-variant-numeric:tabular-nums;}
+.reader-latin {font-family:"Palatino Linotype",Palatino,Georgia,serif;}
+.lib-selection {
+  border:1px solid var(--edge);border-radius:.55rem;
+  padding:.6rem .75rem;gap:.5rem;
+  background:light-dark(#edf2ed,#24323b);
+}
+.selection-description {font-weight:600;font-size:.85rem;}
+.editor-pane {background:var(--surface);}
+.edition-toolbar {
+  background:var(--surface);border:1px solid var(--edge);
+  border-radius:.75rem;padding:.85rem 1rem;gap:.5rem;
+}
+.edition-toolbar h2 {font-family:"Palatino Linotype",Palatino,Georgia,serif;
+  font-size:1.25rem;color:var(--accent);}
+.edition-toolbar-actions {gap:.4rem;}
+.edition-toolbar-actions .btn {font-size:.82rem;padding:.5rem .7rem;}
+.edition-layout {grid-template-columns:minmax(18rem,35%) minmax(0,1fr);gap:.75rem;}
+.edition-settings {background:var(--surface);}
+.edition-menu-nav {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.35rem;padding:.65rem;background:light-dark(#f1efe8,#27323b);
+  border-bottom:1px solid var(--edge);
+}
+.edition-menu-nav .btn {min-width:0;font-size:.82rem;padding:.45rem .5rem;
+  min-height:2.55rem;white-space:normal;}
+.edition-menu-nav .btn-primary {
+  background:light-dark(#1d5466,#a8d9e8);
+  color:light-dark(#fff,#13232a);
+}
+.edition-menu-content {max-height:73vh;gap:.8rem;padding:.8rem;
+  scrollbar-width:thin;}
+.edition-question-index {
+  position:sticky;top:0;z-index:3;
+  display:grid;gap:.4rem;
+  padding:.6rem .65rem;background:var(--surface);
+  border:1px solid var(--edge);border-radius:.55rem;
+}
+.edition-question-index>strong {font-size:.85rem;color:var(--accent);}
+.edition-question-shortcuts {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem;}
+.edition-question-jump {min-height:2.2rem;font-size:.8rem;text-align:left;padding:.35rem .55rem;}
+.edition-question-jump.is-inactive {opacity:.6;}
+.edition-question-panel {
+  gap:.6rem;border:1px solid var(--edge);border-left:3px solid var(--accent);
+  padding:.75rem;border-radius:.55rem;
+  background:light-dark(#fffefa,#242d34);
+}
+.edition-question-panel.is-inactive {border-left-color:var(--edge);}
+.edition-question-top {flex-wrap:wrap;gap:.5rem;}
+.edition-question-top h3 {flex:1 1 auto; font-size:.96rem;color:var(--accent);}
+.edition-question-status {font-size:.72rem;color:var(--subtle);white-space:nowrap;}
+.edition-question-points {max-width:10rem;}
+.edition-question-points .edition-field {font-size:.78rem;}
+.edition-option {
+  border-top:1px solid var(--edge);
+  border-left:2px solid light-dark(#d7e5e5,#40555e);
+  background:light-dark(#f7f6f1,#202b32);
+  padding:.6rem .7rem;border-radius:.3rem;
+}
+.edition-preview {
+  background:light-dark(#e6e1d7,#212a32);
+  padding:.8rem;min-width:0;
+}
+.edition-preview .edition-navigation {
+  display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;
+  padding:.55rem .6rem;margin:0 0 .65rem;
+  background:var(--surface);
+  border:1px solid var(--edge);border-radius:.55rem;
+}
+.edition-preview .edition-navigation>.btn {flex:0 0 auto;padding:.45rem .7rem;min-height:2.45rem;}
+.edition-preview .edition-navigation>select {flex:1 1 12rem;min-width:8rem;}
+.edition-preview .edition-navigation>.edition-counter {font-variant-numeric:tabular-nums;font-size:.82rem;}
+.edition-preview-bar {padding:0 .15rem;gap:.35rem;flex-wrap:wrap;}
+.edition-preview-bar>strong {font-size:.88rem;color:light-dark(#4d5352,#e4edf0);}
+.edition-preview-bar .edition-field {width:7rem;}
+.edition-paper-pages {padding:.5rem .25rem;}
+@media (max-width:920px) {
+  .edition-layout {grid-template-columns:1fr;}
+  .edition-mobile-switch {display:flex;}
+  .edition-preview .edition-navigation {gap:.4rem;}
+}
+@media (max-width:780px) {
+  .workspace-container {padding:.65rem;}
+  .workspace-header {padding:.75rem .85rem;}
+  .workspace-subtitle {font-size:.8rem;}
+  .library-columns {grid-template-columns:1fr;}
+  .lib-sidebar {border-right:0;border-bottom:1px solid var(--edge);}
+  .work-list {max-height:17rem;}
+  .reader-lines {max-height:42vh;}
+  .reader-tools {flex:1 1 100%;}
+  .edition-menu-nav {grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+@media (max-width:440px) {
+  .lib-filter-row {grid-template-columns:1fr;}
+  .edition-preview .edition-navigation>.btn {flex:1 1 0;}
+  .edition-preview .edition-navigation>.edition-counter {order:-1;flex:1 1 100%;text-align:center;}
+  .edition-preview .edition-navigation>select {flex:1 1 100%;}
+}
+
 /* La hoja PDF se construye de nuevo a partir de NotebookEditionV1;
    no se imprime una captura ni un lienzo rasterizado. */
 .edition-print-root{display:none;}
