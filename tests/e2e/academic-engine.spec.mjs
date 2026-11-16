@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('motor académico WebKit: candidata verificada, CAS, recarga y deshacer sin tocar otro texto',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const first=await page.evaluate(async()=>{
     const { createEdition, createPlacement }=await import('/core/edition-factory.js');
     const { VerifiedAcademicBankV1 }=await import('/core/academic-bank.js');
