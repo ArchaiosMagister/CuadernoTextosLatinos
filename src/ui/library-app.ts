@@ -189,11 +189,19 @@ export function mountLibraryApp(root: HTMLElement): void {
     finally{busy=false;}
   }
   function renderCatalog(): HTMLElement {
+    // Reproduce el patrón comprobado de Examinator2: catálogo filtrable a la
+    // izquierda, lectura y cita del pasaje a la derecha. Solo UI; las obras,
+    // las selecciones y el almacenamiento conservan sus contratos originales.
     const main=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
+    sidebar.setAttribute('aria-label','Buscar autores y obras');
+    const sidebarHead=el('div','lib-sidebar-heading');
+    sidebarHead.append(el('h2','','Autores y obras'),
+      el('p','hint','Busca un autor o una obra y elige un título para leerlo.'));
+    sidebar.append(sidebarHead);
     const filters=el('div','lib-filters');
     const f=el('input','field-control');
-    f.type='search';f.placeholder='Buscar autor u obra…';f.value=query;f.setAttribute('aria-label','Buscar autor u obra');
+    f.type='search';f.placeholder='Autor u obra…';f.value=query;f.setAttribute('aria-label','Buscar autor u obra');
     const select=el('select','field-control');select.setAttribute('aria-label','Filtrar por autor');
     const authors=[...new Set(catalogue.map(x=>x.author))].sort(cmp.compare);
     for(const author of ['all',...authors]){
@@ -201,51 +209,77 @@ export function mountLibraryApp(root: HTMLElement): void {
       option.value=author;select.append(option);
     }
     select.value=authorFilter;
-    const genre=el('select','field-control');
-    genre.setAttribute('aria-label','Filtrar por género');
+    const genre=el('select','field-control');genre.setAttribute('aria-label','Filtrar por género');
     const genres=[...new Set(catalogue.map(x=>x.genre))].sort(cmp.compare);
-    for(const name of ['all',...genres]) {
+    for(const name of ['all',...genres]){
       const option=el('option','',name==='all'?'Todos los géneros':name);
       option.value=name;genre.append(option);
     }
     genre.value=genreFilter;
-    const hints=el('p','hint','Biblioteca incluida · obras disponibles sin conexión tras la primera carga.');
+    const selectRow=el('div','lib-filter-row');selectRow.append(select,genre);
     const list=el('div','work-list');
-    const counter=el('small','muted');
+    list.setAttribute('aria-label','Obras encontradas');
+    const counter=el('span','lib-result-count');
+    counter.setAttribute('role','status');
+    counter.setAttribute('aria-live','polite');
+    const clear=button('Limpiar filtros',()=>{
+      query='';authorFilter='all';genreFilter='all';f.value='';
+      select.value='all';genre.value='all';updateList();f.focus();
+    },'btn btn-outline lib-clear-filters');
+    const feedback=el('div','lib-filter-feedback');feedback.append(counter,clear);
     const updateList=()=>{
-      const matches=searchWorks(catalogue,query,authorFilter).filter(item=>genreFilter==='all'||item.genre===genreFilter);
-      counter.textContent=matches.length+' obra(s) encontradas';
+      const matches=searchWorks(catalogue,query,authorFilter)
+        .filter(item=>genreFilter==='all'||item.genre===genreFilter);
+      counter.textContent=matches.length+' de '+catalogue.length+' obras';
+      clear.disabled=!query&&authorFilter==='all'&&genreFilter==='all';
       list.replaceChildren();
-      for(const item of matches) {
-        const b=el('button','work-row'+(activeWork?.urn===item.urn?' active':''));
-        b.type='button';
-        const top=el('strong','work-author',item.author);
-        const title=el('span','work-title',item.latin || item.title);
-        const info=el('span','work-desc',item.title+' · '+item.count+' pasajes');
-        const tag=el('span','work-offline','Incluida');
-        b.append(top,title,info,tag);
-        b.addEventListener('click',()=>{void showWork(item);});
-        list.append(b);
+      // Encabezados por autor: el alumno/docente recorre el corpus sin
+      // desplegar listas, y la búsqueda sigue siendo ortográficamente flexible.
+      const groups=new Map<string,LibraryEntry[]>();
+      for(const item of matches){
+        const group=groups.get(item.author)??[];
+        group.push(item);groups.set(item.author,group);
       }
-      if(!matches.length)list.append(el('p','hint','No hay obras con esos filtros.'));
+      for(const [author,works] of groups){
+        const section=el('section','lib-author-group');
+        const title=el('div','lib-author-label');
+        title.append(el('h3','',author),el('span','lib-author-count',String(works.length)));
+        section.append(title);
+        for(const item of works){
+          const row=el('button','work-row'+(activeWork?.urn===item.urn?' active':''));
+          row.type='button';
+          row.setAttribute('aria-label',item.author+', '+(item.latin||item.title));
+          row.setAttribute('aria-pressed',String(activeWork?.urn===item.urn));
+          const heading=el('span','work-title',item.latin||item.title);
+          const subtitle=el('span','work-desc',item.title+' · '+item.count+' pasajes');
+          const source=el('span','work-offline','Incluida · sin conexión');
+          row.append(heading,subtitle,source);
+          row.addEventListener('click',()=>{void showWork(item);});
+          section.append(row);
+        }
+        list.append(section);
+      }
+      if(!matches.length)list.append(el('p','hint','No hay obras con esos filtros. Prueba a buscar por autor o por título.'));
     };
     f.addEventListener('input',()=>{query=f.value;updateList();});
     select.addEventListener('change',()=>{authorFilter=select.value;updateList();});
     genre.addEventListener('change',()=>{genreFilter=genre.value;updateList();});
-    filters.append(f,select,genre,counter,hints);
+    filters.append(f,selectRow,feedback);
     sidebar.append(filters,list);
     updateList();
     const reader=el('section','lib-reader');
-    if(!activeWork) {
+    reader.setAttribute('aria-label','Lector de textos latinos');
+    if(!activeWork){
       const empty=el('div','empty-reader');
-      empty.append(el('h2','','Biblioteca latina'),el('p','','Selecciona una obra en la columna izquierda para leerla y extraer un fragmento.'));
+      empty.append(el('h2','','Lector de textos'),el('p','','Selecciona una obra en la columna izquierda para leerla y extraer un fragmento.'));
       const online=el('p','hint');
-      online.textContent='César, Eutropio y Cornelio Nepote están incorporados. El acceso a otros autores se podrá añadir después, por conexión.';
+      online.textContent='César, Eutropio y Cornelio Nepote están incluidos. El acceso a otros autores se podrá incorporar en una fase posterior.';
       empty.append(online);reader.append(empty);
     }else{
       const head=el('div','reader-head');
-      const tit=el('div');
+      const tit=el('div','reader-heading');
       tit.append(el('h2','',activeWork.author),el('p','reader-work',activeWork.latin+' · '+activeWork.title));
+      const readerTools=el('div','reader-tools');
       const citation=el('input','field-control citation-input');
       citation.placeholder='Ir a 1.1 / 1.1.2'; citation.setAttribute('aria-label','Ir a pasaje');
       const go=button('Ir a',()=>{
@@ -257,12 +291,11 @@ export function mountLibraryApp(root: HTMLElement): void {
         message('Mostrando el pasaje '+citation.value+'.');
       },'btn btn-outline');
       citation.addEventListener('keydown',event=>{if(event.key==='Enter')go.click();});
-      head.append(tit,citation,go);
-      const readInfo=el('p','hint','Selecciona directamente las palabras que quieras, incluso dentro de una frase o entre varios párrafos. En iPad, mantén pulsado y ajusta la selección con los tiradores.');
+      readerTools.append(citation,go);
+      head.append(tit,readerTools);
+      const readInfo=el('p','hint','Selecciona palabras libremente, incluso dentro de una frase o entre varios párrafos. En iPad, mantén pulsado y ajusta los tiradores.');
       const readerLines=el('div','reader-lines');
       readerLines.setAttribute('aria-label','Texto latino seleccionable');
-      // El lector completo permite arrastrar la selección a través de tantos
-      // párrafos como se necesite. No se limita a bloques de 45 pasajes.
       activeWork.lines.forEach((line,index)=>{
         const row=el('div','reader-line');
         row.dataset.index=String(index);
@@ -281,20 +314,18 @@ export function mountLibraryApp(root: HTMLElement): void {
       const add=button('Añadir selección a mis textos',useFragment,'btn btn-primary');
       add.dataset.useSelection='true';
       add.disabled=!selectedFragment || !ready();
-      // Safari puede colapsar el rango al tocar el botón: guardamos el texto
-      // previamente extraído antes de que cambie el foco.
       add.addEventListener('pointerdown',()=>{preservingSelection=true;});
       add.addEventListener('click',()=>{preservingSelection=false;});
       add.addEventListener('pointercancel',()=>{preservingSelection=false;});
-      const clear=button('Limpiar',()=>{
+      const clearSelection=button('Limpiar',()=>{
         selectedFragment=null;
         preservingSelection=false;
         window.getSelection()?.removeAllRanges();
         syncReaderSelection();
       },'btn btn-outline');
-      clear.dataset.clearSelection='true';
-      clear.disabled=!selectedFragment;
-      selection.append(description,add,clear);
+      clearSelection.dataset.clearSelection='true';
+      clearSelection.disabled=!selectedFragment;
+      selection.append(description,add,clearSelection);
       const source=el('p','source-reference');
       source.append(el('span','',activeWork.editorial+' '));
       const link=el('a','','Fuente y edición');
