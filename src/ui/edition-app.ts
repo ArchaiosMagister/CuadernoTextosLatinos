@@ -355,7 +355,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     for(const p of placements)target.append(paperFor(draft,p,draft.placements.indexOf(p),draft.placements.length));
     target.style.zoom=String(zoom/100);
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
-    if(review)review.textContent='La exportación Word utiliza campos reales de página. El PDF se guarda desde la impresión A4 del navegador; comprueba los saltos en textos largos.';
+    if(review)review.textContent='Word numera las páginas físicas. En Safari, el PDF por impresión puede salir sin numeración 1 | N: si la necesitas, abre el DOCX en Pages y expórtalo como PDF. Comprueba los saltos en textos largos.';
   }
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
@@ -660,7 +660,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
         exportBytes(createNotebookDocx(edition),docFilename(edition,warnings.length>0));
         setMessage('DOCX '+(warnings.length?'de borrador ':'')+'preparado. Comprueba su maquetación antes de imprimirlo.');
       }else{
-        setMessage('Abriendo la impresión A4: elige Guardar como PDF en Safari.');
+        setMessage('Abriendo impresión A4. Atención: Safari puede omitir 1 | N; para conservarlo, exporta Word y genera el PDF con Pages.');
         openPrint(edition);
       }
     }catch(e){setMessage('No se pudo exportar: '+(e instanceof Error?e.message:String(e)),true);}
@@ -672,6 +672,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     review.append(node('h3','','Cuaderno pendiente de revisión'));
     review.append(node('p','hint',
       'La edición todavía contiene observaciones. Si exportas, el documento se identificará como borrador; no se alterará ningún dato.'));
+    if(exportReview.kind==='pdf')review.append(node('p','hint',
+      'Safari no admite la caja marginal CSS de numeración física. Su PDF puede carecer de 1 | N. Para conservar los números abre el DOCX en Pages y exporta desde allí.'));
     const items=node('ul','edition-academic-diff');
     for(const warning of exportReview.warnings.slice(0,50))items.append(node('li','',warning));
     if(exportReview.warnings.length>50)items.append(node('li','','Hay más observaciones; revisa los textos restantes.'));
