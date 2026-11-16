@@ -118,7 +118,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       if(question.kind!=='choice')continue;
       for(const option of question.options){
         if(option.id===excludingOptionId||option.kind!=='preverb'||!option.enabled)continue;
-        const found=option.statement.value.match(/\\*([^*]+)\\* \\(3\\) y de \\*([^*]+)\\* \\(2\\)/u);
+        const found=option.statement.value.match(/\*([^*]+)\* \(3\) y de \*([^*]+)\* \(2\)/u);
         if(!found)continue;
         for(const form of [found[1]!,found[2]!]){
           const key=preverbBaseKeyForForm(academicTeacherSnapshotV1,form);
@@ -129,7 +129,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     return [...used].sort();
   }
   function preverbBasesFor(o:ChoiceOptionV1,p:TextPlacementV1):PreverbSelection{
-    const used=usedPreverbKeys(o.id),signature=used.join('\\0');
+    const used=usedPreverbKeys(o.id),signature=used.join('\0');
     let selected=selectedBases.get(o.id);
     if(!selected||(!manuallySelectedBases.has(o.id)&&baseUsageSignatures.get(o.id)!==signature)){
       selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin,Math.random,used);
