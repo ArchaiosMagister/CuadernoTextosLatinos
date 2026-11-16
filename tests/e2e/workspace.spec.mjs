@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 /** Pruebas de IndexedDB real en WebKit, no solo de fake-indexeddb en Node. */
 test('workspace: guarda una edición, vuelve a abrirla y deshace tras recargar Safari/WebKit',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const first=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const {createEdition,createPlacement}=await import('/core/edition-factory.js');
@@ -35,7 +35,7 @@ test('workspace: guarda una edición, vuelve a abrirla y deshace tras recargar S
 });
 
 test('workspace: migra legado con copia y preserva el CorpusV1 original',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const result=await page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
@@ -64,7 +64,7 @@ test('workspace: migra legado con copia y preserva el CorpusV1 original',async({
 });
 
 test('workspace: respaldo v2 y restauración previa verificación funcionan en WebKit',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const result=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const {createEdition,createPlacement}=await import('/core/edition-factory.js');
