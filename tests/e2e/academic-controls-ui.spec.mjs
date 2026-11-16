@@ -124,15 +124,14 @@ test('academia: no certifica formas sin candidatos ni escribe datos',async({page
   expect(await readEdition(page)).toEqual(before);
 });
 
-test('academia: la modificación preverbial exige seleccionar base concreta',async({page})=>{
+test('academia: modificación preverbial elige dos verbos para tres y dos derivados',async({page})=>{
   await start(page);
   await page.getByRole('button',{name:'Preguntas'}).click();
   const option=page.locator('.edition-option').filter({hasText:'Modificación preverbial'});
-  await option.getByRole('button',{name:'Proponer apartado Modificación preverbial'}).click();
-  await expect(page.locator('.edition-save-state')).toContainText('Indica para cada derivado preverbial');
   const fields=option.locator('fieldset.edition-source-forms select');
-  await expect(fields).toHaveCount(5);
-  for(let i=0;i<5;i++)await fields.nth(i).selectOption('ago');
+  await expect(fields).toHaveCount(2);
+  await expect(fields.nth(0)).not.toHaveValue('');
+  await expect(fields.nth(1)).not.toHaveValue('');
   await option.getByRole('button',{name:'Proponer apartado Modificación preverbial'}).click();
   const box=page.getByRole('region',{name:'Revisar propuesta académica'});
   await expect(box.locator('li')).toHaveCount(5);
