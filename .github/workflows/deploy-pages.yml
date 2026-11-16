@@ -116,6 +116,8 @@ jobs:
             )
           css=(preview/'styles.css').read_text()
           assert '.edition-preview-stack' in css
+          assert '.simple-tabs' in css
+          assert '.simple-prepare-layout' in css
           # El puente Cuadernos -> editor debe estar en la copia publicada.
           editor=(preview/'ui/edition-app.js').read_text()
           assert 'importLegacyNotebook' in editor
