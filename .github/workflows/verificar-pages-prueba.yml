@@ -1,0 +1,74 @@
+name: Verificar Pages público /prueba/ en Safari WebKit
+
+on:
+  push:
+    branches: [preview/cuaderno-pr-10]
+    paths:
+      - '.github/workflows/verificar-pages-prueba.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar HTML, CSS, JS, biblioteca y SW públicos
+        run: |
+          set -euo pipefail
+          url="https://archaiosmagister.github.io/CuadernoTextosLatinos/prueba/"
+          for file in index.html styles.css main.js library/catalog.json service-worker.js storage/workspace-repository.js; do
+            echo "VERIFICANDO $file"
+            curl --fail --location --retry 4 --retry-delay 2 --silent --show-error \
+              -D /tmp/cuaderno-headers -o /tmp/cuaderno-body "$url$file"
+            grep -q -Ei '^HTTP/[0-9.]+ 200' /tmp/cuaderno-headers
+            test -s /tmp/cuaderno-body
+            wc -c /tmp/cuaderno-body
+            if [[ "$file" == "index.html" ]]; then
+              grep -q 'VISTA DE PRUEBA TEMPORAL' /tmp/cuaderno-body
+            fi
+            if [[ "$file" == "storage/workspace-repository.js" ]]; then
+              grep -q "cuaderno-textos-latinos-workspace-prueba-pr10" /tmp/cuaderno-body
+            fi
+          done
+      - name: Instalar WebKit
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps webkit
+      - name: Navegar en la URL pública con Safari WebKit y abrir editor
+        run: |
+          node --input-type=module <<'JS'
+          import { webkit } from '@playwright/test';
+          const url='https://archaiosmagister.github.io/CuadernoTextosLatinos/prueba/';
+          const browser=await webkit.launch();
+          try{
+            const page=await browser.newPage({viewport:{width:820,height:1180},deviceScaleFactor:2,isMobile:true,hasTouch:true});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:40000});
+            await page.getByRole('button',{name:'Preparar cuaderno'}).waitFor({state:'visible',timeout:40000});
+            await page.getByRole('button',{name:'Preparar cuaderno'}).click();
+            const loaded=await page.locator('body').innerText();
+            console.log('STATUS',response?.status(),'URL',page.url(),'TITLE',await page.title());
+            console.log('TEXT',loaded.slice(0,450));
+            console.log('ERRORS',errors);
+            if(response?.status()!==200)throw new Error('No se publica la demo con HTTP 200');
+            if(!loaded.includes('VISTA DE PRUEBA TEMPORAL'))throw new Error('Falta distintivo de prueba');
+            if(errors.length)throw new Error('Errores del navegador: '+errors.join(';'));
+            await page.screenshot({path:'captura-verificada-ipad.png',fullPage:false});
+          }finally{await browser.close()}
+          JS
+      - name: Guardar evidencia de apertura iPad
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prueba-pages-ipad-webkit
+          path: captura-verificada-ipad.png
+          if-no-files-found: ignore
+          retention-days: 7
