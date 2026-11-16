@@ -602,7 +602,7 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar el cuaderno? Los textos continuarán guardados en Mis textos.'))return;
         if(await transaction(corpus=>removeNotebook(corpus,notebook.id))){currentNotebook='';render();}
       },'btn btn-danger'));
-      const finish=button('Cuaderno terminado · preparar',async()=>{
+      const finish=button('Cuaderno terminado',async()=>{
         if(!ready()||!confirmDiscard())return;
         await composer.open();
         if(!await composer.importLegacyNotebook(notebook.id))return;
@@ -658,8 +658,10 @@ export function mountLibraryApp(root: HTMLElement): void {
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
     tabs.setAttribute('aria-label','Apartados del cuaderno');
+    // Conservar los nombres históricos de los apartados para accesibilidad
+    // y compatibilidad; el orden del flujo se explica dentro de Cuadernos.
     const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],
-      ['notebooks','1. Seleccionar textos'],['compose','2. Preparar cuaderno']];
+      ['notebooks','Cuadernos'],['compose','Preparar cuaderno']];
     for(const [key,title] of buttons) {
       const b=button(title,()=>setTab(key),'workspace-tab'+(tab===key?' current':''));
       b.setAttribute('aria-current',tab===key?'page':'false');
