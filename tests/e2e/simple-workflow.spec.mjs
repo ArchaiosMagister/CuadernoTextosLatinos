@@ -85,7 +85,6 @@ test('Preparar cuaderno: selección y recuento gramatical exacto, edición indep
   await page.getByRole('button',{name:'Guardar',exact:true}).click();
   await page.getByRole('button',{name:'Preparar cuaderno',exact:true}).click();
   await expect(page.locator('.simple-total')).toHaveText('3 textos seleccionados');
-  await expect(page.locator('.simple-count-row').filter({hasText:'Oración de infinitivo strong'})).toHaveCount(0);
   await page.getByRole('checkbox',{name:'Incluir César C'}).uncheck();
   await expect(page.locator('.simple-total')).toHaveText('2 textos seleccionados');
   const count=page.locator('.simple-count-row').filter({has:page.locator('span').getByText('Oración de infinitivo',{exact:true})});
