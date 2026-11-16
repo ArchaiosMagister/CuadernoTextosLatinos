@@ -340,7 +340,8 @@ export function mountLibraryApp(root: HTMLElement): void {
   function renderMyTexts(): HTMLElement {
     const shell=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
-    sidebar.append(el('h2','','Mis textos'));
+    sidebar.append(el('h2','','Mis textos'),
+      el('p','hint','Textos de la biblioteca guardados y fragmentos que hayas escrito tú.'));
     const newBtn=button('Nuevo texto',()=>{
       if(!confirmDiscard())return;
       draft=emptyDraft();editingId=null;dirty=false;render();
@@ -422,7 +423,8 @@ export function mountLibraryApp(root: HTMLElement): void {
   function renderNotebooks(): HTMLElement {
     const shell=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
-    sidebar.append(el('h2','','Cuadernos'));
+    sidebar.append(el('h2','','Cuadernos anteriores'),
+      el('p','hint','Organización original de textos. Para preparar las preguntas y el documento A4, abre «Preparar cuaderno».'));
     const createName=el('input','field-control');
     createName.placeholder='Nombre del cuaderno';createName.maxLength=250;
     sidebar.append(createName);
@@ -494,7 +496,10 @@ export function mountLibraryApp(root: HTMLElement): void {
   function render():void {
     root.replaceChildren();
     const head=el('div','workspace-header');
-    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · VERSIÓN 0.3.1'),el('h1','','Biblioteca y cuadernos'));
+    const brand=el('div','workspace-brand');
+    brand.append(el('p','phase','BIBLIOTECA · EDICIÓN · DOCUMENTOS A4'),
+      el('h1','','Cuaderno de textos latinos'),
+      el('p','workspace-subtitle','Selecciona pasajes, prepara preguntas y compón tus cuadernos.'));
     const tag=el('span','offline-indicator',offlinePrepared?'Biblioteca preparada sin conexión':'Preparando biblioteca sin conexión');
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
