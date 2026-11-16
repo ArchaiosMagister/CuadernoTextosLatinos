@@ -18,7 +18,7 @@ test('preverbios: dos bases distintas, 3 + 2 derivados y preferencia por el text
   assert.match(preverbStatement(p.forms),/instruxit.*\(3\).*successerunt.*\(2\)/);
 });
 test('preverbios: una sola base de texto, segunda del banco; nunca se duplica',()=>{
-  const p=choosePreverbBases(bank,'Dixerunt et instruxit.',()=>0);
+  const p=choosePreverbBases(bank,'Luna lucet; instruxit.',()=>0);
   assert.ok(p.source==='mixed'||p.source==='passage');
   assert.equal(p.forms[0],'instruxit');
   assert.notEqual(p.sourceKeys[0],p.sourceKeys[3]);
