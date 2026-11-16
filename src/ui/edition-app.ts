@@ -844,7 +844,8 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     for(const v of items){
       const group=node('div','edition-vocabulary-control');
       const evidenceLabel=v.provenance!==null
-        ?'Lema documentado; significado pendiente de revisión docente'
+        ?(v.meaning?'Lema documentado; significado introducido por docente':
+          'Lema documentado; significado pendiente de revisión docente')
         :v.origin==='generated'
           ?'Forma provisional: lema sin respaldo inequívoco; revisar'
           :'Entrada editada manualmente; no presentada como lema verificado';
