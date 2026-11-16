@@ -55,7 +55,12 @@ jobs:
           const url=process.env.PREVIEW+'index.html';
           const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
           console.log('HTTP',response?.status(),'URL',url);
-          await page.waitForTimeout(4000);
+          if((await page.title()).includes('External Content Notice')){
+            console.log('El proveedor presenta una confirmación de seguridad antes de abrir HTML.');
+            await page.getByText('Open the page',{exact:true}).click();
+            await page.waitForLoadState('domcontentloaded');
+          }
+          await page.waitForTimeout(6000);
           console.log('TITLE',await page.title());
           const body=(await page.locator('body').innerText()).slice(0,5000);
           console.log('BODY',body.slice(0,800));
