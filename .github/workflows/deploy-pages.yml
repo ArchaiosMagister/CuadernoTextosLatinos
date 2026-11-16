@@ -100,6 +100,16 @@ jobs:
           assert 'cuaderno-textos-' in code
           sw.write_text(code.replace('cuaderno-textos-','cuaderno-preview-pr10-'))
 
+          # Regresión de Safari: no volver a imponer alto A4 exacto ni salto
+          # obligatorio después de cada aparición; generaría hojas vacías.
+          css=(example/'styles.css').read_text()
+          assert 'min-height:0!important;height:auto!important' in css, (
+            'Impresión PDF: se ha perdido la eliminación de alto mínimo')
+          assert '.edition-print-root .edition-paper + .edition-paper' in css, (
+            'Impresión PDF: falta salto solo antes de los siguientes textos')
+          assert 'break-after:auto;page-break-after:auto;' in css, (
+            'Impresión PDF: hay saltos obligatorios al final de cada texto')
+
           # Verificar que la raíz conserva todos sus archivos byte a byte.
           for stable_file in Path('estable/dist').rglob('*'):
             if not stable_file.is_file():
