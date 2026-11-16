@@ -125,7 +125,8 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
         for(const segment of splitInlineItalics(statement)){
           row.append(segment.italic?node('em','',segment.text):document.createTextNode(segment.text));
         }
-        if(option.slots.length){
+        // Los derivados preverbiales son datos internos: nunca imprimir un solucionario.
+        if(option.kind!=='preverb'&&option.slots.length){
           row.append(document.createTextNode(' '));
           option.slots.forEach((slot,index)=>{
             if(index)row.append(document.createTextNode(', '));
