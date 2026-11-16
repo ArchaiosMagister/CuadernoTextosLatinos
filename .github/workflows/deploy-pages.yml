@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: ee8cef719e8c2159b860535a5e802e1df5faabc1
+          ref: dfd5d609504b50b128826dad52ed80dfe90433bc
           path: experimental
           persist-credentials: false
       - name: Compilar la versión experimental sin tocar la estable
@@ -116,6 +116,12 @@ jobs:
             )
           css=(preview/'styles.css').read_text()
           assert '.edition-preview-stack' in css
+          # El puente Cuadernos -> editor debe estar en la copia publicada.
+          editor=(preview/'ui/edition-app.js').read_text()
+          assert 'importLegacyNotebook' in editor
+          assert 'Preparar cuaderno seleccionado' in editor
+          library=(preview/'ui/library-app.js').read_text()
+          assert 'Preparar este cuaderno' in library
           assert 'min-height:0!important;height:auto!important' in css
           print('OK: /prueba/ creada, IndexedDB y SW independientes.')
           print('OK: '+str(len(originals))+' archivos estables byte a byte idénticos.')
