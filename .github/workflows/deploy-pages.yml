@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 70d64a2e6d8e2db593ac7ec325fc71245ae4bd5c
+          ref: 3fbc27d30e42be4ae16bf32726d6d615386c7ea8
           path: experimental
           persist-credentials: false
       - name: Compilar la versión experimental sin tocar la estable
