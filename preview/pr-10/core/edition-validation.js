@@ -1,0 +1,363 @@
+import { EDITION_SCHEMA_VERSION, TEMPLATE_POINTS_HUNDREDTHS, } from './edition-model.js';
+export class InvalidEditionError extends Error {
+    constructor(message) { super(message); this.name = 'InvalidEditionError'; }
+}
+function fail(path, explanation) {
+    throw new InvalidEditionError(`${path}: ${explanation}`);
+}
+function object(value, path, keys) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        fail(path, 'se esperaba un objeto');
+    const row = value;
+    for (const key of Object.keys(row))
+        if (!keys.includes(key))
+            fail(`${path}.${key}`, 'campo desconocido');
+    for (const key of keys)
+        if (!Object.hasOwn(row, key))
+            fail(`${path}.${key}`, 'campo obligatorio ausente');
+    return row;
+}
+function array(value, path, max = 10_000) {
+    if (!Array.isArray(value) || value.length > max)
+        fail(path, 'lista inválida o demasiado extensa');
+    return value;
+}
+function str(value, path, max, allowEmpty = false) {
+    if (typeof value !== 'string' || value.length > max || (!allowEmpty && !value.trim()))
+        fail(path, 'texto inválido');
+    return value;
+}
+function id(value, path) {
+    const s = str(value, path, 120);
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(s))
+        fail(path, 'ID inválido');
+    return s;
+}
+function nullable(value, path, max = 250) {
+    return value === null ? null : str(value, path, max);
+}
+function flag(value, path) {
+    if (typeof value !== 'boolean')
+        fail(path, 'se esperaba booleano');
+    return value;
+}
+function integer(value, path, min = 0, max = Number.MAX_SAFE_INTEGER) {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
+        fail(path, 'entero fuera de rango');
+    }
+    return value;
+}
+function number(value, path, min, max) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max)
+        fail(path, 'número inválido');
+    return value;
+}
+function choice(value, path, options) {
+    if (typeof value !== 'string' || !options.includes(value))
+        fail(path, 'valor no admitido');
+    return value;
+}
+function utc(value, path) {
+    const s = str(value, path, 24);
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(s)
+        || Number.isNaN(Date.parse(s)) || new Date(s).toISOString() !== s)
+        fail(path, 'fecha UTC no canónica');
+    return s;
+}
+const hashPattern = /^fnv1a:[0-9a-f]{8}$/;
+/** Huella del contexto de la aparición, no firma de seguridad del documento. */
+export function fingerprintForMark(latin, start, end) {
+    const excerpt = `${start}:${end}:` + latin.slice(Math.max(0, start - 24), Math.min(latin.length, end + 24));
+    let hash = 2166136261;
+    for (let i = 0; i < excerpt.length; i++) {
+        hash ^= excerpt.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return 'fnv1a:' + (hash >>> 0).toString(16).padStart(8, '0');
+}
+function editable(input, path) {
+    const d = object(input, path, ['value', 'origin', 'locked', 'lastEditAt']);
+    return {
+        value: str(d.value, `${path}.value`, 5_000, true),
+        origin: choice(d.origin, `${path}.origin`, ['template', 'generated', 'manual']),
+        locked: flag(d.locked, `${path}.locked`),
+        lastEditAt: d.lastEditAt === null ? null : utc(d.lastEditAt, `${path}.lastEditAt`),
+    };
+}
+function evidence(input, path) {
+    if (input === null)
+        return null;
+    const d = object(input, path, ['provider', 'recordId', 'bankRevision', 'decisionId']);
+    return { provider: str(d.provider, `${path}.provider`, 250), recordId: str(d.recordId, `${path}.recordId`, 250),
+        bankRevision: str(d.bankRevision, `${path}.bankRevision`, 250),
+        decisionId: nullable(d.decisionId, `${path}.decisionId`) };
+}
+function style(input, path) {
+    if (input === null)
+        return null;
+    const d = object(input, path, ['beforePt', 'afterPt', 'subquestionGapPt']);
+    return { beforePt: number(d.beforePt, `${path}.beforePt`, 0, 72), afterPt: number(d.afterPt, `${path}.afterPt`, 0, 72),
+        subquestionGapPt: number(d.subquestionGapPt, `${path}.subquestionGapPt`, 0, 72) };
+}
+function format(input, path) {
+    const d = object(input, path, ['paper', 'fontFamily', 'fontSizePt', 'marginsPt', 'lineSpacingPt', 'questionGapPt', 'showPoints', 'pageFooter']);
+    const m = object(d.marginsPt, `${path}.marginsPt`, ['top', 'right', 'bottom', 'left']);
+    return { paper: choice(d.paper, `${path}.paper`, ['A4']), fontFamily: str(d.fontFamily, `${path}.fontFamily`, 150),
+        fontSizePt: number(d.fontSizePt, `${path}.fontSizePt`, 6, 32),
+        marginsPt: { top: number(m.top, `${path}.marginsPt.top`, 0, 160), right: number(m.right, `${path}.marginsPt.right`, 0, 160),
+            bottom: number(m.bottom, `${path}.marginsPt.bottom`, 0, 160), left: number(m.left, `${path}.marginsPt.left`, 0, 160) },
+        lineSpacingPt: number(d.lineSpacingPt, `${path}.lineSpacingPt`, 6, 80),
+        questionGapPt: number(d.questionGapPt, `${path}.questionGapPt`, 0, 72),
+        showPoints: flag(d.showPoints, `${path}.showPoints`), pageFooter: choice(d.pageFooter, `${path}.pageFooter`, ['page | total']) };
+}
+function mark(input, path, latin) {
+    const d = object(input, path, ['id', 'kind', 'startUtf16', 'endUtf16', 'exact', 'textFingerprint', 'reviewRequired']);
+    const start = integer(d.startUtf16, `${path}.startUtf16`, 0, latin.length);
+    const end = integer(d.endUtf16, `${path}.endUtf16`, 1, latin.length);
+    if (start >= end)
+        fail(path, 'rango UTF-16 vacío o invertido');
+    const exact = str(d.exact, `${path}.exact`, 200_000);
+    const fp = str(d.textFingerprint, `${path}.textFingerprint`, 32);
+    if (!hashPattern.test(fp))
+        fail(path, 'huella de contexto inválida');
+    const reviewRequired = flag(d.reviewRequired, `${path}.reviewRequired`);
+    if (!reviewRequired && (latin.slice(start, end) !== exact || fingerprintForMark(latin, start, end) !== fp)) {
+        fail(path, 'anclaje no coincide; debe marcarse para revisión');
+    }
+    return { id: id(d.id, `${path}.id`), kind: choice(d.kind, `${path}.kind`, ['morph-underline', 'editorial-roman']),
+        startUtf16: start, endUtf16: end, exact, textFingerprint: fp, reviewRequired };
+}
+function text(input, path) {
+    const d = object(input, path, ['title', 'author', 'work', 'reference', 'latin', 'markup']);
+    const latin = str(d.latin, `${path}.latin`, 200_000);
+    return { title: str(d.title, `${path}.title`, 250), author: nullable(d.author, `${path}.author`),
+        work: nullable(d.work, `${path}.work`), reference: nullable(d.reference, `${path}.reference`), latin,
+        markup: array(d.markup, `${path}.markup`, 3000).map((v, i) => mark(v, `${path}.markup[${i}]`, latin)) };
+}
+function morphWord(input, path) {
+    const d = object(input, path, ['id', 'markId', 'surface', 'lemmaId', 'analysis', 'provenance', 'reviewState', 'locked']);
+    const reviewState = choice(d.reviewState, `${path}.reviewState`, ['verified', 'needs-review', 'manual']);
+    const provenance = evidence(d.provenance, `${path}.provenance`);
+    if (reviewState === 'verified' && !provenance)
+        fail(path, 'forma verificada sin evidencia');
+    return { id: id(d.id, `${path}.id`), markId: id(d.markId, `${path}.markId`),
+        surface: str(d.surface, `${path}.surface`, 200_000), lemmaId: nullable(d.lemmaId, `${path}.lemmaId`),
+        analysis: nullable(d.analysis, `${path}.analysis`, 3000), provenance, reviewState, locked: flag(d.locked, `${path}.locked`) };
+}
+function slot(input, path) {
+    const d = object(input, path, ['id', 'value', 'proposedLemmaId', 'origin', 'locked', 'provenance']);
+    const origin = choice(d.origin, `${path}.origin`, ['generated', 'manual']);
+    const provenance = evidence(d.provenance, `${path}.provenance`);
+    if (origin === 'generated' && !provenance)
+        fail(path, 'propuesta generada sin evidencia');
+    return { id: id(d.id, `${path}.id`), value: str(d.value, `${path}.value`, 1000),
+        proposedLemmaId: nullable(d.proposedLemmaId, `${path}.proposedLemmaId`), origin,
+        locked: flag(d.locked, `${path}.locked`), provenance };
+}
+function option(input, path) {
+    const d = object(input, path, ['id', 'kind', 'enabled', 'statement', 'slots']);
+    return { id: id(d.id, `${path}.id`), kind: choice(d.kind, `${path}.kind`, ['preverb', 'phonetics', 'prefix', 'latinism']),
+        enabled: flag(d.enabled, `${path}.enabled`), statement: editable(d.statement, `${path}.statement`),
+        slots: array(d.slots, `${path}.slots`, 500).map((v, i) => slot(v, `${path}.slots[${i}]`)) };
+}
+function question(input, path) {
+    if (!input || typeof input !== 'object')
+        fail(path, 'pregunta inválida');
+    const kind = input.kind;
+    const k = choice(kind, `${path}.kind`, ['translation', 'syntax', 'morphology', 'choice']);
+    const keys = ['id', 'kind', 'enabled', 'statement', 'pointsHundredths', 'styleOverride'];
+    if (k === 'morphology')
+        keys.push('words');
+    if (k === 'choice')
+        keys.push('requiredCount', 'options');
+    const d = object(input, path, keys);
+    const base = { id: id(d.id, `${path}.id`), enabled: flag(d.enabled, `${path}.enabled`),
+        statement: editable(d.statement, `${path}.statement`),
+        pointsHundredths: integer(d.pointsHundredths, `${path}.pointsHundredths`, 0, 10_000),
+        styleOverride: style(d.styleOverride, `${path}.styleOverride`) };
+    if (k === 'translation' || k === 'syntax')
+        return { ...base, kind: k };
+    if (k === 'morphology')
+        return { ...base, kind: k, words: array(d.words, `${path}.words`, 500).map((v, i) => morphWord(v, `${path}.words[${i}]`)) };
+    return { ...base, kind: 'choice', requiredCount: integer(d.requiredCount, `${path}.requiredCount`, 1, 4),
+        options: array(d.options, `${path}.options`, 4).map((v, i) => option(v, `${path}.options[${i}]`)) };
+}
+function vocabulary(input, path) {
+    const d = object(input, path, ['id', 'lemma', 'headword', 'meaning', 'note', 'included', 'order', 'provenance', 'reviewState', 'origin', 'locked']);
+    const provenance = evidence(d.provenance, `${path}.provenance`);
+    const reviewState = choice(d.reviewState, `${path}.reviewState`, ['verified', 'needs-review', 'manual']);
+    const origin = choice(d.origin, `${path}.origin`, ['generated', 'manual']);
+    if (reviewState === 'verified' && !provenance)
+        fail(path, 'entrada verificada sin evidencia');
+    if (origin === 'generated' && !provenance && reviewState !== 'needs-review')
+        fail(path, 'entrada generada sin evidencia');
+    return { id: id(d.id, `${path}.id`), lemma: str(d.lemma, `${path}.lemma`, 250),
+        headword: str(d.headword, `${path}.headword`, 500),
+        meaning: nullable(d.meaning, `${path}.meaning`, 1000), note: nullable(d.note, `${path}.note`, 2000),
+        included: flag(d.included, `${path}.included`), order: integer(d.order, `${path}.order`, 0), provenance,
+        reviewState, origin, locked: flag(d.locked, `${path}.locked`) };
+}
+function source(input, path) {
+    const d = object(input, path, ['kind', 'sourceId', 'urn', 'importedAt']);
+    const kind = choice(d.kind, `${path}.kind`, ['corpus', 'library', 'manual']);
+    const sourceId = d.sourceId === null ? null : id(d.sourceId, `${path}.sourceId`);
+    const urn = nullable(d.urn, `${path}.urn`, 500);
+    if (kind === 'corpus' && !sourceId)
+        fail(path, 'texto de Corpus sin sourceId');
+    if (kind === 'library' && !urn)
+        fail(path, 'obra de Biblioteca sin urn');
+    if (kind === 'manual' && (urn !== null || sourceId !== null))
+        fail(path, 'texto manual sin identificador ajeno');
+    return { kind, sourceId, urn, importedAt: utc(d.importedAt, `${path}.importedAt`) };
+}
+function reviewFlag(input, path) {
+    const d = object(input, path, ['id', 'scopeId', 'reason']);
+    return { id: id(d.id, `${path}.id`), scopeId: id(d.scopeId, `${path}.scopeId`), reason: str(d.reason, `${path}.reason`, 1000) };
+}
+function placement(input, path) {
+    const d = object(input, path, ['id', 'source', 'text', 'questions', 'vocabulary', 'grammaticalTagIds', 'reviewFlags']);
+    return { id: id(d.id, `${path}.id`), source: source(d.source, `${path}.source`), text: text(d.text, `${path}.text`),
+        questions: array(d.questions, `${path}.questions`, 20).map((v, i) => question(v, `${path}.questions[${i}]`)),
+        vocabulary: array(d.vocabulary, `${path}.vocabulary`, 4000).map((v, i) => vocabulary(v, `${path}.vocabulary[${i}]`)),
+        grammaticalTagIds: array(d.grammaticalTagIds, `${path}.grammaticalTagIds`, 2000).map((v, i) => id(v, `${path}.grammaticalTagIds[${i}]`)),
+        reviewFlags: array(d.reviewFlags, `${path}.reviewFlags`, 4000).map((v, i) => reviewFlag(v, `${path}.reviewFlags[${i}]`)) };
+}
+/** Rechaza campos extraños y referencias rotas; devuelve una copia normalizada independiente. */
+export function validateEdition(input) {
+    const d = object(input, 'edition', ['editionSchemaVersion', 'id', 'legacyNotebookId', 'title', 'locale', 'createdAt', 'updatedAt', 'format', 'placements']);
+    if (d.editionSchemaVersion !== EDITION_SCHEMA_VERSION)
+        fail('edition.editionSchemaVersion', 'versión incompatible');
+    const e = { editionSchemaVersion: EDITION_SCHEMA_VERSION, id: id(d.id, 'edition.id'),
+        legacyNotebookId: d.legacyNotebookId === null ? null : id(d.legacyNotebookId, 'edition.legacyNotebookId'),
+        title: str(d.title, 'edition.title', 250), locale: choice(d.locale, 'edition.locale', ['es']),
+        createdAt: utc(d.createdAt, 'edition.createdAt'), updatedAt: utc(d.updatedAt, 'edition.updatedAt'),
+        format: format(d.format, 'edition.format'),
+        placements: array(d.placements, 'edition.placements', 1000).map((v, i) => placement(v, `edition.placements[${i}]`)) };
+    if (e.updatedAt < e.createdAt)
+        fail('edition.updatedAt', 'anterior a createdAt');
+    // Los IDs de entidades son únicos en toda la edición, no solo dentro de un arreglo.
+    const ids = new Set();
+    function register(v, path) { if (ids.has(v.id))
+        fail(path, 'ID duplicado: ' + v.id); ids.add(v.id); }
+    register(e, 'edition.id');
+    e.placements.forEach((p, i) => {
+        const path = `edition.placements[${i}]`;
+        register(p, path + '.id');
+        for (const m of p.text.markup)
+            register(m, path + '.text.markup');
+        for (const q of p.questions) {
+            register(q, path + '.questions');
+            if (q.kind === 'morphology') {
+                const found = new Set();
+                for (const w of q.words) {
+                    register(w, path + '.questions.words');
+                    const mark = p.text.markup.find(m => m.id === w.markId && m.kind === 'morph-underline');
+                    if (!mark)
+                        fail(path + '.questions.words', 'markId inexistente o ajeno a morfología');
+                    if (w.surface !== mark.exact)
+                        fail(path + '.questions.words', 'la forma no coincide con la marca');
+                    if (mark.reviewRequired && w.reviewState === 'verified')
+                        fail(path + '.questions.words', 'anclaje pendiente no puede ser verificado');
+                    if (found.has(w.markId))
+                        fail(path + '.questions.words', 'dos palabras vinculadas a la misma marca');
+                    found.add(w.markId);
+                }
+            }
+            if (q.kind === 'choice') {
+                const kinds = new Set();
+                for (const o of q.options) {
+                    register(o, path + '.questions.options');
+                    if (kinds.has(o.kind))
+                        fail(path + '.questions.options', 'dos apartados con el mismo tipo');
+                    kinds.add(o.kind);
+                    for (const w of o.slots)
+                        register(w, path + '.questions.options.slots');
+                }
+                // La cadena no almacena valores de N/M que puedan desincronizarse.
+                if (q.statement.value && (!q.statement.value.includes('{required}') || !q.statement.value.includes('{offered}'))) {
+                    fail(path + '.questions.statement', 'la pregunta de elección requiere {required} y {offered}');
+                }
+            }
+        }
+        const orders = new Set();
+        for (const v of p.vocabulary) {
+            register(v, path + '.vocabulary');
+            if (orders.has(v.order))
+                fail(path + '.vocabulary', 'orden repetido');
+            orders.add(v.order);
+        }
+        for (const f of p.reviewFlags)
+            register(f, path + '.reviewFlags');
+        if (new Set(p.grammaticalTagIds).size !== p.grammaticalTagIds.length)
+            fail(path + '.grammaticalTagIds', 'etiqueta duplicada');
+    });
+    // Cada marca de revisión pertenece a la edición o a la aparición que la declara.
+    // Un ID de otra aparición, aunque exista, no es un ámbito válido.
+    for (const p of e.placements) {
+        const localIds = new Set([e.id, p.id]);
+        for (const m of p.text.markup)
+            localIds.add(m.id);
+        for (const q of p.questions) {
+            localIds.add(q.id);
+            if (q.kind === 'morphology')
+                for (const w of q.words)
+                    localIds.add(w.id);
+            if (q.kind === 'choice')
+                for (const o of q.options) {
+                    localIds.add(o.id);
+                    for (const w of o.slots)
+                        localIds.add(w.id);
+                }
+        }
+        for (const v of p.vocabulary)
+            localIds.add(v.id);
+        for (const f of p.reviewFlags)
+            localIds.add(f.id);
+        for (const f of p.reviewFlags) {
+            if (!localIds.has(f.scopeId)) {
+                fail('reviewFlags.scopeId', ids.has(f.scopeId)
+                    ? 'el ámbito no pertenece a esta aparición'
+                    : 'referencia a entidad inexistente');
+            }
+        }
+    }
+    return e;
+}
+/** Borradores incompletos son válidos; solo el estado «listo» exige la plantilla y 800 centésimas. */
+export function checkEditionReadiness(edition) {
+    const e = validateEdition(edition);
+    const issues = [];
+    if (!e.placements.length)
+        issues.push({ placementId: '', code: 'empty-notebook', detail: 'El cuaderno no contiene textos.' });
+    for (const p of e.placements) {
+        const kinds = new Map();
+        for (const q of p.questions)
+            kinds.set(q.kind, (kinds.get(q.kind) ?? 0) + 1);
+        if (['translation', 'syntax', 'morphology', 'choice'].some(k => kinds.get(k) !== 1) || p.questions.length !== 4) {
+            issues.push({ placementId: p.id, code: 'wrong-template', detail: 'La plantilla exige cuatro preguntas distintas.' });
+        }
+        const points = p.questions.filter(q => q.enabled).reduce((sum, q) => sum + q.pointsHundredths, 0);
+        if (points !== TEMPLATE_POINTS_HUNDREDTHS) {
+            issues.push({ placementId: p.id, code: 'points', detail: `Total ${points}/800: revisar la puntuación sin redistribuirla automáticamente.` });
+        }
+        for (const q of p.questions) {
+            if (q.kind === 'morphology' && q.enabled && !q.words.length) {
+                issues.push({ placementId: p.id, code: 'content-missing', detail: 'Faltan palabras seleccionadas para el análisis morfológico.' });
+            }
+            if (q.kind === 'choice' && q.enabled && q.options.some(o => o.enabled && !o.slots.length)) {
+                issues.push({ placementId: p.id, code: 'content-missing', detail: 'Faltan términos en apartados activos de la pregunta de elección.' });
+            }
+            if (q.kind === 'choice' && q.enabled && q.options.filter(o => o.enabled).length < q.requiredCount) {
+                issues.push({ placementId: p.id, code: 'choice', detail: 'Hay menos apartados activos que los que deben elegirse.' });
+            }
+            if (q.kind === 'morphology' && q.enabled && q.words.some(w => p.text.markup.find(m => m.id === w.markId)?.reviewRequired)) {
+                issues.push({ placementId: p.id, code: 'morph-anchors', detail: 'Las palabras subrayadas necesitan revisar sus anclajes.' });
+            }
+        }
+        if (p.reviewFlags.length || p.vocabulary.some(v => v.included && v.reviewState === 'needs-review')
+            || p.questions.some(q => q.kind === 'morphology' && q.words.some(w => w.reviewState === 'needs-review'))) {
+            issues.push({ placementId: p.id, code: 'review-needed', detail: 'Existen registros académicos pendientes de revisión.' });
+        }
+    }
+    return issues;
+}
