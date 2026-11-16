@@ -27,8 +27,8 @@ for case in ['breve','largo','varios']:
             raise RuntimeError(f'{case} {engine}: {count} páginas; debe caber una ficha')
         if case=='largo' and count<2:
             raise RuntimeError(f'{case} {engine}: falta salto de página')
-        if case=='varios' and count<3:
-            raise RuntimeError(f'{case} {engine}: falta página para alguna aparición')
+        if case=='varios' and count!=3:
+            raise RuntimeError(f'{case} {engine}: deben ser 3 hojas para 3 textos breves, no {count}; detectar hojas blancas intercaladas')
         txt=subprocess.run(['pdftotext','-layout',str(path),'-'],capture_output=True,text=True,check=True).stdout
         pages=[p for p in txt.split('\f') if p.strip()]
         if len(pages)!=count:
