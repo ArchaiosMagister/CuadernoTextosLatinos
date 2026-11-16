@@ -642,19 +642,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   background:light-dark(#f7f6f1,#202b32);
   padding:.6rem .7rem;border-radius:.3rem;
 }
+.edition-preview-stack {min-width:0;display:grid;align-content:start;gap:.55rem;}
 .edition-preview {
   background:light-dark(#e6e1d7,#212a32);
   padding:.8rem;min-width:0;
 }
-.edition-preview .edition-navigation {
+.edition-preview-stack>.edition-navigation {
   display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;
   padding:.55rem .6rem;margin:0 0 .65rem;
   background:var(--surface);
   border:1px solid var(--edge);border-radius:.55rem;
 }
-.edition-preview .edition-navigation>.btn {flex:0 0 auto;padding:.45rem .7rem;min-height:2.45rem;}
-.edition-preview .edition-navigation>select {flex:1 1 12rem;min-width:8rem;}
-.edition-preview .edition-navigation>.edition-counter {font-variant-numeric:tabular-nums;font-size:.82rem;}
+.edition-preview-stack>.edition-navigation>.btn {flex:0 0 auto;padding:.45rem .7rem;min-height:2.45rem;}
+.edition-preview-stack>.edition-navigation>select {flex:1 1 12rem;min-width:8rem;}
+.edition-preview-stack>.edition-navigation>.edition-counter {font-variant-numeric:tabular-nums;font-size:.82rem;}
 .edition-preview-bar {padding:0 .15rem;gap:.35rem;flex-wrap:wrap;}
 .edition-preview-bar>strong {font-size:.88rem;color:light-dark(#4d5352,#e4edf0);}
 .edition-preview-bar .edition-field {width:7rem;}
@@ -662,7 +663,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 @media (max-width:920px) {
   .edition-layout {grid-template-columns:1fr;}
   .edition-mobile-switch {display:flex;}
-  .edition-preview .edition-navigation {gap:.4rem;}
+  .edition-preview-stack>.edition-navigation {gap:.4rem;}
 }
 @media (max-width:780px) {
   .workspace-container {padding:.65rem;}
@@ -677,9 +678,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 }
 @media (max-width:440px) {
   .lib-filter-row {grid-template-columns:1fr;}
-  .edition-preview .edition-navigation>.btn {flex:1 1 0;}
-  .edition-preview .edition-navigation>.edition-counter {order:-1;flex:1 1 100%;text-align:center;}
-  .edition-preview .edition-navigation>select {flex:1 1 100%;}
+  .edition-preview-stack>.edition-navigation>.btn {flex:1 1 0;}
+  .edition-preview-stack>.edition-navigation>.edition-counter {order:-1;flex:1 1 100%;text-align:center;}
+  .edition-preview-stack>.edition-navigation>select {flex:1 1 100%;}
 }
 
 /* La hoja PDF se construye de nuevo a partir de NotebookEditionV1;
