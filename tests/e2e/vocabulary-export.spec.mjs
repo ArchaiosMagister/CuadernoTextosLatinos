@@ -96,6 +96,31 @@ test('Exportación PDF: usa impresión nativa con hojas A4 completas, no captura
 });
 
 
+test('PDF Safari/WebKit: dos textos, sin alto de hoja obligatorio ni salto posterior',async({page})=>{
+  await setup(page);
+  await page.getByRole('button',{name:'Cuaderno',exact:true}).click();
+  await page.getByRole('button',{name:'Añadir desde Mis textos'}).click();
+  await expect(page.getByText('Texto 2 de 2')).toBeVisible();
+  await page.getByRole('button',{name:'Guardar',exact:true}).click();
+  await page.evaluate(()=>{window.__printCalls=0;window.print=()=>{window.__printCalls++;};});
+  await page.getByRole('button',{name:'PDF / Imprimir'}).click();
+  await page.getByRole('region',{name:'Revisión previa a exportar'})
+    .getByRole('button',{name:'Imprimir borrador / Guardar PDF'}).click();
+  expect(await page.evaluate(()=>window.__printCalls)).toBe(1);
+  await page.emulateMedia({media:'print'});
+  const pages=page.locator('.edition-print-root .edition-paper');
+  await expect(pages).toHaveCount(2);
+  const dimensions=await pages.evaluateAll(nodes=>nodes.map(node=>{
+    const css=getComputedStyle(node);
+    return {minHeight:css.minHeight,height:css.height,breakBefore:css.breakBefore,
+      breakAfter:css.breakAfter,pageBreakAfter:css.pageBreakAfter};
+  }));
+  expect(dimensions[0].minHeight).toBe('0px');
+  expect(dimensions[0].breakAfter).toBe('auto');
+  expect(dimensions[1].breakAfter).toBe('auto');
+  expect(['page','always']).toContain(dimensions[1].breakBefore);
+});
+
 test('iPad vertical: Configurar y Vista previa alternan sin perder preguntas ni vocabulario',async({page})=>{
   await page.setViewportSize({width:820,height:1180});
   await setup(page);
