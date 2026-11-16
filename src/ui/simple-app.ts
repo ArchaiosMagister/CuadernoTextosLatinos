@@ -9,7 +9,7 @@
 import {foldLatin,searchWorks,findCitation,
   type LibraryEntry,type LibraryWork} from '../core/library.js';
 import {readReaderSelection,type ReaderFragment} from './reader-selection.js';
-import {upsertText,type TextDraft} from '../core/editor-operations.js';
+import {upsertText,deleteText,type TextDraft} from '../core/editor-operations.js';
 import {createBackup} from '../core/backup.js';
 import {createEditionPane,WORKING_EDITION_ID} from './edition-app.js';
 import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.js';
@@ -90,6 +90,32 @@ export function mountSimpleApp(root:HTMLElement):void{
       message('Texto añadido. Edita sus preguntas, el latín y el vocabulario; la vista previa está al lado.');
       render();
     }catch(error){message('No se pudo seleccionar el texto: '+String(error),true);}
+    finally{working=false;}
+  }
+
+  async function removeSourceText(id:string):Promise<void>{
+    if(working)return;
+    const entry=snapshot?.corpus.texts.find(x=>x.id===id);
+    if(!entry)return;
+    const prepared=editions.filter(e=>e.edition.id!==WORKING_EDITION_ID&&
+      e.edition.placements.some(p=>p.source.sourceId===id)).length;
+    const description='¿Eliminar «'+entry.title+'» del banco de textos?'+
+      (prepared?' Se conservarán sus copias en '+prepared+' cuaderno(s) preparados.':'')+
+      ' Esta acción no se puede deshacer desde «Textos».';
+    if(!window.confirm(description))return;
+    if(!await composer.flush())return;
+    working=true;
+    try{
+      const original=await corpusRepository.load();
+      if(!original.corpus.texts.some(x=>x.id===id))throw new Error('El texto ya no está disponible');
+      snapshot=await corpusRepository.save(deleteText(original.corpus,id),original.revision);
+      await composer.removeWorkingSource(id);
+      selectedIds=selectedIds.filter(x=>x!==id);
+      if(activeTextId===id)activeTextId=null;
+      window.dispatchEvent(new CustomEvent('corpus-updated'));
+      render();
+      message('Texto eliminado de la biblioteca. Los cuadernos preparados no se han modificado.');
+    }catch(err){message('No se pudo eliminar el texto: '+(err instanceof Error?err.message:String(err)),true);}
     finally{working=false;}
   }
 
@@ -404,7 +430,13 @@ export function mountSimpleApp(root:HTMLElement):void{
     search.addEventListener('input',()=>{textSearch=search.value;draw();});
     aside.append(search,list);draw();
     const active=getActiveText();
-    if(active&&textMode==='editor')aside.append(renderTags(active));
+    if(active&&textMode==='editor'){
+      aside.append(renderTags(active));
+      const remove=button('Eliminar este texto',()=>removeSourceText(active.id),
+        'btn btn-outline simple-delete-text');
+      remove.setAttribute('aria-label','Eliminar texto '+active.title);
+      aside.append(remove);
+    }
     layout.append(aside);
     const content=el('main','simple-text-content');
     if(textMode==='authors')content.append(renderAuthors());
