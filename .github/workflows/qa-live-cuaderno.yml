@@ -1,0 +1,77 @@
+name: Auditoría de la publicación real CuadernoTextosLatinos
+
+on:
+  push:
+    branches: [qa/verificar-publicacion-cuaderno]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-publicacion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    env:
+      URL: https://archaiosmagister.github.io/CuadernoTextosLatinos/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar HTTPS y contenido de la web estable
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in index.html main.js styles.css ui/edition-app.js library/catalog.json recuperar-prueba/index.html; do
+            echo "Comprobando: $URL$file"
+            curl -Lf --retry 5 --retry-delay 2 --max-time 30 --silent --show-error \
+              -o /tmp/qa-body -D /tmp/qa-headers "$URL$file"
+            test -s /tmp/qa-body
+            if [ "$file" = "index.html" ]; then
+              grep -q 'Cuaderno de textos latinos' /tmp/qa-body
+            fi
+            if [ "$file" = "styles.css" ]; then
+              grep -q 'min-height:0!important;height:auto!important' /tmp/qa-body
+            fi
+            if [ "$file" = "recuperar-prueba/index.html" ]; then
+              grep -q 'cuaderno-textos-latinos-workspace-prueba-pr10' /tmp/qa-body
+            fi
+          done
+          code=$(curl -Ls -o /dev/null -w '%{http_code}' --max-time 20 "$URL"prueba/)
+          echo "HTTP de la ruta provisional retirada: $code"
+          if [ "$code" != "404" ]; then
+            echo "::error::La antigua ruta /prueba/ todavía responde HTTP $code"
+            exit 1
+          fi
+      - name: Instalar WebKit
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps webkit
+      - name: Navegar en la web definitiva y página de recuperación con WebKit iPad
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {webkit} from '@playwright/test';
+          const url=process.env.URL;
+          const browser=await webkit.launch({headless:true});
+          try{
+            const page=await browser.newPage({viewport:{width:820,height:1180},hasTouch:true,isMobile:true,deviceScaleFactor:2});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:40000});
+            await page.getByRole('button',{name:'Preparar cuaderno'}).waitFor({timeout:35000});
+            await page.getByRole('button',{name:'Preparar cuaderno'}).click();
+            await page.getByRole('heading',{name:'Editor de cuadernos'}).waitFor({timeout:35000});
+            await page.getByRole('button',{name:'Exportar Word'}).waitFor({timeout:35000});
+            await page.getByRole('button',{name:'PDF / Imprimir'}).waitFor({timeout:35000});
+            console.log('Estable 200 y editor abierto:',res?.status(),page.url());
+            await page.goto(url+'recuperar-prueba/',{waitUntil:'domcontentloaded',timeout:40000});
+            await page.getByRole('button',{name:'Buscar datos guardados en este iPad'}).click();
+            await page.getByText('No hay datos de prueba recuperables en este navegador.').waitFor({timeout:30000});
+            console.log('Página de recuperación disponible en Safari WebKit.');
+            console.log('Errores JavaScript:',errors);
+            assert.equal(res?.status(),200);
+            assert.deepEqual(errors,[]);
+          }finally{await browser.close()}
+          JS
