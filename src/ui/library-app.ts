@@ -10,6 +10,10 @@ import type { CorpusSnapshot } from '../ports/corpus-repository.js';
 import { readReaderSelection, type ReaderFragment } from './reader-selection.js';
 import { IndexedDbCorpusRepository, RevisionConflictError } from '../storage/indexeddb-corpus-repository.js';
 import { createEditionPane } from './edition-app.js';
+import type { GrammarTag } from '../core/model.js';
+import { allGrammarTags, attachGrammarTags, catalogDepth, findTagByLabel,
+  GRAMMAR_GROUP_IDS, isCustomTagLabelValid, matchesGrammarFilters,
+} from '../core/grammar-tags.js';
 
 type Tab = 'library' | 'texts' | 'notebooks' | 'compose';
 const repository = new IndexedDbCorpusRepository();
@@ -43,6 +47,69 @@ function field(labelText: string, value: string, change: (value:string)=>void, m
 }
 function notify(id: string): void { window.dispatchEvent(new CustomEvent(id)); }
 
+/** Selector de árboles compacto: grupo/forma/función nunca se confunden. */
+function grammarPicker(tags:readonly GrammarTag[],selected:ReadonlySet<string>,
+  changed:(id:string,checked:boolean)=>void,cls:string):HTMLElement{
+  const root=el('div',cls);
+  const byParent=new Map<string|null,GrammarTag[]>();
+  for(const tag of tags){
+    const siblings=byParent.get(tag.parentId)??[];
+    siblings.push(tag);byParent.set(tag.parentId,siblings);
+  }
+  function addChildren(parent:string,body:HTMLElement,level=0):void{
+    for(const tag of byParent.get(parent)??[]){
+      const label=el('label','grammar-item');
+      label.style.setProperty('--level',String(Math.min(level,3)));
+      const input=el('input');
+      input.type='checkbox';
+      input.checked=selected.has(tag.id);
+      input.setAttribute('aria-label',tag.label);
+      input.addEventListener('change',()=>changed(tag.id,input.checked));
+      label.append(input,el('span','',tag.label));
+      body.append(label);
+      if(level<5)addChildren(tag.id,body,level+1);
+    }
+  }
+  for(const groupId of GRAMMAR_GROUP_IDS){
+    const group=tags.find(tag=>tag.id===groupId);
+    if(!group)continue;
+    const details=el('details','grammar-group');
+    details.open=tags.some(tag=>selected.has(tag.id) &&
+      (tag.id===groupId || tag.parentId===groupId));
+    details.append(el('summary','',group.label));
+    const body=el('div','grammar-group-body');
+    // El nodo padre es seleccionable por sí mismo.
+    const label=el('label','grammar-item grammar-root');
+    const input=el('input');input.type='checkbox';
+    input.checked=selected.has(groupId);
+    input.setAttribute('aria-label',group.label);
+    input.addEventListener('change',()=>changed(groupId,input.checked));
+    label.append(input,el('span','','Etiquetar: '+group.label));
+    body.append(label);
+    addChildren(groupId,body);
+    details.append(body);root.append(details);
+  }
+  const custom=tags.filter(tag=>tag.kind==='custom');
+  if(custom.length){
+    const details=el('details','grammar-group');
+    details.open=custom.some(tag=>selected.has(tag.id));
+    details.append(el('summary','','Etiquetas personalizadas'));
+    const body=el('div','grammar-group-body');
+    for(const tag of custom){
+      const label=el('label','grammar-item');
+      label.style.setProperty('--level',String(catalogDepth(tag,tags)));
+      const input=el('input');input.type='checkbox';
+      input.checked=selected.has(tag.id);
+      input.setAttribute('aria-label',tag.label);
+      input.addEventListener('change',()=>changed(tag.id,input.checked));
+      label.append(input,el('span','',tag.label));
+      body.append(label);
+    }
+    details.append(body);root.append(details);
+  }
+  return root;
+}
+
 export function mountLibraryApp(root: HTMLElement): void {
   let snapshot: CorpusSnapshot | null = null;
   let catalogue: LibraryEntry[] = [];
@@ -56,6 +123,9 @@ export function mountLibraryApp(root: HTMLElement): void {
   let genreFilter = 'all';
   let query = '';
   let ownQuery = '';
+  const tagFilters=new Set<string>();
+  const selectedTagIds=new Set<string>();
+  let pendingCustomTags:GrammarTag[]=[];
   let editingId: string | null = null;
   let draft = emptyDraft();
   let dirty = false;
@@ -101,7 +171,10 @@ export function mountLibraryApp(root: HTMLElement): void {
     if (t===tab)return;
     if (tab==='compose' && !await composer.flush())return;
     if(t!==tab && !confirmDiscard())return;
-    if(t!=='texts'){draft=emptyDraft();dirty=false;editingId=null;}
+    if(t!=='texts'){
+      draft=emptyDraft();dirty=false;editingId=null;
+      selectedTagIds.clear();pendingCustomTags=[];
+    }
     if(t!=='library'){selectedFragment=null;window.getSelection()?.removeAllRanges();}
     tab=t;
     if(t==='compose')await composer.open();
@@ -116,6 +189,9 @@ export function mountLibraryApp(root: HTMLElement): void {
       author:text.source.author??'',work:text.source.work??'',reference:text.source.reference??'',
     };
     editingId=text.id;
+    selectedTagIds.clear();
+    for(const id of text.tagIds)selectedTagIds.add(id);
+    pendingCustomTags=[];
     dirty=false;tab='texts';render();
   }
   /**
@@ -157,7 +233,8 @@ export function mountLibraryApp(root: HTMLElement): void {
       author:activeWork.author,work:activeWork.latin,reference:frag.reference,
       latin:frag.latin,
     };
-    editingId=null;dirty=true;tab='texts';selectedFragment=null;render();
+    editingId=null;selectedTagIds.clear();pendingCustomTags=[];
+    dirty=true;tab='texts';selectedFragment=null;render();
     message('Fragmento de '+frag.wordCount+' palabras incorporado al editor. Pulsa «Guardar texto».');
   }
 
@@ -344,11 +421,30 @@ export function mountLibraryApp(root: HTMLElement): void {
       el('p','hint','Textos de la biblioteca guardados y fragmentos que hayas escrito tú.'));
     const newBtn=button('Nuevo texto',()=>{
       if(!confirmDiscard())return;
-      draft=emptyDraft();editingId=null;dirty=false;render();
+      draft=emptyDraft();editingId=null;dirty=false;
+      selectedTagIds.clear();pendingCustomTags=[];
+      render();
     },'btn btn-primary');
     const find=el('input','field-control');
     find.type='search';find.placeholder='Buscar en mis textos…';find.value=ownQuery;
     find.setAttribute('aria-label','Buscar en mis textos');
+    const tagFilterDetails=el('details','grammar-filter');
+    const tagFilterSummary=el('summary','','Filtrar por etiquetas gramaticales');
+    tagFilterDetails.append(tagFilterSummary);
+    const tags=allGrammarTags(snapshot?.corpus??{schemaVersion:1,texts:[],tags:[],notebooks:[]});
+    const filterBody=el('div','grammar-filter-inner');
+    filterBody.append(el('p','hint','Marca varias etiquetas para encontrar textos que cumplan todas las condiciones. Una etiqueta general incluye sus subtipos.'));
+    const clearFilters=button('Quitar filtros de etiquetas',()=>{
+      tagFilters.clear();render();
+    },'btn btn-outline');
+    filterBody.append(grammarPicker(tags,tagFilters,(id,checked)=>{
+      if(checked)tagFilters.add(id);else tagFilters.delete(id);
+      draw();
+      clearFilters.disabled=!tagFilters.size;
+    },'grammar-filter-choices'),clearFilters);
+    clearFilters.disabled=!tagFilters.size;
+    tagFilterDetails.append(filterBody);
+    tagFilterDetails.open=tagFilters.size>0;
     const list=el('div','work-list');
     const draw=()=>{
       list.replaceChildren();
@@ -356,19 +452,25 @@ export function mountLibraryApp(root: HTMLElement): void {
       if(!corpus)return;
       const needle=foldLatin(ownQuery);
       const matches=corpus.texts.filter(t=>
-        !needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle)
+        (!needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle))
+        && matchesGrammarFilters(t.tagIds,[...tagFilters],tags)
       ).sort((a,b)=>cmp.compare(a.title,b.title));
       for(const entry of matches){
         const b=el('button','work-row'+(editingId===entry.id?' active':''));
         b.type='button';
         b.append(el('strong','',entry.title),el('span','work-desc',[entry.source.author,entry.source.work,entry.source.reference].filter(Boolean).join(' · ')));
+        if(entry.tagIds.length){
+          const label=el('span','work-tags',
+            entry.tagIds.map(id=>tags.find(tag=>tag.id===id)?.label??id).join(' · '));
+          b.append(label);
+        }
         b.addEventListener('click',()=>editText(entry.id));
         list.append(b);
       }
       if(!matches.length)list.append(el('p','hint','Todavía no hay textos con ese filtro.'));
     };
     find.addEventListener('input',()=>{ownQuery=find.value;draw();});
-    sidebar.append(newBtn,find,list);draw();
+    sidebar.append(newBtn,find,tagFilterDetails,list);draw();
     const editor=el('section','editor-pane');
     editor.append(el('h2','',editingId?'Editar texto':'Nuevo texto'));
     const form=el('form','editor-form');
@@ -380,13 +482,50 @@ export function mountLibraryApp(root: HTMLElement): void {
       field('Libro, capítulo o pasaje',draft.reference,bind('reference')),
       field('Texto latino',draft.latin,bind('latin'),true),
     );
+    const grammar=el('section','grammar-editor');
+    grammar.append(el('h3','','Etiquetas gramaticales'),
+      el('p','hint','Selección docente manual. Clasifica por separado construcción, tiempo y voz del infinitivo, funciones sintácticas y pronombres. No se asignan etiquetas por IA.'));
+    grammar.append(grammarPicker(allGrammarTags(snapshot?.corpus??{
+      schemaVersion:1,texts:[],tags:[],notebooks:[],
+    },pendingCustomTags),selectedTagIds,(id,checked)=>{
+      if(checked)selectedTagIds.add(id);else selectedTagIds.delete(id);
+      dirty=true;message('Etiquetas pendientes de guardar. Pulsa «Guardar texto».');
+    },'grammar-editor-choices'));
+    const customRow=el('div','grammar-custom-row');
+    const customInput=el('input','field-control');
+    customInput.placeholder='Nueva etiqueta personalizada';
+    customInput.setAttribute('aria-label','Nueva etiqueta personalizada');
+    const addCustom=button('Añadir etiqueta',()=>{
+      const label=customInput.value.trim();
+      if(!isCustomTagLabelValid(label)){
+        message('Escribe una etiqueta personalizada de 1 a 160 caracteres.',true);return;
+      }
+      const already=findTagByLabel(label,allGrammarTags(snapshot?.corpus??{
+        schemaVersion:1,texts:[],tags:[],notebooks:[],
+      },pendingCustomTags));
+      if(already){
+        selectedTagIds.add(already.id);
+        message('Etiqueta existente seleccionada. Guarda el texto.');
+      }else{
+        const tag:GrammarTag={id:'custom.'+crypto.randomUUID(),label,
+          kind:'custom',parentId:null};
+        pendingCustomTags.push(tag);selectedTagIds.add(tag.id);
+        message('Etiqueta personalizada añadida al borrador. Guarda el texto.');
+      }
+      dirty=true;render();
+    },'btn btn-outline');
+    customRow.append(customInput,addCustom);
+    grammar.append(customRow);
+    form.append(grammar);
     const action=el('div','editor-actions');
     const save=button('Guardar texto',async()=>{
       if(!ready())return;
       if(!draft.title.trim()||!draft.latin.trim()){message('El título y el texto latino son obligatorios.',true);return;}
       const id=editingId??freshId();
-      const ok=await transaction(corpus=>upsertText(corpus,draft,id,new Date().toISOString()));
-      if(ok){editingId=id;draft.id=id;dirty=false;render();}
+      const chosen=[...selectedTagIds],customs=[...pendingCustomTags];
+      const ok=await transaction(corpus=>attachGrammarTags(
+        upsertText(corpus,draft,id,new Date().toISOString()),id,chosen,customs));
+      if(ok){editingId=id;draft.id=id;dirty=false;pendingCustomTags=[];render();}
     },'btn btn-primary');
     if(!snapshot)save.disabled=true;
     action.append(save);
@@ -396,7 +535,10 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar este texto?'+(references?' Se quitará también de '+references+' cuaderno(s).':'')+' Esta acción no se puede deshacer sin una copia de seguridad.'))return;
         const id=editingId!;
         const ok=await transaction(corpus=>deleteText(corpus,id));
-        if(ok){editingId=null;draft=emptyDraft();dirty=false;render();}
+        if(ok){
+          editingId=null;draft=emptyDraft();dirty=false;
+          selectedTagIds.clear();pendingCustomTags=[];render();
+        }
       },'btn btn-danger');
       action.append(remove);
       if(snapshot?.corpus.notebooks.length){
