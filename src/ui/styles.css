@@ -755,6 +755,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   font-family:system-ui,-apple-system,sans-serif;font-weight:400;
   font-size:.73rem;color:var(--subtle);line-height:1.35;
 }
+.simple-delete-text {
+  border:1px solid light-dark(#ba7272,#9c6969);color:light-dark(#913e43,#ffb0b0);
+  background:transparent;font-size:.8rem;min-height:2.5rem;
+}
+.simple-delete-text:hover {background:light-dark(#fff0f0,#462b30);}
 .simple-source-row.selected {background:light-dark(#dfebea,#2e414b);
   border-left-color:var(--accent);}
 .simple-source-row:hover {background:light-dark(#eaf1ed,#273743);}
