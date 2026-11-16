@@ -79,12 +79,17 @@ export function choosePreverbBases(snapshot:TeacherAcademicSourceSnapshotV1,
   const chosen:{base:Base;word:string;fromPassage:boolean}[]=[];
   const fromText=rankedPassageBases(snapshot,latin);
   // Para la primera base hacen falta tres derivados; para la segunda dos.
+  const clashes=(a:Base,b:Base):boolean=>{
+    if(a.key===b.key||a.prompt===b.prompt)return true;
+    const derivatives=new Set(a.derivatives);
+    return b.derivatives.some(d=>derivatives.has(d));
+  };
   for(const minimum of [3,2]){
     const found=fromText.find(x=>x.base.derivatives.length>=minimum&&
-      !chosen.some(c=>c.base.key===x.base.key));
+      !chosen.some(c=>clashes(c.base,x.base)));
     if(found){chosen.push({...found,fromPassage:true});continue;}
     const candidates=available.filter(x=>x.derivatives.length>=minimum&&
-      !chosen.some(c=>c.base.key===x.key));
+      !chosen.some(c=>clashes(c.base,x)));
     const draw=Math.max(0,Math.min(candidates.length-1,Math.floor(random()*candidates.length)));
     const base=candidates[draw]!;
     chosen.push({base,word:base.prompt,fromPassage:false});
