@@ -105,6 +105,16 @@ function existingValues(q: Extract<QuestionV1,{kind:'choice'}>, exclusion: reado
   const ids=new Set(exclusion);
   return new Set(q.options.flatMap(o=>o.slots.filter(s=>!ids.has(s.id)).map(s=>normalize(s.value))));
 }
+/** La unicidad del cuaderno se calcula por valor, no por ID de ficha ni por texto. */
+function notebookUsage(edition:NotebookEditionV1):ReadonlySet<string> {
+  return new Set(edition.placements.flatMap(p=>p.questions.flatMap(q=>
+    q.kind==='choice'?q.options.flatMap(o=>o.slots.map(s=>normalize(s.value))):[])));
+}
+/** Solo se reutiliza una palabra ya usada si no queda ninguna candidata nueva y válida. */
+function preferNew<T extends {value:string}>(rows:readonly T[],used:ReadonlySet<string>):readonly T[] {
+  const fresh=rows.filter(row=>!used.has(normalize(row.value)));
+  return fresh.length?fresh:rows;
+}
 function makePlan(edition:NotebookEditionV1,target:AcademicTargetV1,kind:AcademicPlanV1['kind'],bank:VerifiedAcademicBankV1,
   values:{optionId?:string;wordId?:string;assignments?:AcademicPlanV1['assignments'];morphCandidateId?:string;replaceLocked?:boolean}):AcademicPlanV1 {
   checkRevision(target.expectedRevision);
@@ -118,15 +128,17 @@ export class AcademicQuestionEngineV1 {
   constructor(readonly bank: VerifiedAcademicBankV1) {}
 
   previewSlot(edition:NotebookEditionV1,target:AcademicSlotTargetV1):AcademicPreviewV1 {
-    const p=getPlacement(validateEdition(edition),target.placementId);
+    const valid=validateEdition(edition);
+    const p=getPlacement(valid,target.placementId);
     const q=getChoice(p,target.questionId),option=getOption(q,target.optionId);
     const slot=option.slots.find(s=>s.id===target.slotId)??fail('Palabra inexistente');
     const sourceForm=target.sourceForm??null;
     if(option.kind==='preverb'&&!sourceForm)fail('Es necesario elegir la forma de partida preverbial');
     const taken=existingValues(q,[slot.id]);
     taken.add(normalize(slot.value));
-    const rows=this.bank.verified(option.kind,sourceForm,
+    const eligible=this.bank.verified(option.kind,sourceForm,
       option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalize(row.value)));
+    const rows=preferNew(eligible,notebookUsage(valid));
     return {status:slot.locked?'locked':rows.length?'ready':'no-candidates',
       candidates:rows.map(r=>({id:r.id,value:r.value,lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts(option.kind).needsReview};
@@ -173,7 +185,7 @@ export class AcademicQuestionEngineV1 {
   private assignOption(q:Extract<QuestionV1,{kind:'choice'}>,option:ChoiceOptionV1,
     count:number,sourceForms:readonly string[]|undefined,newIds:readonly string[]|undefined,
     allowManualReplacement:boolean,seed:number,excluded:Set<string>,
-    selectedPhoneticRules?:readonly string[]):AcademicAssignmentV1[] {
+    usedInNotebook:ReadonlySet<string>,selectedPhoneticRules?:readonly string[]):AcademicAssignmentV1[] {
     if(!Number.isSafeInteger(count)||count<0||count>30)fail('Cantidad solicitada inválida (0–30)');
     const slots=option.slots;
     if(!allowManualReplacement && slots.some((s,i)=>s.locked&&i>=count)){
@@ -205,7 +217,7 @@ export class AcademicQuestionEngineV1 {
         return key!==current&&!excludedOthers.has(key);
       });
       if(!candidates.length)fail(`No hay suficientes términos verificados para ${option.kind} (${i+1}/${count})`);
-      const chosen=choose(candidates,seed+i);
+      const chosen=choose(preferNew(candidates,usedInNotebook),seed+i);
       excludedOthers.add(normalize(chosen.value));
       items.push({slotId:id,candidateId:chosen.id,sourceForm});
     }
@@ -213,25 +225,28 @@ export class AcademicQuestionEngineV1 {
   }
   prepareSubquestion(edition:NotebookEditionV1,target:AcademicGroupTargetV1):AcademicPlanV1 {
     checkSeed(target.seed);
-    const q=getChoice(getPlacement(edition,target.placementId),target.questionId);
+    const valid=validateEdition(edition);
+    const q=getChoice(getPlacement(valid,target.placementId),target.questionId);
     const o=getOption(q,target.optionId);
     const items=this.assignOption(q,o,target.desiredCount,target.sourceForms,target.newSlotIds,
-      target.allowManualReplacement??false,target.seed,new Set(),target.phoneticRules);
+      target.allowManualReplacement??false,target.seed,new Set(),notebookUsage(valid),target.phoneticRules);
     return makePlan(edition,target,'subquestion',this.bank,{optionId:o.id,replaceLocked:target.allowManualReplacement??false,
       assignments:[{optionId:o.id,items}]});
   }
   /** Solo la pregunta 4 de elección es autogenerable; no se inventan traducciones ni sintaxis. */
   prepareChoiceQuestion(edition:NotebookEditionV1,target:AcademicQuestionTargetV1):AcademicPlanV1 {
     checkSeed(target.seed);
-    const q=getChoice(getPlacement(edition,target.placementId),target.questionId);
+    const valid=validateEdition(edition);
+    const q=getChoice(getPlacement(valid,target.placementId),target.questionId);
     const assignments:{optionId:string;items:AcademicAssignmentV1[]}[]=[];
     const excluded=new Set<string>();
+    const usedInNotebook=notebookUsage(valid);
     for(const [idx,o] of q.options.entries()){
       if(!o.enabled)continue;
       const count=target.desiredCountByKind[o.kind]??o.slots.length;
       const items=this.assignOption(q,o,count,target.sourceFormsByKind?.[o.kind],
         target.newSlotIdsByKind?.[o.kind],target.allowManualReplacement??false,target.seed+idx*31,excluded,
-        target.phoneticRules);
+        usedInNotebook,target.phoneticRules);
       assignments.push({optionId:o.id,items});
       for(const entry of items){
         const candidate=entry.candidateId?this.bank.findVerified(entry.candidateId):null;
