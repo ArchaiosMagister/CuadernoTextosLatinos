@@ -14,7 +14,7 @@ import {
 } from '../core/academic-morph-selection.js';
 import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/academic-teacher-bank.js';
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
-import { choosePreverbBases,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
+import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
 import {validateEdition} from '../core/edition-validation.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
@@ -83,6 +83,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   const counts=new Map<string,number>();
   const sourceForms=new Map<string,string[]>();
   const selectedBases=new Map<string,PreverbSelection>();
+  const baseUsageSignatures=new Map<string,string>();
+  const manuallySelectedBases=new Set<string>();
   const ruleFilters=new Map<string,Set<string>>();
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
@@ -108,11 +110,31 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function countFor(o:ChoiceOptionV1):number{
     return counts.get(o.id)??(o.slots.length||defaults[o.kind]);
   }
+  function usedPreverbKeys(excludingOptionId:string):string[]{
+    const edition=bind.snapshot()?.edition;
+    if(!edition)return [];
+    const used=new Set<string>();
+    for(const placement of edition.placements)for(const question of placement.questions){
+      if(question.kind!=='choice')continue;
+      for(const option of question.options){
+        if(option.id===excludingOptionId||option.kind!=='preverb'||!option.enabled)continue;
+        const found=option.statement.value.match(/\\*([^*]+)\\* \\(3\\) y de \\*([^*]+)\\* \\(2\\)/u);
+        if(!found)continue;
+        for(const form of [found[1]!,found[2]!]){
+          const key=preverbBaseKeyForForm(academicTeacherSnapshotV1,form);
+          if(key)used.add(key);
+        }
+      }
+    }
+    return [...used].sort();
+  }
   function preverbBasesFor(o:ChoiceOptionV1,p:TextPlacementV1):PreverbSelection{
+    const used=usedPreverbKeys(o.id),signature=used.join('\\0');
     let selected=selectedBases.get(o.id);
-    if(!selected){
-      selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin);
+    if(!selected||(!manuallySelectedBases.has(o.id)&&baseUsageSignatures.get(o.id)!==signature)){
+      selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin,Math.random,used);
       selectedBases.set(o.id,selected);
+      baseUsageSignatures.set(o.id,signature);
       sourceForms.set(o.id,[...selected.sourceKeys]);
     }
     return selected;
@@ -452,6 +474,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const first=index===0?select.value:values[0]!;
         const second=index===1?select.value:values[3]!;
         sourceForms.set(o.id,[first,first,first,second,second]);
+        manuallySelectedBases.add(o.id);
         // Una elección manual sustituye la forma tomada del pasaje
         // por el lema del banco, sin declarar que aparece en el texto.
         const baseA=bases.find(x=>x.selectionKey===first);
@@ -464,7 +487,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       });
       label.append(select);wrap.append(label);
     }
-    wrap.append(el('p','hint','Se priorizan formas documentadas del pasaje; si faltan, se eligen bases distintas del banco docente.'));
+    wrap.append(el('p','hint','Se priorizan bases del pasaje no utilizadas en otros textos; después se buscan nuevas en el banco. Solo se reutilizan si no quedan bases válidas.'));
     section.append(wrap);
   }
   function phoneticControls(section:HTMLElement,q:Choice):void{
