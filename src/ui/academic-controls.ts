@@ -175,7 +175,12 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const rec=report.bank.findVerified(item.candidateId);
         if(!rec)throw new Error('Candidato inexistente o no elegible.');
         const audit=teacherAuditRecord(report,item.candidateId);
+        const seenBefore=old.placements.some(placement=>placement.questions.some(question=>
+          question.kind==='choice'&&question.options.some(other=>other.slots.some(slot=>
+            slot.id!==item.slotId&&slot.value.normalize('NFC').toLocaleLowerCase('es')===
+              rec.value.normalize('NFC').toLocaleLowerCase('es'))));
         details.push(optionName(option.kind)+': '+previous+' → '+rec.value+
+          (seenBefore?' (reutilizada: no quedan nuevas candidatas compatibles)':'')+
           (audit?.semanticReviewRequired?' (significado orientativo; revisar)':''));
       }
     }
@@ -245,7 +250,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     }
     pending=null;paperRange=null;replaceGroups.clear();
     bind.saved(saved);
-    bind.status(label+' aplicado directamente. Puedes cambiar cada término individualmente.');
+    const repeated=prepareDetails(plan).filter(x=>x.includes('(reutilizada:')).length;
+    bind.status(label+' aplicado directamente. Puedes cambiar cada término individualmente.'+
+      (repeated?' Reutilizadas por agotamiento del banco: '+repeated+'.':''));
   }
   async function chooseCandidateDirect(kind:CandidatePending['kind'],
     target:CandidatePending['target'],rows:Candidate[],locked:boolean):Promise<void>{
