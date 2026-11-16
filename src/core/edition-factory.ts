@@ -9,7 +9,8 @@ import { validateEdition } from './edition-validation.js';
 export type NextId = () => string;
 export const DEFAULT_PAGE_FORMAT_V1: Readonly<PageFormatV1> = {
   paper:'A4',fontFamily:'Palatino Linotype',fontSizePt:10.5,
-  marginsPt:{top:54,right:54,bottom:54,left:54},lineSpacingPt:13.5,
+  // Aproximación al modelo Pages A4: 2,5 cm verticales y 3 cm laterales.
+  marginsPt:{top:70.87,right:85.04,bottom:70.87,left:85.04},lineSpacingPt:13.5,
   questionGapPt:7,showPoints:true,pageFooter:'page | total',
 };
 function field(value:string):EditableFieldV1 {
