@@ -78,6 +78,8 @@ export interface AcademicAssignmentV1 {
   slotId: string;
   candidateId: string | null;
   sourceForm: string | null;
+  /** Repetición interna autorizada solo cuando no hay alternativa distinta elegible. */
+  unavoidableRepeat?: boolean;
 }
 export interface AcademicPlanV1 {
   kind: 'slot' | 'subquestion' | 'choice-question' | 'morph';
@@ -211,15 +213,18 @@ export class AcademicQuestionEngineV1 {
         continue;
       }
       const current=existing?normalize(existing.value):null;
-      const candidates=this.bank.verified(option.kind,sourceForm,
-        option.kind==='phonetics'?selectedPhoneticRules:undefined).filter(row=>{
-        const key=normalize(row.value);
-        return key!==current&&!excludedOthers.has(key);
-      });
-      if(!candidates.length)fail(`No hay suficientes términos verificados para ${option.kind} (${i+1}/${count})`);
+      const all=this.bank.verified(option.kind,sourceForm,
+        option.kind==='phonetics'?selectedPhoneticRules:undefined).filter(row=>
+        normalize(row.value)!==current);
+      const distinct=all.filter(row=>!excludedOthers.has(normalize(row.value)));
+      // Puede agotarse el subconjunto de términos distintos aunque el banco
+      // siga teniendo fichas verificadas: en ese único caso se admite repetir.
+      const candidates=distinct.length?distinct:all;
+      if(!candidates.length)fail(`No hay términos verificables para ${option.kind} (${i+1}/${count})`);
       const chosen=choose(preferNew(candidates,usedInNotebook),seed+i);
       excludedOthers.add(normalize(chosen.value));
-      items.push({slotId:id,candidateId:chosen.id,sourceForm});
+      items.push({slotId:id,candidateId:chosen.id,sourceForm,
+        ...(distinct.length?{}:{unavoidableRepeat:true})});
     }
     return items;
   }
@@ -304,7 +309,18 @@ export class AcademicQuestionEngineV1 {
         const row=this.bank.findVerified(entry.candidateId);
         if(!row||!validSlotRecord(row,option.kind,entry.sourceForm,plan.target.phoneticRules))fail('Propuesta fuera de banco/curso/fuente');
         const valueKey=normalize(row.value);
-        if(used.has(valueKey))fail('Dos casillas recibirían la misma palabra');
+        if(used.has(valueKey)&&!entry.unavoidableRepeat)fail('Dos casillas recibirían la misma palabra');
+        if(entry.unavoidableRepeat){
+          // Un plan manipulado no debe poder declarar escasez cuando hay una
+          // alternativa documentada que no aparece en el apartado.
+          const otherExisting=existingValues(q,original.slots.map(slot=>slot.id));
+          const hasAlternative=this.bank.verified(option.kind,entry.sourceForm,
+            option.kind==='phonetics'?plan.target.phoneticRules:undefined).some(candidate=>{
+            const key=normalize(candidate.value);
+            return key!==normalize(old?.value??'')&&!used.has(key)&&!otherExisting.has(key);
+          });
+          if(hasAlternative)fail('La repetición no está justificada por agotamiento del banco');
+        }
         used.add(valueKey);
         if(old && valueKey===normalize(old.value))fail('La regeneración no cambia el valor');
         slots.push({id:entry.slotId,value:row.value,proposedLemmaId:row.lemmaId,
@@ -319,7 +335,11 @@ export class AcademicQuestionEngineV1 {
       const a=plan.assignments[0]!;
       const targetOption=getOption(modified,a.optionId);
       const others=existingValues(q,getOption(q,a.optionId).slots.map(s=>s.id));
-      for(const s of targetOption.slots)if(others.has(normalize(s.value)))fail('La propuesta duplica una palabra del resto');
+      for(const s of targetOption.slots){
+        const planned=a.items.find(item=>item.slotId===s.id);
+        if(others.has(normalize(s.value))&&!planned?.unavoidableRepeat)
+          fail('La propuesta duplica una palabra del resto');
+      }
       // La operación granular existente solo admite candidatos generados.
       // Si preservamos un término manual intacto, aplicamos la pregunta
       // construida con el único subapartado cambiado (ningún otro difiere).
@@ -340,8 +360,9 @@ export class AcademicQuestionEngineV1 {
     // No se admiten candidatos que dupliquen un término conservado.
     const changed=new Set(plan.assignments.flatMap(a=>a.items.filter(i=>i.candidateId!==null).map(i=>i.slotId)));
     const preserved=new Set(q.options.flatMap(o=>o.slots.filter(s=>!changed.has(s.id)).map(s=>normalize(s.value))));
+    const unavoidable=new Set(plan.assignments.flatMap(a=>a.items.filter(i=>i.unavoidableRepeat).map(i=>i.slotId)));
     for(const o of modified.options)for(const slot of o.slots){
-      if(changed.has(slot.id)&&preserved.has(normalize(slot.value))) {
+      if(changed.has(slot.id)&&preserved.has(normalize(slot.value))&&!unavoidable.has(slot.id)) {
         fail('La propuesta duplica una palabra conservada');
       }
     }
