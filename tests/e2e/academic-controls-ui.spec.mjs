@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 async function start(page,latin='arate arate.'){
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.evaluate(async text=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     const repository=new IndexedDbCorpusRepository();
