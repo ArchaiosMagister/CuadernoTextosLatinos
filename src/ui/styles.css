@@ -523,14 +523,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   body > :not(.edition-print-root) {display:none!important;}
   .edition-print-root{display:block!important;padding:0!important;margin:0!important;}
   .edition-print-root .edition-paper{
+    /* No forzar una hoja de alto completo. En Safari el redondeo de
+       284 mm + la caja inferior de @page podía crear una hoja adicional
+       vacía al final de CADA texto. El contenido determina la altura. */
     box-sizing:border-box;display:block!important;
-    width:210mm!important;min-height:284mm!important;
+    width:210mm!important;min-height:0!important;height:auto!important;
     margin:0!important;border:0!important;box-shadow:none!important;
     overflow:visible!important;
-    break-after:page;page-break-after:always;
+    break-before:auto;page-break-before:auto;
+    break-after:auto;page-break-after:auto;
     color:#111!important;background:white!important;
   }
-  .edition-print-root .edition-paper:last-child{break-after:auto;page-break-after:auto;}
+  /* Separamos textos antes del siguiente, no después del anterior:
+     evita un salto sobrante en la última aparición del cuaderno. */
+  .edition-print-root .edition-paper + .edition-paper{
+    break-before:page;page-break-before:always;
+  }
   .edition-print-root .edition-paper-head{break-after:avoid;page-break-after:avoid;}
   .edition-print-root .edition-question,
   .edition-print-root .edition-vocabulary{break-inside:avoid;page-break-inside:avoid;}
