@@ -173,6 +173,7 @@ export function createEditionPane():{
   prepareFromIds:(textIds:readonly string[],title:string)=>Promise<boolean>;
   openEdition:(editionId:string)=>Promise<boolean>;
   syncSourceTags:(textId:string,tagIds:readonly string[])=>Promise<boolean>;
+  removeWorkingSource:(textId:string)=>Promise<boolean>;
 } {
   const element=node('section','edition-shell');
   element.setAttribute('aria-label','Editor del cuaderno');
@@ -317,6 +318,35 @@ export function createEditionPane():{
       editions=[...editions,saved];await changeEdition(id);
     }catch(e){setMessage('No se ha creado: '+(e instanceof Error?e.message:String(e)),true);}
   }
+  /** Solo retira la aparición de trabajo; preserva sin cambios todos los
+   * cuadernos exportables que ya se hayan preparado a partir de ella. */
+  async function removeWorkingSource(textId:string):Promise<boolean>{
+    if(!await flush())return false;
+    try{
+      const saved=await workspace.loadEdition(WORKING_EDITION_ID);
+      if(!saved)return true;
+      if(!saved.edition.placements.some(p=>p.source.sourceId===textId))return true;
+      const at=now();
+      const updated=await workspace.commitEdition(WORKING_EDITION_ID,saved.revision,
+        {command:'ui.remove-working-source',targetId:textId,timestamp:at},previous=>{
+          if(!previous)throw new Error('La edición de trabajo no está disponible');
+          return validateEdition({...previous,updatedAt:at,
+            placements:previous.placements.filter(p=>p.source.sourceId!==textId)});
+        });
+      editions=editions.map(e=>e.edition.id===WORKING_EDITION_ID?updated:e);
+      if(active===WORKING_EDITION_ID){
+        current=updated;draft=structuredClone(updated.edition);
+        if(session)session={...session,activePlacementId:draft.placements[0]?.id??null};
+        paint();
+      }
+      return true;
+    }catch(err){
+      setMessage('El texto original se ha eliminado, pero queda una copia de trabajo. '+
+        (err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
   /** Selección directa: un texto guardado se añade sin duplicar la fuente
    * a la edición de trabajo; preguntas, vocabulario y cambios se conservan. */
   async function openSourceText(textId:string):Promise<boolean>{
@@ -1055,5 +1085,5 @@ export function createEditionPane():{
     paintPreview();
   }
   return {element,open:()=>refresh(),flush,importLegacyNotebook,
-    openSourceText,prepareFromIds,openEdition,syncSourceTags};
+    openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource};
 }
