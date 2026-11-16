@@ -42,8 +42,9 @@ test('un cuaderno de Cuadernos pasa a Preparar cuaderno sin duplicar ni borrar o
   await page.getByRole('combobox',{name:'Seleccionar texto para añadir'}).selectOption('bridge.nepos');
   await page.getByRole('button',{name:'Añadir texto',exact:true}).click();
   await expect(page.locator('.notebook-contents li')).toHaveCount(2);
+  await expect(page.getByRole('button',{name:'Cuaderno terminado'})).toBeEnabled();
   const original=await getLegacy(page);
-  await page.getByRole('button',{name:'Preparar este cuaderno'}).click();
+  await page.getByRole('button',{name:'Cuaderno terminado'}).click();
   await expect(page.getByRole('heading',{name:'Editor de cuadernos'})).toBeVisible();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 2');
   let ed=await editions(page);
@@ -64,7 +65,7 @@ test('un cuaderno de Cuadernos pasa a Preparar cuaderno sin duplicar ni borrar o
   await page.getByRole('combobox',{name:'Seleccionar texto para añadir'}).selectOption('bridge.eutropius');
   await page.getByRole('button',{name:'Añadir texto',exact:true}).click();
   await expect(page.locator('.notebook-contents li')).toHaveCount(3);
-  await page.getByRole('button',{name:'Preparar este cuaderno'}).click();
+  await page.getByRole('button',{name:'Cuaderno terminado'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 3');
   ed=await editions(page);
   expect(ed).toHaveLength(1);
@@ -73,7 +74,7 @@ test('un cuaderno de Cuadernos pasa a Preparar cuaderno sin duplicar ni borrar o
   expect(ed[0].placements[0].questions[0].statement.value).toBe('Traduce el pasaje.');
 
   await page.getByRole('button',{name:'Cuadernos',exact:true}).click();
-  await page.getByRole('button',{name:'Preparar este cuaderno'}).click();
+  await page.getByRole('button',{name:'Cuaderno terminado'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 3');
   expect((await editions(page))[0].placements).toHaveLength(3);
   expect((await getLegacy(page)).notebooks[0].textIds).toEqual(['bridge.cesar','bridge.nepos','bridge.eutropius']);
