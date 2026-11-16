@@ -39,3 +39,18 @@ test('preverbios: con vocabulario repetido, cada base se utiliza una sola vez',(
   const p=choosePreverbBases(bank,'Instruxit, instruxit atque instruxit.',()=>0.3);
   assert.notEqual(p.sourceKeys[0],p.sourceKeys[3]);
 });
+
+test('preverbios: una base de pasaje ya utilizada pierde prioridad ante bases nuevas del banco',()=>{
+  const p=choosePreverbBases(bank,'Instruxit aciem; successerunt.',()=>0,['struo','cedo']);
+  assert.equal(p.source,'bank');
+  assert.ok(!p.sourceKeys.includes('struo'));
+  assert.ok(!p.sourceKeys.includes('cedo'));
+  assert.notEqual(p.sourceKeys[0],p.sourceKeys[3]);
+});
+test('preverbios: agotadas las bases nuevas se admite reutilización documentada',()=>{
+  const used=bank.preverbs.map(x=>x.ambiguousPrompt?x.enunciado:x.prompt);
+  const p=choosePreverbBases(bank,'Luna clara sub nocte erat.',()=>0,used);
+  assert.equal(p.source,'bank');
+  assert.equal(p.sourceKeys.length,5);
+  assert.notEqual(p.sourceKeys[0],p.sourceKeys[3]);
+});
