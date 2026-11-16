@@ -288,8 +288,10 @@ test('filtrar fonética por leyes impartidas conserva la opción de usar el banc
   assert.equal(e.previewSlot(ed,t).candidates.length,3);
   assert.throws(()=>e.previewSlot(ed,{...t,phoneticRules:['N99']}),/Filtro/);
   assert.throws(()=>e.prepareSlot(ed,{...t,phoneticRules:['N05']},'phonetics.1'),/No hay alternativas/);
-  assert.throws(()=>e.prepareSubquestion(ed,{...targeted(ed,'phonetics'),desiredCount:2,seed:0,
-    phoneticRules:['N05']}),/No hay suficientes/);
+  const scarce=e.prepareSubquestion(ed,{...targeted(ed,'phonetics'),desiredCount:2,seed:0,
+    phoneticRules:['N05']});
+  assert.equal(scarce.assignments[0]!.items.length,2);
+  assert.equal(scarce.assignments[0]!.items[1]!.unavoidableRepeat,true);
 });
 
 test('la confirmación CAS no admite una ficha fonética de una ley excluida por el filtro',async()=>{
@@ -351,4 +353,31 @@ test('la selección de una pregunta completa evita repetir palabras entre textos
   const latinisms=choice(after.edition).options.find(o=>o.kind==='latinism')!.slots.map(x=>x.value);
   assert.ok(latinisms.every(v=>v!=='latinism-0'));
   assert.deepEqual(after.edition.placements[1],valid.placements[1]);
+});
+
+test('si el apartado pide más palabras de las distintas disponibles, reutiliza solo tras agotarlas',async()=>{
+  const db=repo(),ed=await create(db),e=engine([record('prefix',0),record('prefix',1)]);
+  const q=choice(ed),o=q.options.find(o=>o.kind==='prefix')!;
+  const plan=e.prepareSubquestion(ed,{placementId:'place.1',questionId:q.id,optionId:o.id,
+    expectedRevision:1,seed:0,desiredCount:4,newSlotIds:newSlots('prefix',2)});
+  const chosen=plan.assignments[0]!.items.map(i=>e.bank.findVerified(i.candidateId!)!.value);
+  assert.equal(new Set(chosen).size,2);
+  assert.equal(chosen.length,4);
+  assert.equal(plan.assignments[0]!.items.filter(i=>i.unavoidableRepeat).length,2);
+  const saved=await e.commit(db,plan,LATER);
+  const result=choice(saved.edition).options.find(x=>x.kind==='prefix')!.slots.map(x=>x.value);
+  assert.deepEqual(result,chosen);
+  assert.deepEqual(saved.edition.placements[1],ed.placements[1]);
+});
+
+test('una repetición falsa inyectada no supera la validación contra el banco',async()=>{
+  const db=repo(),ed=await create(db),e=engine();
+  const plan=e.prepareSubquestion(ed,{...targeted(ed,'prefix'),desiredCount:2,seed:0});
+  const group=plan.assignments[0]!;
+  const fake={...plan,assignments:[{optionId:group.optionId,items:[
+    group.items[0]!,{...group.items[1]!,candidateId:group.items[0]!.candidateId,
+      unavoidableRepeat:true},
+  ]}]};
+  await assert.rejects(e.commit(db,fake,LATER),/no está justificada/);
+  assert.equal((await db.loadEdition(ed.id))!.revision,1);
 });
