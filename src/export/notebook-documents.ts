@@ -3,6 +3,7 @@
  * cuatro preguntas, vocabulario y campos PAGE / NUMPAGES.
  * PDF se imprime desde el mismo modelo mediante el sistema del navegador.
  */
+import {quotedMeaning} from '../core/vocabulary-format.js';
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
@@ -90,7 +91,7 @@ function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
     '" w:type="dxa"/></w:tcPr>'+inside+'</w:tc></w:tr>';
   let body=cell(paragraph('Vocabulario',paraProps({align:'center',after:5,keepNext:true}),{bold:true}));
   for(const entry of rows){
-    const meaning=entry.meaning?': '+entry.meaning:': [significado pendiente]';
+    const meaning=entry.meaning?': '+quotedMeaning(entry.meaning):': [significado pendiente]';
     let text='<w:p>'+paraProps({after:1})+run(entry.headword,{italic:true})+
       run(meaning)+(entry.note?run(' ('+entry.note+')'):'')+'</w:p>';
     body+=cell(text);
