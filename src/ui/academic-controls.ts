@@ -186,8 +186,66 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
             (data?.sourceForm?' · base '+data.sourceForm:'')};
     });
   }
+  async function commitPlanDirect(plan:AcademicPlanV1,label:string,
+    preverb?:{placementId:string;questionId:string;optionId:string;forms:readonly [string,string]}):Promise<void>{
+    let saved=await service().engine.commit(repository,plan,new Date().toISOString());
+    if(preverb){
+      const at=new Date().toISOString();
+      const text=preverbStatement(preverb.forms);
+      // Enunciados editados manualmente no se reescriben al regenerar.
+      const placement=saved.edition.placements.find(p=>p.id===preverb.placementId);
+      const question=placement?.questions.find(q=>q.id===preverb.questionId);
+      const option=question?.kind==='choice'
+        ?question.options.find(o=>o.id===preverb.optionId):null;
+      if(option&&(!option.statement.locked||option.statement.origin==='template')){
+        saved=await repository.commitEdition(saved.edition.id,saved.revision,
+          {command:'ui.preverb-statement',targetId:preverb.optionId,timestamp:at},original=>{
+            if(!original)throw new Error('Se ha perdido el cuaderno editorial.');
+            return validateEdition({...original,updatedAt:at,
+              placements:original.placements.map(p=>p.id!==preverb.placementId?p:{
+                ...p,questions:p.questions.map(q=>q.id!==preverb.questionId||q.kind!=='choice'?q:{
+                  ...q,options:q.options.map(o=>o.id!==preverb.optionId?o:{
+                    ...o,statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
+                  }),
+                }),
+              }),
+            });
+          });
+      }
+    }
+    pending=null;paperRange=null;replaceGroups.clear();
+    bind.saved(saved);
+    bind.status(label+' aplicado directamente. Puedes cambiar cada término individualmente.');
+  }
+  async function chooseCandidateDirect(kind:CandidatePending['kind'],
+    target:CandidatePending['target'],rows:Candidate[],locked:boolean):Promise<void>{
+    if(!rows.length)throw new Error('No hay propuestas documentadas para esta palabra.');
+    if(locked){
+      bind.status('Palabra manual protegida: se conserva sin reemplazarla.');
+      return;
+    }
+    const chosen=rows[0]!.id;
+    const saved=current();
+    let next:EditionSnapshotV1;
+    const {engine,selector}=service();
+    if(kind==='token'){
+      const plan=selector.prepare(saved.edition,target as MorphTokenTargetV1,chosen);
+      next=await selector.commit(repository,plan,new Date().toISOString());
+    }else if(kind==='morph'){
+      const plan=engine.prepareMorph(saved.edition,target as AcademicMorphTargetV1,chosen,false);
+      next=await engine.commit(repository,plan,new Date().toISOString());
+    }else{
+      const plan=engine.prepareSlot(saved.edition,target as AcademicSlotTargetV1,chosen,
+        randomSeed(),false);
+      next=await engine.commit(repository,plan,new Date().toISOString());
+    }
+    bind.saved(next);
+    bind.status('Aplicado directamente'+(rows.length>1?
+      ' · varias lecturas posibles: revisa la forma elegida.':'.'));
+  }
+
   function requestSlot(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const target:AcademicSlotTargetV1={
         placementId:p.id,questionId:q.id,optionId:o.id,slotId,expectedRevision:s.revision,
         ...(o.kind==='preverb'?{sourceForm:sourceFor(o)[index]??''}:{}),
@@ -195,24 +253,26 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       };
       const academic=service().engine;
       const view=academic.previewSlot(s.edition,target);
-      showCandidate('slot','Sustituir una palabra de '+optionName(o.kind),target,
-        candidateRows(o.kind,view.candidates),view.status==='locked',
-        JSON.stringify(s.edition),s.revision);
+      const rows=candidateRows(o.kind,view.candidates);
+      if(autoApply)await chooseCandidateDirect('slot',target,rows,view.status==='locked');
+      else showCandidate('slot','Sustituir una palabra de '+optionName(o.kind),target,
+        rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
     });
   }
   function requestMorph(p:TextPlacementV1,q:Morph,wordId:string):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const target:AcademicMorphTargetV1={
         placementId:p.id,questionId:q.id,wordId,expectedRevision:s.revision,
       };
       const view=service().engine.previewMorph(s.edition,target);
-      showCandidate('morph','Reanalizar únicamente esta aparición',target,
-        candidateRows('morphology',view.candidates),view.status==='locked',
-        JSON.stringify(s.edition),s.revision);
+      const rows=candidateRows('morphology',view.candidates);
+      if(autoApply)await chooseCandidateDirect('morph',target,rows,view.status==='locked');
+      else showCandidate('morph','Reanalizar únicamente esta aparición',target,
+        rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
     });
   }
   function requestGroup(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const f=fieldsFor(o,p);
       const plan=service().engine.prepareSubquestion(s.edition,{
         placementId:p.id,questionId:q.id,optionId:o.id,expectedRevision:s.revision,
@@ -225,12 +285,18 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       if(!plan.assignments.some(g=>g.items.some(x=>x.candidateId))){
         throw new Error('No hay términos que sustituir; las palabras manuales permanecen protegidas.');
       }
-      pending={type:'plan',label:'Regenerar solo '+optionName(o.kind),plan,details};
-      bind.repaint();
+      if(autoApply){
+        const picked=o.kind==='preverb'?preverbBasesFor(o,p):null;
+        await commitPlanDirect(plan,optionName(o.kind),
+          picked?{placementId:p.id,questionId:q.id,optionId:o.id,forms:picked.forms}:undefined);
+      }else{
+        pending={type:'plan',label:'Regenerar solo '+optionName(o.kind),plan,details};
+        bind.repaint();
+      }
     });
   }
   function requestQuestion(p:TextPlacementV1,q:Choice):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const desiredCountByKind:Partial<Record<AcademicSlotKindV1,number>>={};
       const sourceFormsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
       const newSlotIdsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
@@ -249,12 +315,19 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const details=prepareDetails(plan);
       if(!plan.assignments.some(g=>g.items.some(x=>x.candidateId)))
         throw new Error('No hay términos que regenerar.');
-      pending={type:'plan',label:'Regenerar solo la pregunta 4',plan,details};
-      bind.repaint();
+      if(autoApply){
+        const preverb=q.options.find(o=>o.kind==='preverb'&&o.enabled);
+        const picked=preverb?preverbBasesFor(preverb,p):null;
+        await commitPlanDirect(plan,'Pregunta 4',
+          preverb&&picked?{placementId:p.id,questionId:q.id,optionId:preverb.id,forms:picked.forms}:undefined);
+      }else{
+        pending={type:'plan',label:'Regenerar solo la pregunta 4',plan,details};
+        bind.repaint();
+      }
     });
   }
   function requestToken(target:RangeTarget):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const p=s.edition.placements.find(x=>x.id===target.placementId);
       const q=p?.questions.find(x=>x.kind==='morphology');
       if(!p||!q)throw new Error('No se encontró la pregunta de morfología.');
@@ -268,7 +341,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const view=service().selector.preview(s.edition,t);
       const rows=view.candidates.map(x=>({id:x.id,value:view.surface,
         detail:x.lemmaId+' · '+x.analysis+' · '+x.reference}));
-      showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
+      if(autoApply)await chooseCandidateDirect('token',t,rows,false);
+      else showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
         JSON.stringify(s.edition),s.revision);
     });
   }
@@ -438,7 +512,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     label.append(count);ui.append(label);
     setSourcesUi(ui,p,o);
     consent(ui,o.id);
-    ui.append(button('Proponer apartado '+optionName(o.kind),()=>requestGroup(p,q,o)));
+    ui.append(button((autoApply?'Generar ':'Proponer apartado ')+optionName(o.kind),()=>requestGroup(p,q,o)));
     section.append(ui);
   }
   function renderSlot(section:HTMLElement,p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
@@ -448,8 +522,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const ui=el('div','edition-academic-question');
     phoneticControls(ui,q);
     consent(ui,q.id);
-    ui.append(button('Proponer pregunta 4 completa',()=>requestQuestion(p,q)),
-      el('p','hint','Los apartados desactivados y las otras preguntas quedan intactos. Las propuestas se revisan antes de guardar.'));
+    ui.append(button(autoApply?'Generar pregunta 4':'Proponer pregunta 4 completa',()=>requestQuestion(p,q)),
+      el('p','hint',autoApply?'Los candidatos documentados se aplican directamente. Puedes editarlos después.':
+        'Los apartados desactivados y las otras preguntas quedan intactos. Las propuestas se revisan antes de guardar.'));
     section.append(ui);
   }
   function renderMorph(section:HTMLElement,p:TextPlacementV1,q:Morph):void{
