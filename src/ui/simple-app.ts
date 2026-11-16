@@ -389,6 +389,7 @@ export function mountSimpleApp(root:HTMLElement):void{
       for(const t of found){
         const row=button(t.title,()=>chooseText(t.id),
           'simple-source-row'+(activeTextId===t.id?' selected':''));
+        row.setAttribute('aria-label',t.title);
         const meta=el('span','',[
           t.source.author,t.source.work,t.source.reference,
         ].filter(Boolean).join(' · '));
