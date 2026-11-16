@@ -372,25 +372,50 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
+    // Índice compacto a la manera de Examinator2: navegar a cada tarjeta sin
+    // duplicar sus campos ni modificar las palabras y decisiones del docente.
+    const names:Record<string,string>={
+      translation:'Traducción',syntax:'Sintaxis',morphology:'Morfología',choice:'Elección',
+    };
+    const overview=node('nav','edition-question-index');
+    overview.setAttribute('aria-label','Ir a una pregunta');
+    overview.append(node('strong','','Preguntas del texto'));
+    const shortcuts=node('div','edition-question-shortcuts');
+    for(const [index,q] of p.questions.entries()){
+      const jump=action(String(index+1)+'. '+(names[q.kind]??q.kind),()=>{
+        panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
+          ?.scrollIntoView({block:'nearest',behavior:'auto'});
+      },'btn btn-outline edition-question-jump');
+      if(!q.enabled)jump.classList.add('is-inactive');
+      shortcuts.append(jump);
+    }
+    overview.append(shortcuts);
+    panel.append(overview);
     for(const q of p.questions){
       const section=node('section','edition-question-panel');
+      section.dataset.kind=q.kind;
+      if(!q.enabled)section.classList.add('is-inactive');
       const top=node('div','edition-question-top');
       const check=node('input');check.type='checkbox';check.checked=q.enabled;
       check.setAttribute('aria-label','Incluir pregunta '+q.kind);
       check.addEventListener('change',()=>{
         apply((e,at)=>toggleQuestion(e,p.id,q.id,check.checked,at));paint();
       });
-      top.append(check,node('h3','',({
+      const heading=({
         translation:'1. Traducción',syntax:'2. Sintaxis',
         morphology:'3. Morfología',choice:'4. Elección',
-      } as Record<string,string>)[q.kind]??q.kind));
+      } as Record<string,string>)[q.kind]??q.kind;
+      top.append(check,node('h3','',heading),
+        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'));
       section.append(top);
       section.append(textField('Enunciado',q.statement.value,value=>{
         apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
       }));
-      section.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
+      const points=node('div','edition-question-points');
+      points.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
         apply((e,at)=>setQuestionPoints(e,p.id,q.id,Math.round(value*100),at));paint();
       }));
+      section.append(points);
       if(q.kind==='morphology')academics.renderMorph(section,p,q);
       if(q.kind==='choice'){
         const options=q.options;
@@ -740,7 +765,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     const whole=action(session.mode==='whole-notebook'?'Ver texto seleccionado':'Ver cuaderno completo',
       ()=>navigate(session?.mode==='whole-notebook'?{placementId:selection()?.id??draft!.placements[0]?.id??''}:'whole'));
     whole.disabled=!n;
-    nav.append(whole);element.append(nav);
+    nav.append(whole);
+    nav.setAttribute('aria-label','Navegación de textos encima de la vista previa');
     const review=academics.review();
     if(review)element.append(review);
     const exportNotice=renderExportReview();
@@ -777,7 +803,9 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     bar.append(node('strong','','Vista A4'));
     bar.append(numberField('Zoom (%)',zoom,50,130,5,value=>{zoom=value;paintPreview();}));
     bar.append(academics.renderPaperSelect(papers));
-    preview.append(bar,papers);
+    // Los controles Anterior / Siguiente van justo encima del papel; no se
+    // reproducen en la cabecera ni alteran el modelo al cambiar de posición.
+    preview.append(nav,bar,papers);
     preview.append(node('p','edition-preview-note','Vista en pantalla · sin exportación todavía.'));
     layout.append(editor,preview);element.append(layout);
     paintPreview();
