@@ -164,7 +164,7 @@ function formatPoints(p:TextPlacementV1):string {
 export const WORKING_EDITION_ID='ed.seleccion-textos';
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
-export function createEditionPane():{
+export function createEditionPane(options:{autoApply?:boolean}={}):{
   element:HTMLElement;
   open:()=>Promise<void>;
   flush:()=>Promise<boolean>;
@@ -175,6 +175,7 @@ export function createEditionPane():{
   syncSourceTags:(textId:string,tagIds:readonly string[])=>Promise<boolean>;
   removeWorkingSource:(textId:string)=>Promise<boolean>;
 } {
+  const autoApply=options.autoApply===true;
   const element=node('section','edition-shell');
   element.setAttribute('aria-label','Editor del cuaderno');
   let editions:EditionSnapshotV1[]=[];
@@ -385,6 +386,13 @@ export function createEditionPane():{
       if(session&&entry)session={...session,activePlacementId:entry.id,mode:'text'};
       menu='questions';
       mobile='config';
+      if(autoApply&&entry){
+        const currentPlacement=selection();
+        if(currentPlacement&&currentPlacement.id===entry.id&&currentPlacement.vocabulary.length===0){
+          try{applyVocabularyAutomatically(currentPlacement,true);await flush();}
+          catch(err){setMessage('El texto se ha abierto; revisa su vocabulario: '+String(err),true);}
+        }
+      }
       paint();
       setMessage('Texto listo para editar: preguntas, vocabulario y vista previa A4.');
       return true;
@@ -736,9 +744,35 @@ export function createEditionPane():{
     panel.append(node('p',total===800?'edition-score':'edition-error',
       'Total activo: '+formatPoints(p)+(total===800?'':' · revisión necesaria')));
   }
+  function applyVocabularyAutomatically(p:TextPlacementV1,onlyWhenEmpty=false):number{
+    if(!draft||(onlyWhenEmpty&&p.vocabulary.length))return 0;
+    vocabularyBank??=createOfflineTeacherBankV1();
+    const proposals=suggestVocabulary(p,vocabularyBank.bank);
+    if(!proposals.length)return 0;
+    // Lemas inequívocos del banco; los demás conservan la forma textual y
+    // se guardan como pendientes de revisión, nunca como lemas verificados.
+    const seen=new Set<string>();
+    const decisions=proposals.map(item=>{
+      const headword=item.lemma??item.surface;
+      const normalized=headword.toLocaleLowerCase('es').normalize('NFC');
+      const selected=!seen.has(normalized);
+      seen.add(normalized);
+      return {surface:item.surface,selected,headword,meaning:''};
+    });
+    apply((e,at)=>acceptVocabulary(e,p.id,proposals,decisions,
+      ()=>freshId('voc'),at));
+    return decisions.filter(x=>x.selected).length;
+  }
   function prepareVocabulary(p:TextPlacementV1):void{
     if(!draft)return;
     try{
+      if(autoApply){
+        const n=applyVocabularyAutomatically(p);
+        setMessage(n?'Añadidas '+n+' entradas editables. Formas ambiguas o desconocidas: revisión pendiente.':
+          'No hay nuevas formas para añadir al vocabulario.');
+        paint();
+        return;
+      }
       vocabularyBank??=createOfflineTeacherBankV1();
       const proposals=suggestVocabulary(p,vocabularyBank.bank);
       vocabPreview={placementId:p.id,baseline:JSON.stringify(draft),
@@ -794,7 +828,8 @@ export function createEditionPane():{
     panel.append(section);
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
-    panel.append(action('Proponer vocabulario del texto',()=>prepareVocabulary(p),'btn btn-primary'));
+    panel.append(action(autoApply?'Lematizar y actualizar vocabulario':'Proponer vocabulario del texto',
+      ()=>prepareVocabulary(p),'btn btn-primary'));
     renderVocabularySuggestions(panel,p);
     const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
     for(const v of items){
