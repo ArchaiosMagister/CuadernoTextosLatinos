@@ -160,7 +160,12 @@ function formatPoints(p:TextPlacementV1):string {
 }
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
-export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;flush:()=>Promise<boolean>} {
+export function createEditionPane():{
+  element:HTMLElement;
+  open:()=>Promise<void>;
+  flush:()=>Promise<boolean>;
+  importLegacyNotebook:(id:string)=>Promise<boolean>;
+} {
   const element=node('section','edition-shell');
   element.setAttribute('aria-label','Editor del cuaderno');
   let editions:EditionSnapshotV1[]=[];
@@ -304,6 +309,107 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       editions=[...editions,saved];await changeEdition(id);
     }catch(e){setMessage('No se ha creado: '+(e instanceof Error?e.message:String(e)),true);}
   }
+  /**
+   * Puente no destructivo entre «Cuadernos» (CorpusV1) y el compositor A4.
+   * Un cuaderno histórico se importa una sola vez; importaciones sucesivas
+   * agregan únicamente los IDs de texto pendientes, sin sobrescribir el
+   * texto, vocabulario, preguntas ni orden que el docente editó en A4.
+   */
+  async function importLegacyNotebook(legacyNotebookId:string):Promise<boolean>{
+    if(!await flush())return false;
+    try{
+      const source=await legacy.load();
+      const book=source.corpus.notebooks.find(item=>item.id===legacyNotebookId);
+      if(!book)throw new Error('El cuaderno original ya no existe. Actualiza la biblioteca.');
+      const texts=new Map(source.corpus.texts.map(text=>[text.id,text]));
+      for(const textId of book.textIds){
+        if(!texts.has(textId))throw new Error('Falta un texto del cuaderno original: '+textId);
+      }
+      // Refrescar antes de decidir si el cuaderno ya se importó (otra pestaña
+      // podría haberlo creado). Nunca generar un duplicado por pulsar dos veces.
+      editions=await workspace.listEditions();
+      const previous=editions.find(item=>item.edition.legacyNotebookId===book.id);
+      const at=now();
+      if(previous){
+        const assigned=new Set(previous.edition.placements.map(p=>p.source.sourceId));
+        const pending=book.textIds.filter(id=>!assigned.has(id));
+        if(!pending.length){
+          await changeEdition(previous.edition.id);
+          menu='notebook';paint();
+          setMessage('«'+book.title+'» ya está preparado. No se han duplicado textos.');
+          return true;
+        }
+        const added=pending.map(id=>placementFromCorpus(texts.get(id)!,freshId('place'),at,
+          ()=>freshId('item')));
+        const saved=await workspace.commitEdition(previous.edition.id,previous.revision,
+          {command:'ui.import-legacy',targetId:book.id,timestamp:at},edition=>{
+            if(!edition || edition.legacyNotebookId!==book.id){
+              throw new Error('El cuaderno editorial cambió durante la importación.');
+            }
+            // Revalidar sobre el estado de la transacción evita sobrescribir
+            // cualquier otra modificación del documento.
+            return validateEdition({...edition,updatedAt:at,
+              placements:[...edition.placements,...added]});
+          });
+        editions=editions.map(item=>item.edition.id===saved.edition.id?saved:item);
+        await changeEdition(saved.edition.id);
+        menu='notebook';paint();
+        setMessage('Se han incorporado '+pending.length+' texto(s) nuevos de «'+book.title+
+          '». Las preguntas, el vocabulario y los textos ya editados se conservan.');
+        return true;
+      }
+      const placements=book.textIds.map(id=>placementFromCorpus(texts.get(id)!,freshId('place'),
+        at,()=>freshId('item')));
+      const id=freshId('ed');
+      const edition=createEdition({id,legacyNotebookId:book.id,title:book.title,
+        timestamp:at,placements});
+      const saved=await workspace.commitEdition(id,0,
+        {command:'ui.import-legacy',targetId:book.id,timestamp:at},()=>edition);
+      editions=[...editions,saved];
+      await changeEdition(saved.edition.id);
+      menu='notebook';paint();
+      setMessage('Cuaderno «'+book.title+'» preparado con '+placements.length+
+        ' texto(s). Los originales continúan en «Cuadernos».');
+      return true;
+    }catch(err){
+      setMessage('No se pudo preparar el cuaderno original: '+
+        (err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
+  function legacyNotebookPicker():HTMLElement {
+    const container=node('section','edition-import-legacy');
+    container.append(node('h3','','Traer cuaderno existente'),
+      node('p','hint','Copia al editor los textos de «Cuadernos» en el orden guardado. Si ya estaba preparado, añade solo los textos nuevos sin cambiar tus preguntas ni el vocabulario.'));
+    const choice=node('select','field-control');
+    choice.setAttribute('aria-label','Elegir cuaderno de Cuadernos');
+    const importButton=action('Preparar cuaderno seleccionado',async()=>{
+      if(!choice.value)return;
+      await importLegacyNotebook(choice.value);
+    },'btn btn-primary');
+    importButton.disabled=true;
+    const row=node('div','edition-inline-edit');
+    row.append(choice,importButton);
+    container.append(row);
+    void legacy.load().then(snapshot=>{
+      if(!container.isConnected)return;
+      choice.replaceChildren();
+      for(const notebook of snapshot.corpus.notebooks){
+        const option=node('option','',
+          notebook.title+' ('+notebook.textIds.length+' texto(s))');
+        option.value=notebook.id;
+        choice.append(option);
+      }
+      importButton.disabled=!snapshot.corpus.notebooks.length;
+      if(!snapshot.corpus.notebooks.length){
+        choice.append(node('option','','Primero crea un cuaderno en «Cuadernos»'));
+        importButton.disabled=true;
+      }
+    }).catch(err=>setMessage('No se pudieron listar los cuadernos: '+String(err),true));
+    return container;
+  }
+
   async function undo():Promise<void>{
     if(!current||!await flush())return;
     try{
@@ -600,6 +706,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
     const e=draft;
+    panel.append(legacyNotebookPicker());
     panel.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
@@ -732,6 +839,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       empty.append(node('h3','','Comienza un cuaderno editorial'),
         node('p','','La biblioteca y tus cuadernos anteriores se conservan. Puedes migrarlos de forma explícita con una copia verificada o crear un cuaderno nuevo.'));
       const migration=action('Preparar migración de cuadernos antiguos',prepareMigration,'btn btn-outline');
+      empty.append(legacyNotebookPicker());
+      empty.append(node('p','hint','Importación completa de la biblioteca anterior (avanzado):'));
       empty.append(migration);
       if(pendingMigration){
         empty.append(node('p','hint',
@@ -815,5 +924,5 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     layout.append(editor,previewStack);element.append(layout);
     paintPreview();
   }
-  return {element,open:()=>refresh(),flush};
+  return {element,open:()=>refresh(),flush,importLegacyNotebook};
 }
