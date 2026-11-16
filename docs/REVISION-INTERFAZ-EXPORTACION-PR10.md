@@ -100,3 +100,36 @@ declarar equivalencia exacta con Pages.
   fuera de esta PR.
 
 La PR no se fusionará ni desplegará hasta autorización.
+
+
+## 8. Compatibilidad Safari/Pages y criterio de aceptación (16-11-2026)
+
+Se contrastó el PDF de referencia del docente (una hoja Pages A4) con las salidas
+**breve**, **largo** y **varios** de la última ejecución de CI, utilizando
+LibreOffice para abrir DOCX y Chromium para imprimir el HTML A4. La comparación
+mide posiciones en puntos y conserva archivos de prueba en el artefacto de CI.
+
+- **Breve**: 1 página en ambas salidas. Las posiciones del texto, vocabulario y
+  preguntas están dentro de la tolerancia automatizada de 20 pt frente al PDF
+  de Pages. Asteriscos de cursiva convertidos en segmentos de estilo, sin verse
+  en el documento final.
+- **Largo**: Word/LibreOffice genera **3 páginas** y Chromium **2 páginas**.
+  Ninguna ha perdido pasajes, vocabulario ni preguntas. Los saltos difieren por
+  tipografías/métricas/implementación; no hay una promesa de paginación idéntica.
+- **Varios**: 3 páginas y tres textos independientes, uno por página, en ambas
+  salidas. La numeración física de Word y Chromium se ha contrastado.
+- **Pages iPad**: Apple confirma que Pages abre DOCX, pero no se ha probado
+  directamente el archivo en la aplicación Pages de un dispositivo real. No
+  se certifica equivalencia tipográfica completa con Pages.
+- **Safari iPad**: pruebas WebKit (móvil/vertical y escritorio) comprueban DOM,
+  persistencia, controles y CSS de impresión. **Safari no soporta** los cuadros
+  marginales `@page @bottom-center` según las tablas de compatibilidad de MDN.
+  Así que, aunque Chromium imprime `1 | N`, el PDF guardado desde Safari puede
+  omitir esa numeración. Se advierte expresamente al usuario en la interfaz y
+  se recomienda **DOCX → Pages → Exportar PDF** si el pie numerado es imprescindible.
+  No se ha podido generar ni examinar un PDF desde un iPad Safari físico.
+
+**Resultado**: auditoría de código, DOM, OOXML y
+renderizado comparado superada, con **reserva de validación física Safari/Pages**.
+La prueba accesible para el docente es precisamente el paso pendiente antes de
+fusionar. No equivale a un visto bueno definitivo para producción.
