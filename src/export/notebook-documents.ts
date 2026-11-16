@@ -133,7 +133,8 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
         let optionRuns=run(String.fromCharCode(96+letter)+'.  ');
         optionRuns+=splitInlineItalics(option.statement.value)
           .map(segment=>run(segment.text,{italic:segment.italic})).join('');
-        if(option.slots.length){
+        // Los derivados preverbiales son datos internos: nunca imprimir un solucionario.
+        if(option.kind!=='preverb'&&option.slots.length){
           optionRuns+=run(' ');
           option.slots.forEach((slot,index)=>{
             if(index)optionRuns+=run(', ');
