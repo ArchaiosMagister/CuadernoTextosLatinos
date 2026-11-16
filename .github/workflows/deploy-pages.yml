@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 84ce4c9e5a00e451fb249f5751739722de7e1c8a
+          ref: 0ce24e40bb8d41e9db2abd6deb47f23af03989af
           path: experimental
           persist-credentials: false
       - name: Compilar la versión experimental sin tocar la estable
@@ -116,6 +116,8 @@ jobs:
             )
           css=(preview/'styles.css').read_text()
           assert '.edition-preview-stack' in css
+          assert '.simple-tabs' in css
+          assert '.simple-prepare-layout' in css
           # El puente Cuadernos -> editor debe estar en la copia publicada.
           editor=(preview/'ui/edition-app.js').read_text()
           assert 'importLegacyNotebook' in editor
@@ -124,6 +126,15 @@ jobs:
           assert 'Cuaderno terminado' in library
           assert 'Etiquetas gramaticales' in library
           assert 'Filtrar por etiquetas gramaticales' in library
+          simple=(preview/'ui/simple-app.js').read_text()
+          assert 'Preparar cuaderno' in simple
+          assert 'Buscar autores' in simple
+          assert 'simple-grammar-summary' in simple
+          assert 'openSourceText' in editor
+          assert 'prepareFromIds' in editor
+          counts=(preview/'core/notebook-selection.js').read_text()
+          assert 'summarizeSelection' in counts
+          assert 'mountSimpleApp' in (preview/'main.js').read_text()
           tags=(preview/'core/grammar-tags.js').read_text()
           assert 'gram.inf.perfecto' in tags
           assert 'gram.inf.pasivo' in tags
@@ -173,7 +184,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/grammar-tags.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -198,6 +209,11 @@ jobs:
               "prueba/ui/library-app.js")
                 grep -q 'Cuaderno terminado' /tmp/cuaderno-public
                 grep -q 'Etiquetas gramaticales' /tmp/cuaderno-public ;;
+              "prueba/ui/simple-app.js")
+                grep -q 'Preparar cuaderno' /tmp/cuaderno-public
+                grep -q 'Buscar autores' /tmp/cuaderno-public ;;
+              "prueba/core/notebook-selection.js")
+                grep -q 'summarizeSelection' /tmp/cuaderno-public ;;
               "prueba/storage/workspace-repository.js")
                 grep -q "'cuaderno-textos-latinos-workspace-prueba-pr14'" /tmp/cuaderno-public ;;
               "prueba/storage/indexeddb-corpus-repository.js")
@@ -205,6 +221,7 @@ jobs:
               "prueba/service-worker.js")
                 grep -q 'cuaderno-preview-pr14-' /tmp/cuaderno-public ;;
               "prueba/main.js")
+                grep -q 'mountSimpleApp' /tmp/cuaderno-public
                 grep -q 'mountLibraryApp' /tmp/cuaderno-public ;;
             esac
           done
@@ -225,17 +242,27 @@ jobs:
             page.on('pageerror',e=>errors.push(e.message));
             const url=process.env.ROOT+'prueba/';
             const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
-            await page.getByRole('button',{name:'Preparar cuaderno'}).waitFor({state:'visible',timeout:40000});
+            await page.getByRole('navigation',{name:'Navegación principal'})
+              .getByRole('button').first().waitFor({state:'visible',timeout:40000});
+            const tabs=page.getByRole('navigation',{name:'Navegación principal'});
+            if(await tabs.getByRole('button').count()!==2)throw Error('La interfaz debe tener dos apartados');
             if(!(await page.locator('body').innerText()).includes('VISTA DE PRUEBA — REDISEÑO PR #14'))
               throw Error('Falta marca provisional');
-            await page.getByRole('button',{name:'Preparar cuaderno'}).click();
-            await page.getByRole('heading',{name:'Editor de cuadernos'}).waitFor();
-            page.once('dialog',dialog=>dialog.accept('Prueba pública de diseño'));
-            await page.getByRole('button',{name:'+ Cuaderno'}).click();
-            await page.locator('.edition-preview-stack > .edition-navigation').waitFor();
-            console.log('Preview HTTP:',res?.status(),'URL:',page.url(),'errores JS:',errors);
-            if(res?.status()!==200||errors.length)throw Error('Fallo carga Safari WebKit');
+            await page.getByRole('button',{name:'Buscar autores',exact:true}).click();
+            await page.locator('.simple-work-item').first().waitFor();
+            await page.locator('.simple-work-item').first().click();
+            await page.locator('.simple-reader-line').first().waitFor();
+            await page.locator('.simple-reader-line').first().click();
+            await page.locator('.edition-paper').first().waitFor({state:'visible'});
+            await page.locator('.edition-preview-stack .edition-navigation').waitFor();
+            await page.locator('.edition-question-panel').first().waitFor();
+            await page.getByRole('button',{name:'Preparar cuaderno',exact:true}).click();
+            await page.locator('.simple-grammar-summary').waitFor();
             await page.screenshot({path:'preview-redisenio-ipad.png',fullPage:false});
+            await page.goto(url+'?classic=1',{waitUntil:'domcontentloaded'});
+            await page.getByRole('button',{name:'Biblioteca',exact:true}).waitFor();
+            console.log('Preview HTTP:',res?.status(),'2 apartados, editor A4 y vista clásica. Errores JS:',errors);
+            if(res?.status()!==200||errors.length)throw Error('Fallo carga Safari WebKit');
           } finally {await browser.close();}
           JS
       - uses: actions/upload-artifact@v4
