@@ -48,7 +48,6 @@ export const GRAMMAR_CATALOGUE: readonly GrammarTag[] = [
   {id:'gram.genitivo.partitivo',label:'Genitivo partitivo',kind:'catalogue',parentId:'gram.funciones'},
 ];
 
-const catalogueById = new Map(GRAMMAR_CATALOGUE.map(tag=>[tag.id,tag]));
 export const GRAMMAR_GROUP_IDS = [
   'gram.oracion','gram.formas','gram.pronombres','gram.funciones',
 ] as const;
