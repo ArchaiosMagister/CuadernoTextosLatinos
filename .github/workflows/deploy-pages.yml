@@ -237,6 +237,51 @@ jobs:
           print('OK: caché offline, bases de datos y service worker separados.')
           print('OK: obras del catálogo Examinator2:',len(catalog['entries']))
           PY2
+      - name: Obtener Examinator2 original en revisión inmutable
+        uses: actions/checkout@v4
+        with:
+          repository: ArchaiosMagister/examinator2
+          ref: 4ca31b4b2852f6b3ac0dc28c3f6ff3f2ad15d4a8
+          path: original-examinator
+          persist-credentials: false
+      - name: Incorporar Examinator2 intacto como referencia funcional separada
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'ORIGINAL'
+          from pathlib import Path
+          import hashlib, shutil
+
+          root=Path('dist')
+          source=Path('original-examinator')
+          destination=root/'examinator2-original'
+          assert not destination.exists(), 'La copia original no debe estar en el build estable'
+          assert (root/'prueba-examinator2/index.html').is_file()
+          assert (root/'prueba/index.html').is_file()
+          original_hashes={p.relative_to(root):hashlib.sha256(p.read_bytes()).hexdigest()
+                           for p in root.rglob('*') if p.is_file()}
+          for name in ['index.html','styles.css','fonts.css','icon.png','FUENTES.md']:
+            destination.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(source/name,destination/name)
+          for name in ['js','lib','fonts']:
+            shutil.copytree(source/name,destination/name)
+          every={p.relative_to(source):hashlib.sha256(p.read_bytes()).hexdigest()
+                 for p in destination.rglob('*') if p.is_file()}
+          for rel,digest in every.items():
+            assert hashlib.sha256((source/rel).read_bytes()).hexdigest()==digest, str(rel)
+          for rel,digest in original_hashes.items():
+            assert hashlib.sha256((root/rel).read_bytes()).hexdigest()==digest,(
+              'La referencia ha alterado otra aplicación: '+str(rel))
+          html=(destination/'index.html').read_text()
+          css=(destination/'styles.css').read_text()
+          assert '<span class="brand">Examinator</span>' in html
+          assert '#lib { position: fixed;' in css
+          assert (destination/'js/shim.js').is_file()
+          assert (destination/'js/datos.js').stat().st_size>9_000_000
+          assert (destination/'js/incluidos.js').stat().st_size>2_000_000
+          print('OK: referencia Examinator2 100% original:',len(every),'archivos.')
+          print('OK: '+str(len(original_hashes))+' archivos del cuaderno y pruebas byte a byte idénticos.')
+          ORIGINAL
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Empaquetar estable, recuperación y rediseño provisional
@@ -277,7 +322,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -325,6 +370,18 @@ jobs:
                 grep -q 'summarizeNotebook' /tmp/cuaderno-public ;;
               "prueba/core/online-sources.js")
                 grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
+              "examinator2-original/index.html")
+                grep -q '<span class="brand">Examinator</span>' /tmp/cuaderno-public ;;
+              "examinator2-original/styles.css")
+                grep -q '#lib { position: fixed;' /tmp/cuaderno-public ;;
+              "examinator2-original/js/library.js")
+                grep -q 'M.openLibrary' /tmp/cuaderno-public ;;
+              "examinator2-original/js/shim.js")
+                grep -q 'window.api =' /tmp/cuaderno-public ;;
+              "examinator2-original/js/datos.js")
+                test $(wc -c < /tmp/cuaderno-public) -gt 9000000 ;;
+              "examinator2-original/js/incluidos.js")
+                test $(wc -c < /tmp/cuaderno-public) -gt 2000000 ;;
               "prueba-examinator2/index.html")
                 grep -q 'PRUEBA AISLADA · BIBLIOTECA EXAMINATOR2' /tmp/cuaderno-public ;;
               "prueba-examinator2/styles.css")
@@ -411,6 +468,30 @@ jobs:
                fit.column!==440||fit.reading<350)
               throw Error('La biblioteca ya no reproduce el diseño original: '+JSON.stringify(fit));
             await page.screenshot({path:'biblioteca-examinator2-ipad.png',fullPage:false});
+            const exact=await browser.newPage({
+              viewport:{width:820,height:1180},isMobile:true,hasTouch:true,deviceScaleFactor:2
+            });
+            const originalErrors=[];
+            exact.on('pageerror',error=>originalErrors.push(error.message));
+            const originalUrl=process.env.ROOT+'examinator2-original/';
+            const originalResponse=await exact.goto(originalUrl,{
+              waitUntil:'domcontentloaded',timeout:60000});
+            if(originalResponse?.status()!==200)
+              throw Error('No se abre Examinator2 original');
+            await exact.waitForFunction(()=>Boolean(window.M?.S&&
+              document.querySelector('#btnLib')?.onclick),{timeout:120000});
+            await exact.getByRole('button',{name:'Biblioteca',exact:true}).click();
+            await exact.locator('#lib .lhead').waitFor({state:'visible',timeout:30000});
+            await exact.locator('#lib .lrow').first().waitFor({state:'visible',timeout:90000});
+            await exact.locator('#lib .lf').fill('Eutropio');
+            await exact.locator('#lib .lrow.have').first().waitFor({state:'visible',timeout:30000});
+            await exact.locator('#lib .lrow.have').first().click();
+            await exact.locator('#lib .rtext .rl').first().waitFor({state:'visible',timeout:60000});
+            await exact.screenshot({path:'examinator2-original-ipad.png',fullPage:false});
+            if(originalErrors.length)throw Error('Examinator2 original falló: '+originalErrors.join('; '));
+            console.log('Examinator2 original:',originalResponse.status(),
+              'biblioteca, Eutropio y lector originales operativos en iPad.');
+            await exact.close();
             console.log('Examinator2 preview:',response.status(),'lector y búsqueda disponibles en iPad');
             console.log('Preview HTTP:',res?.status(),'2 apartados, editor A4 y vista clásica. Errores JS:',errors);
             if(res?.status()!==200||errors.length)throw Error('Fallo carga Safari WebKit');
@@ -423,5 +504,6 @@ jobs:
           path: |
             preview-redisenio-ipad.png
             biblioteca-examinator2-ipad.png
+            examinator2-original-ipad.png
           if-no-files-found: ignore
           retention-days: 7
