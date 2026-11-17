@@ -72,7 +72,7 @@ async function examinadorIncludes() {
     const [urn, path, author, title, genre, latin, description] = item;
     if (!urn || !path || !author || !title || !genre || !latin || !/^[\\w.-]+$/.test(urn)
       || path.includes('..') || /^https?:/i.test(path)) {
-      throw new Error('Ficha bibliográfica inválida en Examinator2: ' + index);
+      throw new Error('Ficha bibliográfica inválida en Examinator2: ' + index + ' / ' + JSON.stringify(item).slice(0,600));
     }
     return {urn,path,author,title,genre,latin,description};
   });
