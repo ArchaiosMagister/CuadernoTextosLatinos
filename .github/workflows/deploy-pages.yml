@@ -164,7 +164,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: d42523a533449df235b5735d719086cfd882b71f
+          ref: 3ae8a371c3e387eb3f4bf553ce7caa32ec87ff4d
           path: evaluation
           persist-credentials: false
       - name: Compilar y comprobar selector de Examinator2 para iPad
