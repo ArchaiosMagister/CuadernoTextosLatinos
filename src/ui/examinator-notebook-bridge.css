@@ -1,0 +1,66 @@
+/**
+ * Adaptaciones puntuales de CuadernoTextosLatinos SOBRE el CSS literal de
+ * Examinator2. No modifica las clases originales de su biblioteca.
+ */
+:root{color-scheme:light;}
+#editor .edition-toolbar{display:none!important;}
+#editor .edition-layout{display:block!important;min-width:0;}
+#editor .edition-settings{display:grid!important;gap:8px;min-width:0;max-width:none;padding:0;}
+#editor .edition-settings>.edition-menu-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;}
+#editor .edition-menu-nav .btn{
+  border:1px solid var(--rule);border-radius:6px;padding:5px 6px;
+  min-height:30px;background:var(--panel);color:var(--ink-2);font:400 12px var(--ui-font);
+}
+#editor .edition-menu-nav .btn-primary{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+#editor .edition-menu-content{padding:8px;background:var(--panel);border:1px solid var(--rule);border-radius:9px;max-height:none;}
+#editor .edition-menu-content .btn{min-height:30px;font-size:12px;}
+#editor .edition-preview-stack{
+  position:fixed;z-index:2;left:600px;top:48px;bottom:0;right:0;
+  min-width:0;min-height:0;max-height:none;display:block!important;
+  overflow:auto;background:#d9d6cf;padding:12px;
+}
+#editor .edition-preview-stack>.edition-navigation{
+  margin:0 0 8px;display:flex;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--rule);border-radius:7px;
+}
+#editor .edition-preview-stack .edition-preview{
+  display:block!important;min-width:0;margin:0;padding:0;background:transparent;
+}
+#editor .edition-preview-stack .edition-paper-pages{padding:0;}
+#editor .edition-paper{
+  border:0;box-shadow:0 6px 24px rgba(0,0,0,.18);background:#fff;
+}
+#editor .edition-mobile-switch{display:none!important;}
+#editor .edition-mobile-hidden{display:block!important;}
+body[data-has-editor='true'] #preview .sheet{display:none;}
+#editor .original-text-index{display:grid;gap:4px;max-height:170px;overflow:auto;margin-top:8px;}
+#editor .original-text-index button{text-align:left;white-space:normal;}
+#editor .original-open-row{justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--rule-2);}
+.original-own-list{display:grid;gap:5px;max-height:360px;overflow:auto;margin:8px 0;}
+.original-own-list .tbtn{text-align:left;white-space:normal;}
+.original-paste .field{margin:0 0 9px;}
+.original-paste textarea{resize:vertical;width:100%;}
+#editor .edition-question-panel,#editor .edition-option{background:var(--panel);}
+#editor .edition-question-panel h3{font-size:13px;}
+#editor .card p{margin:8px 0;}
+/* Se conserva la pantalla original a dos columnas en iPad; en móviles
+   pequeños se permite desplazamiento vertical sin reducir la hoja A4. */
+@media(max-width:700px){
+  body{overflow:auto;display:block;min-height:100dvh;}
+  header{position:sticky;top:0;z-index:4;height:48px;overflow-x:auto;}
+  main{display:block;min-height:calc(100dvh - 48px);}
+  #editor{min-height:calc(100dvh - 48px);padding-bottom:0;}
+  #editor .edition-preview-stack{
+    position:static;display:block!important;overflow:auto;
+    width:100%;max-width:none;height:auto;min-height:440px;
+    border-top:1px solid var(--rule);margin-top:12px;
+  }
+  #preview{display:none;}
+  #lib{inset:48px 0 0;grid-template-rows:46px minmax(0,1fr);}
+  #lib .lbody{grid-template-columns:minmax(0,1fr);grid-template-rows:45% 55%;}
+  #lib .lcat{border-right:0;border-bottom:1px solid var(--rule);}
+  #lib .rtext{padding:10px;}
+  #lib .rl{grid-template-columns:48px minmax(0,1fr);}
+  #lib .lhead{gap:5px;padding:0 8px;}
+  #lib .lhead .small{display:none;}
+}
