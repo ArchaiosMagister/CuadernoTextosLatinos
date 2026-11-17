@@ -33,7 +33,7 @@ test('el resumen gramatical se actualiza por cuaderno, sin modificar otro cuader
   await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
   const tags=page.locator('.notebook-editor-aside .simple-grammar');
   await tags.locator('summary').first().click();
-  await tags.getByText('Oraciones y construcciones',{exact:true}).click();
+  await tags.locator('.simple-tag-group > summary').filter({hasText:'Oraciones y construcciones'}).click();
   const utterance=tags.getByRole('checkbox',{name:'Ablativo absoluto'});
   await utterance.check();
   await expect(page.locator('.simple-grammar-summary')).toContainText('Ablativo absoluto');

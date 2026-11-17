@@ -996,3 +996,37 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .notebook-first .simple-authors-layout {grid-template-columns:1fr;}
   .notebook-first .edition-toolbar-actions .btn {font-size:.75rem;padding:.4rem .55rem;min-height:2.2rem;}
 }
+
+/* Fase 2: visibilidad contextual del etiquetado junto a las preguntas. */
+.notebook-question-tags {display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;
+  padding:.55rem .7rem;margin:0 0 .6rem;background:var(--surface);
+  border:1px solid var(--edge);border-radius:.55rem;font-size:.83rem;}
+.notebook-question-tags strong {color:var(--accent);}
+.notebook-question-tags span {flex:1 1 12rem;overflow-wrap:anywhere;}
+.notebook-question-tags .btn {font-size:.77rem;padding:.38rem .65rem;min-height:2.15rem;}
+.notebook-count-jump {width:auto;min-width:2.4rem;min-height:2rem;padding:.15rem .4rem;
+  background:light-dark(#e2eff0,#334b51);color:var(--accent);font-size:.85rem;}
+
+/* Fase 3: consulta online opcional, sin dependencias ni servicios propios. */
+.notebook-online {display:grid;gap:.6rem;align-content:start;border:1px solid var(--edge);
+  padding:.85rem;border-radius:.7rem;background:var(--surface);min-width:0;}
+.notebook-online h2,.notebook-online h3 {margin:0;color:var(--accent);}
+.notebook-online .simple-ref-jump .field-control {max-width:none;}
+.notebook-online-results {display:grid;gap:.2rem;max-height:18rem;overflow-y:auto;}
+.notebook-online-results .simple-source-row {text-align:left;font-size:.83rem;min-height:2.1rem;}
+.notebook-online .simple-manual {display:grid;gap:.6rem;}
+.notebook-online .simple-manual a {color:var(--accent);font-size:.82rem;}
+.notebook-online textarea {min-height:15rem;}
+
+/* Fase 4: etiquetas de fragmento sin edición accidental del latín. */
+.notebook-fragments {border:1px solid var(--edge);border-radius:.45rem;padding:.45rem;}
+.notebook-fragments>summary {font-size:.83rem;font-weight:700;cursor:pointer;color:var(--accent);}
+.notebook-fragment-editor {display:grid;gap:.4rem;padding:.5rem 0;}
+.notebook-fragment-editor textarea {font:italic 1rem Palatino,Georgia,serif;line-height:1.5;
+  min-height:8rem;max-width:100%;margin:0;resize:vertical;}
+.notebook-fragment-editor select {margin:0;max-width:100%;}
+.notebook-fragment-items {display:grid;gap:.35rem;}
+.notebook-fragment-row {display:flex;gap:.45rem;justify-content:space-between;
+  align-items:center;border:1px solid var(--edge);border-radius:.35rem;padding:.4rem;font-size:.8rem;}
+.notebook-fragment-row span {overflow-wrap:anywhere;min-width:0;}
+.notebook-fragment-row .btn {font-size:.75rem;min-height:2rem;padding:.25rem .4rem;}
