@@ -7,6 +7,7 @@ import {foldLatin,searchWorks,findCitation,
   type LibraryEntry,type LibraryWork} from '../core/library.js';
 import {readReaderSelection,type ReaderFragment} from './reader-selection.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
+import {createBackup} from '../core/backup.js';
 import {allGrammarTags,findTagByLabel,GRAMMAR_GROUP_IDS,
   matchesGrammarTag,isCustomTagLabelValid} from '../core/grammar-tags.js';
 import {summarizeNotebook} from '../core/notebook-overview.js';
@@ -483,6 +484,14 @@ export function mountNotebookApp(root:HTMLElement):void{
           'cuadernos-backup-'+new Date().toISOString().slice(0,10)+'.json');
         notice('Copia de seguridad del espacio editorial preparada.');
       }catch(e){notice('No se generó la copia: '+String(e),true);}
+    }));
+    controls.append(button('Copia JSON de la biblioteca histórica',async()=>{
+      try{
+        const source=await corpusRepo.load();
+        saveJson(await createBackup(source.corpus),
+          'biblioteca-textos-backup-'+new Date().toISOString().slice(0,10)+'.json');
+        notice('Copia del banco histórico preparada. Conserva los dos archivos JSON.');
+      }catch(e){notice('No se generó la copia de biblioteca: '+String(e),true);}
     }));
     const legacy=el('a','','Interfaz de transición anterior');legacy.href='?';controls.append(legacy);
     advanced.append(controls);app.append(advanced);root.append(app);
