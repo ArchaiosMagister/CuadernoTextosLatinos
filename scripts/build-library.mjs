@@ -48,6 +48,7 @@ async function examinadorIncludes() {
       levels: data.levels || [],
       lines: data.lines.filter((line) => line.t && line.c).map((line) => ({
         c: String(line.c), t: clean(line.t), k: line.k || 'p',
+        ...(line.s ? {s:clean(line.s)} : {}),
       })),
       source: data.source || REPO_SOURCE,
       license: data.license || 'Texto incorporado en Examinator2; fuente original citada en FUENTES.md',
