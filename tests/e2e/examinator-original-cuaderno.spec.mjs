@@ -72,3 +72,69 @@ test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea pr
   await page.locator('.original-open-row .hbtn').first().click();
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
 });
+
+test('título, obra y cita separados; tipografía global, menú de vocabulario y añadir sobre A4',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno formato'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await page.locator('#lib .lf').fill('Eutropio');
+  await page.locator('#lib .lrow.have').first().click();
+  await page.locator('#lib .rtext .rl').first().click();
+  await page.locator('#lib [data-act=use]').click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  const head=page.locator('.edition-paper > .edition-paper-head').first();
+  await expect(head.locator('.edition-paper-title')).toHaveText('Texto 1');
+  await expect(head.locator('.edition-paper-source')).toContainText('Eutropio');
+  await expect(head).toHaveCSS('display','block');
+  const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
+  await expect(tabs.getByRole('button')).toHaveCount(5);
+  await expect(tabs).toHaveCSS('position','sticky');
+  await tabs.getByRole('button',{name:'Vocabulario'}).click();
+  await expect(page.locator('#editor .edition-vocab-add')).toBeVisible();
+  const entry=page.locator('#editor .edition-vocab-add');
+  await entry.locator('input').nth(0).fill('Caesar, -aris (m.)');
+  await entry.locator('input').nth(1).fill('César');
+  await entry.getByRole('button',{name:'Añadir entrada'}).click();
+  await expect(page.locator('.edition-paper .edition-vocabulary-line').filter({hasText:'César'}))
+    .toBeVisible();
+  await tabs.getByRole('button',{name:'Formato'}).click();
+  await page.getByRole('combobox',{name:'Tipografía'}).selectOption('Georgia');
+  const paper=page.locator('.edition-paper').first();
+  await expect(paper).toHaveCSS('font-family',/Georgia/);
+  await expect(paper.locator('.edition-paper-title')).toHaveCSS('font-family',/Georgia/);
+  await expect(paper.locator('.edition-paper-source')).toHaveCSS('font-family',/Georgia/);
+  const add=page.locator('.edition-preview-bar').getByRole('button',{name:'+ Añadir al cuaderno'});
+  await expect(add).toBeVisible();
+  await add.click();
+  await expect(page.locator('#lib .lhead')).toBeVisible();
+});
+
+test('preguntas autocreadas usando bancos docentes sin formulario previo',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno preguntas'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await page.locator('#lib .lf').fill('Eutropio');
+  await page.locator('#lib .lrow.have').first().click();
+  await page.locator('#lib .rtext .rl').first().click();
+  await page.locator('#lib [data-act=use]').click();
+  await expect(page.locator('.edition-questions > li')).toHaveCount(4);
+  const options=page.locator('.edition-paper .edition-choice-options li');
+  await expect(options).toHaveCount(4);
+  // Una pregunta recién incorporada ha recibido candidatos filológicos:
+  // la plantilla literal «Evolución fonética.» no es un ejercicio completo.
+  await expect(options.nth(1)).not.toHaveText('Evolución fonética.');
+  await expect(options.nth(2)).not.toHaveText('Prefijos.');
+  await expect(options.nth(3)).not.toHaveText('Latinismos.');
+  await page.locator('#btnSave').click();
+  await page.reload();
+  await page.locator('#btnOpen').click();
+  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.locator('.edition-paper .edition-choice-options li')).toHaveCount(4);
+  await expect(page.locator('.edition-paper .edition-choice-options li').nth(1))
+    .not.toHaveText('Evolución fonética.');
+});
