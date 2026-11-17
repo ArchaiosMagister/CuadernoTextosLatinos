@@ -9,7 +9,7 @@ import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStat
   editSlotManual, editVocabulary, insertManualVocabulary, movePlacement, moveSession,
   scorePlacement, setQuestionPoints, toggleOption, toggleQuestion,
 } from '../core/edition-operations.js';
-import { validateEdition } from '../core/edition-validation.js';
+import { fingerprintForMark, validateEdition } from '../core/edition-validation.js';
 import type { EditorSessionV1 } from '../core/edition-model.js';
 import { IndexedDbCorpusRepository } from '../storage/indexeddb-corpus-repository.js';
 import { WorkspaceConflictError, WorkspaceRepository, type EditionSnapshotV1 } from '../storage/workspace-repository.js';
@@ -181,6 +181,8 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
+  addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
+  removeGrammarSpan:(id:string)=>Promise<boolean>;
   renameActiveNotebook:(title:string)=>Promise<boolean>;
   closeEdition:()=>void;
 } {
@@ -388,6 +390,30 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     const unique=[...new Set(ids)];
     apply((edition,at)=>validateEdition({...edition,updatedAt:at,
       placements:edition.placements.map(x=>x.id===p.id?{...x,grammaticalTagIds:unique}:x)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function addGrammarSpan(start:number,end:number,tagId:string):Promise<boolean>{
+    const placement=selection();
+    if(!placement||!draft||!tagId)return false;
+    const latin=placement.text.latin;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)
+      ||start<0||end>latin.length||end<=start||!latin.slice(start,end).trim()){
+      setMessage('Selecciona un fragmento latino no vacío.',true);return false;
+    }
+    const span={id:freshId('span'),startUtf16:start,endUtf16:end,
+      exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
+      tagIds:[tagId],reviewRequired:false};
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(p=>p.id===placement.id
+        ?{...p,grammaticalSpans:[...(p.grammaticalSpans??[]),span]}:p)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function removeGrammarSpan(id:string):Promise<boolean>{
+    const placement=selection();
+    if(!placement||!draft||!(placement.grammaticalSpans??[]).some(x=>x.id===id))return false;
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(p=>p.id===placement.id
+        ?{...p,grammaticalSpans:(p.grammaticalSpans??[]).filter(x=>x.id!==id)}:p)}));
     const saved=await flush();paint();return saved;
   }
   async function renameActiveNotebook(title:string):Promise<boolean>{
@@ -1232,5 +1258,5 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     createNotebookNamed,addSourceToNotebook,selectPlacement,
     activePlacement:()=>selection()?structuredClone(selection()!):null,
     activeEdition:()=>draft?structuredClone(draft):null,
-    setActiveTags,renameActiveNotebook,closeEdition};
+    setActiveTags,addGrammarSpan,removeGrammarSpan,renameActiveNotebook,closeEdition};
 }

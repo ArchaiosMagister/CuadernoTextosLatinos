@@ -82,13 +82,23 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
       if(p.text.markup.some(mark=>mark.endUtf16>newLatin.length)){
         fail('La edición recorta un subrayado fuera del texto. Revisa o retira primero las marcas afectadas.');
       }
+      if((p.grammaticalSpans??[]).some(span=>span.endUtf16>newLatin.length)){
+        fail('La edición recorta un fragmento gramatical. Retira antes su etiqueta de fragmento.');
+      }
+      const spans=(p.grammaticalSpans??[]).map(span=>({...span,
+        reviewRequired:span.reviewRequired
+          ||newLatin.slice(span.startUtf16,span.endUtf16)!==span.exact
+          ||fingerprintForMark(newLatin,span.startUtf16,span.endUtf16)!==span.textFingerprint,
+      }));
       editedText.markup=p.text.markup.map(m=>({...m,
         reviewRequired:m.reviewRequired
           || newLatin.slice(m.startUtf16,m.endUtf16)!==m.exact
           || fingerprintForMark(newLatin,m.startUtf16,m.endUtf16)!==m.textFingerprint,
       }));
       const marksInReview=new Set(editedText.markup.filter(m=>m.reviewRequired).map(m=>m.id));
-      return {...p,text:editedText,questions:p.questions.map(q=>q.kind==='morphology'
+      return {...p,text:editedText,
+        ...(p.grammaticalSpans?{grammaticalSpans:spans}:{}),
+        questions:p.questions.map(q=>q.kind==='morphology'
         ? {...q,words:q.words.map(w=>marksInReview.has(w.markId)&&w.reviewState==='verified'
           ? {...w,reviewState:'needs-review' as const}:w)} : q)};
     }
