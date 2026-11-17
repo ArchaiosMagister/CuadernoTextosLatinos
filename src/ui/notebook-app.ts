@@ -260,7 +260,44 @@ export function mountNotebookApp(root:HTMLElement):void{
     input.placeholder='Nueva etiqueta personalizada';
     input.setAttribute('aria-label','Nueva etiqueta gramatical');
     own.append(input,button('Añadir',()=>addCustomTag(input.value)));
-    body.append(own);detail.append(body);return detail;
+    body.append(own);
+    const fragments=el('details','notebook-fragments');
+    fragments.append(el('summary','','Etiquetar fragmentos del texto ('+
+      (placement.grammaticalSpans?.length??0)+')'));
+    const segment=el('div','notebook-fragment-editor');
+    segment.append(el('p','hint','Selecciona una expresión latina dentro del campo siguiente y elige su construcción gramatical.'));
+    const area=el('textarea','field-control');
+    area.readOnly=true;area.rows=6;area.value=placement.text.latin;
+    area.setAttribute('aria-label','Seleccionar fragmento latino');
+    const choose=el('select','field-control');
+    choose.setAttribute('aria-label','Construcción del fragmento');
+    for(const tag of all){
+      const option=el('option','',tag.label);option.value=tag.id;choose.append(option);
+    }
+    const add=button('Etiquetar selección',async()=>{
+      const start=area.selectionStart,end=area.selectionEnd;
+      if(!choose.value||end<=start){notice('Selecciona primero un fragmento latino.',true);return;}
+      if(await composer.addGrammarSpan(start,end,choose.value)){
+        await reload();tagsOpen=true;render();
+        notice('Etiqueta de fragmento guardada sin modificar las preguntas.');
+      }else notice('No se ha podido guardar la etiqueta de fragmento.',true);
+    },'btn btn-primary');
+    segment.append(area,choose,add);
+    const saved=el('div','notebook-fragment-items');
+    for(const span of placement.grammaticalSpans??[]){
+      const row=el('div','notebook-fragment-row');
+      const names=span.tagIds.map(id=>all.find(t=>t.id===id)?.label??id);
+      row.append(el('span','',span.exact+' · '+names.join(', ')+
+        (span.reviewRequired?' · Revisar anclaje':'')));
+      row.append(button('Quitar',async()=>{
+        if(!await composer.removeGrammarSpan(span.id))return;
+        await reload();tagsOpen=true;render();
+        notice('Etiqueta de fragmento retirada; texto y preguntas intactos.');
+      }));
+      saved.append(row);
+    }
+    segment.append(saved);fragments.append(segment);
+    body.append(fragments);detail.append(body);return detail;
   }
   function summaryCard(edition:EditionSnapshotV1):HTMLElement{
     const card=el('section','simple-grammar-summary');
