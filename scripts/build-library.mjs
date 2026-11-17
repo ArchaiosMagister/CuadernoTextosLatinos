@@ -70,9 +70,9 @@ async function examinadorIncludes() {
       throw new Error('Ficha bibliográfica incompatible en Examinator2: ' + index);
     }
     const [urn, path, author, title, genre, latin, description] = item;
-    if (!urn || !path || !author || !title || !genre || !latin || !/^[\\w.-]+$/.test(urn)
+    if (!urn || !path || !author || !title || !genre || !latin || !/^[a-zA-Z0-9._-]+$/.test(urn)
       || path.includes('..') || /^https?:/i.test(path)) {
-      throw new Error('Ficha bibliográfica inválida en Examinator2: ' + index + ' / ' + JSON.stringify(item).slice(0,600));
+      throw new Error('Ficha bibliográfica inválida en Examinator2: ' + index);
     }
     return {urn,path,author,title,genre,latin,description};
   });
