@@ -17,12 +17,12 @@ test('Wikisource latina: búsqueda en línea, revisión manual y alta en cuadern
   await page.goto('/?nuevo=1');
   page.once('dialog',dialog=>dialog.accept('Textos externos'));
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
-  await page.getByRole('button',{name:'Autores online'}).click();
+  await page.locator('.notebook-editor-head').getByRole('button',{name:'Autores online'}).click();
   await page.getByRole('searchbox',{name:'Buscar obras online'}).fill('Cicero');
   await page.getByRole('button',{name:'Buscar online'}).click();
   await page.getByRole('button',{name:'Cicero/De officiis'}).click();
   await expect(page.getByRole('textbox',{name:'Fragmento latino (editable)'}))
-    .toContainText('Quamquam te');
+    .toHaveValue(/Quamquam te/);
   const content=page.getByRole('textbox',{name:'Fragmento latino (editable)'});
   await content.fill('Quamquam te, Marce fili, annum iam audientem Cratippum.');
   await page.getByRole('button',{name:'Añadir fragmento revisado'}).click();
