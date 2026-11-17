@@ -156,6 +156,68 @@ host.api={
     }
   },
 };
+/** Conexión real con el lematizador de Examinator2 (Collatinus).
+ * Se carga de forma diferida y NO se reutiliza la base de Examinator2 original.
+ * Su análisis no sustituye una verificación individual ni una decisión docente.
+ */
+type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean};
+type LatinLemma={lid:number;head:string;trad:string;note:string;proper:boolean};
+type CollatinusApi={call:(method:string,args?:Record<string,unknown>)=>Promise<unknown>};
+let collatinusPromise:Promise<CollatinusApi>|null=null;
+async function collatinus():Promise<CollatinusApi>{
+  if(!collatinusPromise)collatinusPromise=(async()=>{
+    const adaptedApi=host.api;
+    try{
+      for(const name of ['datos.js','incluidos.js','shim.js']){
+        await script(new URL('./collatinus/'+name,document.baseURI).href);
+      }
+      const originalApi=host.api as unknown as CollatinusApi;
+      host.api=adaptedApi;
+      await script(new URL('./collatinus/motor.js',document.baseURI).href);
+      await originalApi.call('warm');
+      return originalApi;
+    }finally{host.api=adaptedApi;}
+  })().catch(e=>{collatinusPromise=null;throw e;});
+  return collatinusPromise;
+}
+/** No se infiere un gentilicio por su sufijo: lista editorial de gentilicios
+ * latinos ya presentes en el repertorio docente/Collatinus. */
+const GENTILICS=new Set([
+  'romanus','gallus','helvetius','helvetii','graecus','latinus',
+  'hispanus','hispaniensis','atheniensis','sabinus','sequanus',
+  'poenus','punicus','italus','lacedemonius','lacaedemonius',
+]);
+const lexKey=(value:string)=>value.normalize('NFD')
+  .replace(/[\u0300-\u036f]/g,'').replace(/æ/g,'ae')
+  .replace(/œ/g,'oe').toLowerCase().trim();
+async function enrichVocabulary(latin:string,placementId:string,editionId:string):Promise<void>{
+  try{
+    const engine=await collatinus();
+    const tokens=await engine.call('analyze',{text:latin}) as LatinToken[];
+    if(!Array.isArray(tokens))throw new Error('Collatinus devolvió un análisis inesperado.');
+    const ids=[...new Set(tokens.filter(x=>x.sel&&(!x.amb||x.proper))
+      .map(x=>x.sel!.lid))];
+    if(!ids.length)return;
+    const entries=await engine.call('vocabEntries',{lids:ids,mode:'modelo'}) as LatinLemma[];
+    if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
+    const chosen=new Set(tokens.filter(x=>x.sel&&(!x.amb||x.proper))
+      .map(x=>x.sel!.lid));
+    const approved=entries.filter(x=>{
+      const lemma=lexKey(x.head.split(',')[0]??'');
+      return chosen.has(x.lid)&&(x.proper||GENTILICS.has(lemma));
+    }).map(x=>({
+      headword:x.head,lemma:x.head,meaning:x.trad||null,note:x.note||null,
+    }));
+    // No escribir resultados tardíos en otro cuaderno o aparición.
+    if(currentId!==editionId||composer.activeEdition()?.id!==editionId||
+       !composer.activeEdition()?.placements.some(x=>x.id===placementId))return;
+    await composer.addCollatinusVocabulary(placementId,approved);
+  }catch(error){
+    console.warn('No se pudo terminar la lematización Collatinus:',error);
+    M.toast('El texto se ha guardado; el análisis Collatinus queda pendiente. '
+      +'Puedes editar su vocabulario manualmente.',6000);
+  }
+}
 async function addText(input:TextDraft):Promise<void>{
   if(!active())throw new Error('Primero abre o crea un cuaderno.');
   if(!input.title.trim()||!input.latin.trim())throw new Error('El fragmento y el título no pueden estar vacíos.');
@@ -173,6 +235,10 @@ async function addText(input:TextDraft):Promise<void>{
     throw new Error('No se ha podido añadir el pasaje al cuaderno.');
   await reload();
   render();M.toast('Fragmento incorporado al cuaderno.');
+  const editionId=currentId,placement=composer.activePlacement();
+  if(editionId&&placement){
+    void enrichVocabulary(input.latin,placement.id,editionId);
+  }
 }
 M.setTextFromLibrary=(fragment)=>{
   void addText({
