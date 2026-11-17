@@ -447,6 +447,8 @@ export class WorkspaceRepository {
           const ep=epoch(epochQuery.result);
           if(previous!==expectedRevision)throw new WorkspaceConflictError(expectedRevision,previous);
           if(!old)throw new WorkspaceStorageError('El cuaderno ya no existe.');
+          if(old.edition.legacyNotebookId!==null)
+            throw new WorkspaceStorageError('Cuaderno histórico protegido: eliminarlo rompería la trazabilidad de la migración.');
           if(!ep||ep>=MAX_REVISION)throw new WorkspaceStorageError('Revisión global inválida.');
           const own=(historyQuery.result as unknown[]).map(historyRow)
             .filter(row=>row.event.editionId===id);
