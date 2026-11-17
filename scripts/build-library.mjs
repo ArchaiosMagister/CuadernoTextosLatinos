@@ -30,6 +30,11 @@ async function examinadorIncludes() {
   vm.runInNewContext(source, context, { timeout: 12000, filename: 'Examinator2-incluidos.js' });
   // Eutropio forma parte de datos.js del Examinator2 del docente.
   const originalData = await download(RAW_EXAMINATOR + 'js/datos.js');
+  // Exactamente los archivos que alimentan el Collatinus de Examinator2,
+  // empaquetados en un directorio que no modifica la copia original.
+  await mkdir('dist/examinator-cuadernos/collatinus',{recursive:true});
+  await writeFile('dist/examinator-cuadernos/collatinus/datos.js',originalData);
+  await writeFile('dist/examinator-cuadernos/collatinus/incluidos.js',source);
   vm.runInNewContext(originalData, context, { timeout: 20000, filename: 'Examinator2-datos.js' });
   const files = Object.entries(context.EXDATA).filter(([key]) => key.startsWith('/app/data/incluidos/') && key.endsWith('.json'));
   const selected = [];
