@@ -96,7 +96,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   if(p.text.work){source.append(document.createTextNode(p.text.author?', ':''));source.append(node('em','',p.text.work));}
   if(p.text.reference)source.append(document.createTextNode(' '+p.text.reference));
   head.append(source);paper.append(head,buildMarkedLatin(p));
-  const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.order-b.order||a.headword.localeCompare(b.headword,'es'));
+  const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
   if(included.length){
     const box=node('section','edition-vocabulary');
     box.append(node('h3','','Vocabulario'));
