@@ -82,7 +82,7 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
   return '<w:p>'+paraProps({align:'both',after:5.3*f.fontSizePt,linePt:f.lineSpacingPt})+body+'</w:p>';
 }
 function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
-  const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.order-b.order);
+  const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
   if(!rows.length)return '';
   // El ancho auto sin tblGrid dejaba la tabla fuera del A4 y LibreOffice
   // incluso omitía su primera fila ("Vocabulario"). Anchura fija entre márgenes.
