@@ -825,6 +825,13 @@ export function mountNotebookApp(root:HTMLElement):void{
     }));
     const legacy=el('a','','Interfaz de transición anterior');legacy.href='?';controls.append(legacy);
     advanced.append(controls);app.append(advanced);root.append(app);
+    // La biblioteca actúa como ventana modal de Examinator2: la cabecera
+    // y las acciones del editor de fondo no deben aceptar toques ni foco.
+    if(stage==='editor'&&(view==='sources'||view==='authors')){
+      header.inert=true;status.inert=true;advanced.inert=true;
+      const behind=app.querySelector<HTMLElement>('.notebook-editor-head');
+      if(behind)behind.inert=true;
+    }
   }
   document.addEventListener('selectionchange',readerSelectionChanged);
   render();
