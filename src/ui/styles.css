@@ -996,3 +996,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .notebook-first .simple-authors-layout {grid-template-columns:1fr;}
   .notebook-first .edition-toolbar-actions .btn {font-size:.75rem;padding:.4rem .55rem;min-height:2.2rem;}
 }
+
+/* Fase 2: visibilidad contextual del etiquetado junto a las preguntas. */
+.notebook-question-tags {display:flex;align-items:center;flex-wrap:wrap;gap:.45rem;
+  padding:.55rem .7rem;margin:0 0 .6rem;background:var(--surface);
+  border:1px solid var(--edge);border-radius:.55rem;font-size:.83rem;}
+.notebook-question-tags strong {color:var(--accent);}
+.notebook-question-tags span {flex:1 1 12rem;overflow-wrap:anywhere;}
+.notebook-question-tags .btn {font-size:.77rem;padding:.38rem .65rem;min-height:2.15rem;}
+.notebook-count-jump {width:auto;min-width:2.4rem;min-height:2rem;padding:.15rem .4rem;
+  background:light-dark(#e2eff0,#334b51);color:var(--accent);font-size:.85rem;}
