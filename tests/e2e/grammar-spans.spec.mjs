@@ -4,7 +4,8 @@ test('etiquetas por fragmento sobreviven a recarga y quedan en su cuaderno',asyn
   await page.goto('/?nuevo=1');
   page.once('dialog',d=>d.accept('Fragmentos A4'));
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
-  await page.getByRole('button',{name:'Pegar otro texto'}).click();
+  await page.locator('.exlib-more>summary').click();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Pegar texto propio'}).click();
   await page.getByRole('textbox',{name:'Título',exact:true}).fill('César');
   await page.getByRole('textbox',{name:'Texto latino'}).fill('Caesar Galliam vicit, cum milites secum duceret.');
   await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
