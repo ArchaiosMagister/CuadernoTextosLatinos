@@ -282,6 +282,76 @@ jobs:
           print('OK: referencia Examinator2 100% original:',len(every),'archivos.')
           print('OK: '+str(len(original_hashes))+' archivos del cuaderno y pruebas byte a byte idénticos.')
           ORIGINAL
+      - name: Obtener la base de cuadernos adaptada desde PR28, sin fusionarla
+        uses: actions/checkout@v4
+        with:
+          repository: ArchaiosMagister/CuadernoTextosLatinos
+          ref: e49c999f85fa13fbcbb4a35f5b12e8d92756aa07
+          path: cuaderno-original-pr28
+          persist-credentials: false
+      - name: Compilar la adaptación de Examinator2 para cuadernos
+        working-directory: cuaderno-original-pr28
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run check
+      - name: Añadir vista de cuadernos original con bases y cachés independientes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'CUADERNOS'
+          from pathlib import Path
+          import hashlib, json, shutil
+
+          root=Path('dist')
+          destination=root/'prueba-cuaderno-examinator'
+          source=Path('cuaderno-original-pr28/dist')
+          assert (source/'examinator-cuadernos/index.html').is_file()
+          assert (source/'examinator-cuadernos/js/library.js').is_file()
+          assert (root/'examinator2-original/index.html').is_file()
+          assert not destination.exists()
+          hashes={p.relative_to(root):hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in root.rglob('*') if p.is_file()}
+          shutil.copytree(source,destination)
+
+          def replace(rel,before,after):
+            target=destination/rel
+            content=target.read_text()
+            assert content.count(before)==1, 'No está aislado '+str(target)
+            target.write_text(content.replace(before,after,1))
+
+          replace('storage/workspace-repository.js',
+            "'cuaderno-textos-latinos-workspace'",
+            "'cuaderno-textos-latinos-workspace-examinator-prueba'")
+          replace('storage/indexeddb-corpus-repository.js',
+            "'cuaderno-textos-latinos'",
+            "'cuaderno-textos-latinos-examinator-prueba'")
+          replace('storage/downloaded-works.js',
+            "'cuaderno-textos-latinos-biblioteca-examinator2'",
+            "'cuaderno-textos-latinos-biblioteca-examinator2-pr28'")
+          replace('ui/examinator-notebook-app.js',
+            "'cuaderno-original-examinator2-obras'",
+            "'cuaderno-original-examinator2-obras-prueba'")
+          replace('examinator-cuadernos/index.html',
+            '../examinator2-original/icon.png',
+            '../../examinator2-original/icon.png')
+          replace('examinator-cuadernos/fonts.css',
+            '../examinator2-original/fonts.css',
+            '../../examinator2-original/fonts.css')
+
+          sw=destination/'service-worker.js'
+          if sw.is_file():
+            before=sw.read_text()
+            assert 'cuaderno-textos-' in before
+            sw.write_text(before.replace('cuaderno-textos-','cuaderno-examinator-original-prueba-'))
+          for rel,digest in hashes.items():
+            assert hashlib.sha256((root/rel).read_bytes()).hexdigest()==digest,(
+              'Se ha alterado algún archivo estable o prueba: '+str(rel))
+          catalog=json.loads((destination/'library/examinator-catalog.json').read_text())
+          assert len(catalog['entries'])>=25
+          print('OK: prueba original adaptada en /prueba-cuaderno-examinator/examinator-cuadernos/')
+          print('OK: 3 IndexedDB y caché de obras aisladas; '+str(len(catalog['entries']))+' obras Perseus')
+          print('OK: estable y todas las pruebas previas byte a byte intactas.')
+          CUADERNOS
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Empaquetar estable, recuperación y rediseño provisional
@@ -322,7 +392,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-cuaderno-examinator/examinator-cuadernos/index.html prueba-cuaderno-examinator/examinator-cuadernos/styles.css prueba-cuaderno-examinator/examinator-cuadernos/js/library.js prueba-cuaderno-examinator/ui/examinator-notebook-app.js prueba-cuaderno-examinator/storage/workspace-repository.js prueba-cuaderno-examinator/library/examinator-catalog.json examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -370,6 +440,18 @@ jobs:
                 grep -q 'summarizeNotebook' /tmp/cuaderno-public ;;
               "prueba/core/online-sources.js")
                 grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/examinator-cuadernos/index.html")
+                grep -q 'Examinator · Cuaderno de textos latinos' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/examinator-cuadernos/styles.css")
+                grep -q '#lib { position: fixed;' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/examinator-cuadernos/js/library.js")
+                grep -q 'M.openLibrary' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/ui/examinator-notebook-app.js")
+                grep -q 'cuaderno-original-examinator2-obras-prueba' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/storage/workspace-repository.js")
+                grep -q "'cuaderno-textos-latinos-workspace-examinator-prueba'" /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/library/examinator-catalog.json")
+                grep -q 'Perseus Digital Library' /tmp/cuaderno-public ;;
               "examinator2-original/index.html")
                 grep -q '<span class="brand">Examinator</span>' /tmp/cuaderno-public ;;
               "examinator2-original/styles.css")
@@ -489,6 +571,37 @@ jobs:
             await exact.locator('#lib .rtext .rl').first().waitFor({state:'visible',timeout:60000});
             await exact.screenshot({path:'examinator2-original-ipad.png',fullPage:false});
             if(originalErrors.length)throw Error('Examinator2 original falló: '+originalErrors.join('; '));
+            const adapted=await browser.newPage({
+              viewport:{width:820,height:1180},isMobile:true,hasTouch:true,deviceScaleFactor:2
+            });
+            const adaptedErrors=[];
+            adapted.on('pageerror',error=>adaptedErrors.push(error.message));
+            const adaptedUrl=process.env.ROOT+
+              'prueba-cuaderno-examinator/examinator-cuadernos/';
+            const adaptedResponse=await adapted.goto(adaptedUrl,{
+              waitUntil:'domcontentloaded',timeout:60000});
+            if(adaptedResponse?.status()!==200)
+              throw Error('No se ha publicado la adaptación a cuadernos.');
+            await adapted.locator('#editor .card h3').waitFor({state:'visible',timeout:120000});
+            if(await adapted.locator('header .brand').textContent()!=='Examinator')
+              throw Error('La cabecera ya no es la original.');
+            adapted.once('dialog',d=>d.accept('Cuaderno prueba fidelidad'));
+            await adapted.locator('#btnNew').click();
+            await adapted.locator('#btnLib').click();
+            await adapted.locator('#lib .lf').fill('Eutropio');
+            await adapted.locator('#lib .lrow.have').first().waitFor({state:'visible'});
+            await adapted.locator('#lib .lrow.have').first().click();
+            await adapted.locator('#lib .rtext .rl').first().waitFor({state:'visible'});
+            await adapted.locator('#lib .rtext .rl').first().click();
+            await adapted.locator('#lib [data-act=use]').click();
+            await adapted.locator('.edition-counter').getByText('Texto 1 de 1').waitFor();
+            await adapted.screenshot({path:'cuaderno-examinator-original-adaptado-ipad.png',
+              fullPage:false});
+            if(adaptedErrors.length)
+              throw Error('Fallos JS en adaptación iPad: '+adaptedErrors.join('; '));
+            console.log('Cuaderno original adaptado:',adaptedResponse.status(),
+              'selección y guardado habilitados; sin fallos JS.');
+            await adapted.close();
             console.log('Examinator2 original:',originalResponse.status(),
               'biblioteca, Eutropio y lector originales operativos en iPad.');
             await exact.close();
@@ -505,5 +618,6 @@ jobs:
             preview-redisenio-ipad.png
             biblioteca-examinator2-ipad.png
             examinator2-original-ipad.png
+            cuaderno-examinator-original-adaptado-ipad.png
           if-no-files-found: ignore
           retention-days: 7
