@@ -1,0 +1,74 @@
+import {test,expect} from '@playwright/test';
+
+test('Examinator original como base: cabecera, biblioteca original y cuaderno persistente',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  const errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('header .brand')).toHaveText('Examinator');
+  await expect(page.locator('main#main > #editor')).toBeVisible();
+  await expect(page.locator('main#main > #preview')).toBeVisible();
+  await expect(page.locator('#editor .card h3')).toHaveText('Cuaderno de textos latinos');
+  await expect(page.locator('body')).toHaveCSS('grid-template-rows',/48px/);
+  page.once('dialog',dialog=>dialog.accept('Cuaderno original 1'));
+  await page.locator('#btnNew').click();
+  await expect(page.locator('#editor .card')).toContainText('Cuaderno original 1');
+  await page.locator('#btnLib').click();
+  await expect(page.locator('#lib .lhead b')).toHaveText('Biblioteca');
+  await expect(page.locator('#lib .lbody .lcat')).toBeVisible();
+  await expect(page.locator('#lib .lbody .lread')).toBeVisible();
+  await page.locator('#lib .lf').fill('Eutropio');
+  const row=page.locator('#lib .lrow.have').first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.locator('#lib .rtext .rl').first()).toBeVisible();
+  await page.locator('#lib .rtext .rl').first().click();
+  await expect(page.locator('#lib [data-act=use]')).toBeEnabled();
+  await page.locator('#lib [data-act=use]').click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await page.locator('#btnSave').click();
+  await page.reload();
+  await expect(page.locator('#editor .card h3')).toBeVisible();
+  await page.locator('#btnOpen').click();
+  await expect(page.locator('.modal')).toContainText('Cuaderno original 1');
+  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  expect(errors).toEqual([]);
+});
+
+test('Examinator original conserva búsqueda, géneros, cabecera y 440px de catálogo',async({page})=>{
+  await page.setViewportSize({width:1000,height:900});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card h3')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno original 2'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await expect(page.locator('#lib .lfil input')).toHaveAttribute('placeholder','Autor u obra…');
+  await expect(page.locator('#lib .lfil select')).toContainText('Todos los géneros');
+  const width=await page.locator('#lib .lcat').evaluate(node=>node.getBoundingClientRect().width);
+  expect(width).toBe(440);
+  await expect(page.locator('#lib [data-act=dl]')).toHaveText('Descargar las marcadas');
+  await expect(page.locator('#lib [data-act=del]')).toHaveText('Eliminar las marcadas');
+  await expect(page.locator('#lib .lrow')).not.toHaveCount(0);
+  await page.locator('#lib [data-act=close]').click();
+  await expect(page.locator('#lib')).toBeHidden();
+  await page.locator('#btnLists').click();
+  await expect(page.locator('.modal .mh h2')).toHaveText('Textos propios');
+  await page.locator('.modal .mf button').click();
+  await expect(page.locator('.modal')).toHaveCount(0);
+});
+
+test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea preguntas vacías',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno vacío'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await page.locator('#lib [data-act=close]').click();
+  await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
+  await page.locator('#btnSave').click();
+  await page.reload();
+  await page.locator('#btnOpen').click();
+  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
+});
