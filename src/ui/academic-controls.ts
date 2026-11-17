@@ -617,8 +617,87 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const selection=capturePaperSelection(root);
     if(selection)paperRange=selection;
   }
+  /** Al incorporar un texto nuevo se rellenan las preguntas disponibles
+   * sin formularios previos. El motor evita repetir fichas en el cuaderno
+   * mientras existan otras candidatas documentadas.
+   * No altera preguntas redactadas o protegidas por el docente.
+   */
+  async function generateInitial(placementId:string):Promise<void>{
+    if(!autoApply)return;
+    await withSaved(async first=>{
+      const p=first.edition.placements.find(x=>x.id===placementId);
+      if(!p)return;
+      const question=p.questions.find(q=>q.kind==='choice');
+      if(!question||question.kind!=='choice')return;
+      // Solo se completa la pregunta original vacía, nunca se regenera
+      // una ya preparada o modificada manualmente.
+      if(question.options.some(o=>o.slots.length>0||
+        (o.statement.locked&&o.statement.origin==='manual')))return;
+      const desiredCountByKind:Partial<Record<AcademicSlotKindV1,number>>={};
+      const sourceFormsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
+      const newSlotIdsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
+      for(const option of question.options.filter(x=>x.enabled)){
+        const fields=fieldsFor(option,p);
+        desiredCountByKind[option.kind]=fields.count;
+        newSlotIdsByKind[option.kind]=fields.newSlotIds;
+        if(fields.sourceForms)sourceFormsByKind[option.kind]=fields.sourceForms;
+      }
+      const plan=service().engine.prepareChoiceQuestion(first.edition,{
+        placementId:p.id,questionId:question.id,expectedRevision:first.revision,
+        desiredCountByKind,sourceFormsByKind,newSlotIdsByKind,
+        seed:randomSeed(),allowManualReplacement:false,
+      });
+      if(plan.assignments.some(g=>g.items.some(x=>x.candidateId))){
+        const preverb=question.options.find(o=>o.kind==='preverb'&&o.enabled);
+        const picked=preverb?preverbBasesFor(preverb,p):null;
+        await commitPlanDirect(plan,'Preguntas iniciales',
+          preverb&&picked?{placementId:p.id,questionId:question.id,
+            optionId:preverb.id,forms:picked.forms}:undefined);
+      }
+    });
+    // Seleccionar automáticamente hasta dos formas con análisis individual
+    // inequívoco, evitando repetirlas en otros textos del cuaderno.
+    await withSaved(async first=>{
+      const p=first.edition.placements.find(x=>x.id===placementId);
+      const question=p?.questions.find(q=>q.kind==='morphology');
+      if(!p||!question||question.kind!=='morphology'||question.words.length)return;
+      const tokens=[...p.text.latin.matchAll(/[\p{L}\p{M}]+/gu)];
+      const already=new Set(first.edition.placements.flatMap(x=>
+        x.questions.filter(q=>q.kind==='morphology').flatMap(q=>
+          q.kind==='morphology'?q.words.map(w=>w.surface.toLocaleLowerCase('es')):[])));
+      const possible=tokens.flatMap(t=>{
+        const surface=t[0],key=surface.toLocaleLowerCase('es');
+        const records=service().report.bank.verified('morphology',surface);
+        const unambiguous=new Set(records.map(r=>(r.lemmaId??'')+'|'+(r.analysis??''))).size===1;
+        return records.length&&unambiguous
+          ?[{surface,start:t.index!,end:t.index!+surface.length,key}]:[];
+      });
+      const unique=possible.filter(t=>!already.has(t.key));
+      const pool=unique.length>=2?unique:possible;
+      const taken=new Set<string>();
+      for(const token of pool){
+        if(taken.size>=2)break;
+        if(taken.has(token.key))continue;
+        const currentState=current();
+        const currentPlacement=currentState.edition.placements.find(x=>x.id===placementId);
+        if(!currentPlacement||currentPlacement.text.markup.some(m=>
+          token.start<m.endUtf16&&m.startUtf16<token.end))continue;
+        const target:MorphTokenTargetV1={
+          editionId:currentState.edition.id,placementId,questionId:question.id,
+          expectedRevision:currentState.revision,startUtf16:token.start,
+          endUtf16:token.end,markId:'mark.'+crypto.randomUUID(),
+          wordId:'morph.'+crypto.randomUUID(),
+        };
+        const inspection=service().selector.preview(currentState.edition,target);
+        if(inspection.status!=='ready')continue;
+        const plan=service().selector.prepare(currentState.edition,target);
+        const saved=await service().selector.commit(repository,plan,new Date().toISOString());
+        taken.add(token.key);bind.saved(saved);
+      }
+    });
+  }
   return {
-    clear,review,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
+    clear,generateInitial,review,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
     renderPaperSelect,savePaperSelection,
   };
 }
