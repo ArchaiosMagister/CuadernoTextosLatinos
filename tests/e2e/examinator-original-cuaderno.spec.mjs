@@ -43,7 +43,7 @@ test('Examinator original conserva búsqueda, géneros, cabecera y 440px de cat�
   page.once('dialog',dialog=>dialog.accept('Cuaderno original 2'));
   await page.locator('#btnNew').click();
   await page.locator('#btnLib').click();
-  await expect(page.locator('#lib .lfil input')).toHaveAttribute('placeholder','Autor u obra…');
+  await expect(page.locator('#lib .lfil input.lf')).toHaveAttribute('placeholder','Autor u obra…');
   await expect(page.locator('#lib .lfil select')).toContainText('Todos los géneros');
   const width=await page.locator('#lib .lcat').evaluate(node=>node.getBoundingClientRect().width);
   expect(width).toBe(440);
