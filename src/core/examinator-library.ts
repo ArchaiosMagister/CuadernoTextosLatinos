@@ -37,13 +37,15 @@ export function originalWorkUrl(catalogue:ExaminatorCatalogue,entry:ExaminatorEn
     throw new Error('Obra ajena al catálogo verificado.');
   return catalogue.baseUrl+entry.path;
 }
-export function searchExaminatorWorks<T extends Pick<ExaminatorEntry,'author'|'title'|'genre'|'latin'|'urn'>>(
+export function searchExaminatorWorks<T extends Pick<ExaminatorEntry,'author'|'title'|'genre'|'latin'|'urn'>
+  & {local?:{author:string;title:string;latin:string}}>(
   items:readonly T[],query:string,genre:string,onlyDownloaded:boolean,downloaded:ReadonlySet<string>,
 ):T[]{
   const term=foldLatin(query),collator=new Intl.Collator('es',{sensitivity:'base'});
   return items.filter(x=>(!onlyDownloaded||downloaded.has(x.urn))
     &&(!genre||x.genre===genre)
-    &&(!term||foldLatin([x.author,x.title,x.latin].join(' ')).includes(term)))
+    &&(!term||foldLatin([x.author,x.title,x.latin,...(x.local?
+      [x.local.author,x.local.title,x.local.latin]:[])].join(' ')).includes(term)))
     .sort((a,b)=>collator.compare(a.author,b.author)||collator.compare(a.title,b.title));
 }
 const excluded=new Set(['note','teiHeader','bibl','figure','figDesc','fw','app','rdg',
