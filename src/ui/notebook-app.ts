@@ -679,6 +679,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     const footer=el('div','exlib-footer');
     footer.append(el('span','hint','Fuentes: Perseus Digital Library · Eutropio, The Latin Library (incluido) · Nepote, Perseus.'));
     footer.append(button('Pegar otro texto',()=>{form=newForm();view='manual';render();},
+        'btn btn-outline'),button('Autores online (Wikisource)',()=>{view='online';render();},
         'btn btn-outline'),button('Volver al cuaderno',()=>{view='edit';render();}));
     shell.append(footer);return shell;
   }
