@@ -1037,11 +1037,20 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     const add=action('Añadir entrada',()=>{
       const lemma=headword.value.trim();
       if(!lemma)return;
-      const entry:VocabularyEntryV1={id:freshId('voc'),lemma,headword:lemma,
-        meaning:meaning.value.trim()||null,note:null,included:true,
-        order:p.vocabulary.reduce((m,v)=>Math.max(m,v.order),-1)+1,
-        provenance:null,reviewState:'manual',origin:'manual',locked:true};
-      apply((e,at)=>insertManualVocabulary(e,p.id,entry,at));paint();
+      const manualMeaning=meaning.value.trim()||null;
+      // Collatinus puede completar propuestas entre la apertura del menú y el
+      // clic. Calcular el orden desde la edición VIVA evita colisiones de orden
+      // y pérdida de entradas manuales por una referencia p desactualizada.
+      apply((e,at)=>{
+        const latest=e.placements.find(item=>item.id===p.id);
+        if(!latest)throw new Error('El texto ya no existe en el cuaderno.');
+        const order=latest.vocabulary.reduce((m,v)=>Math.max(m,v.order),-1)+1;
+        const entry:VocabularyEntryV1={id:freshId('voc'),lemma,headword:lemma,
+          meaning:manualMeaning,note:null,included:true,order,
+          provenance:null,reviewState:'manual',origin:'manual',locked:true};
+        return insertManualVocabulary(e,p.id,entry,at);
+      });
+      paint();
     },'btn btn-primary');
     const row=node('div','edition-vocab-add');row.append(headword,meaning,add);panel.append(row);
   }
