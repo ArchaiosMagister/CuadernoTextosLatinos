@@ -175,6 +175,14 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
   openEdition:(editionId:string)=>Promise<boolean>;
   syncSourceTags:(textId:string,tagIds:readonly string[])=>Promise<boolean>;
   removeWorkingSource:(textId:string)=>Promise<boolean>;
+  createNotebookNamed:(title:string)=>Promise<string|null>;
+  addSourceToNotebook:(textId:string)=>Promise<boolean>;
+  selectPlacement:(placementId:string)=>Promise<boolean>;
+  activePlacement:()=>TextPlacementV1|null;
+  activeEdition:()=>NotebookEditionV1|null;
+  setActiveTags:(ids:readonly string[])=>Promise<boolean>;
+  renameActiveNotebook:(title:string)=>Promise<boolean>;
+  closeEdition:()=>void;
 } {
   const autoApply=options.autoApply===true;
   const element=node('section','edition-shell');
@@ -308,6 +316,90 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       session=moveSession(draft,session,command);
       paint();
     })();
+  }
+  /** El cuaderno nace vacío, con ID e historial propio: no hay edición intermedia. */
+  async function createNotebookNamed(title:string):Promise<string|null>{
+    if(!title.trim()||title.trim().length>250){
+      setMessage('Escribe un título válido de hasta 250 caracteres.',true);return null;
+    }
+    if(!await flush())return null;
+    const at=now(),id=freshId('ed');
+    try{
+      const fresh=createEdition({id,legacyNotebookId:null,title:title.trim(),timestamp:at,placements:[]});
+      const saved=await workspace.commitEdition(id,0,
+        {command:'ui.create-direct-notebook',targetId:id,timestamp:at},()=>fresh);
+      editions=[...editions,saved];
+      await changeEdition(id);
+      return id;
+    }catch(e){
+      setMessage('No se ha creado el cuaderno: '+(e instanceof Error?e.message:String(e)),true);
+      return null;
+    }
+  }
+  /** Añadir al cuaderno ACTIVO sin modificar ni clonar otros cuadernos. */
+  async function addSourceToNotebook(textId:string):Promise<boolean>{
+    if(!await flush()||!current||!draft||!session)return false;
+    try{
+      const text=(await legacy.load()).corpus.texts.find(t=>t.id===textId);
+      if(!text)throw new Error('El texto ya no existe en la biblioteca.');
+      const existing=draft.placements.find(p=>p.source.kind==='corpus'&&p.source.sourceId===textId);
+      if(existing){
+        await navigate({placementId:existing.id});
+        setMessage('Este texto ya figura en el cuaderno; se abre sin duplicarlo.');
+        return true;
+      }
+      const at=now(),place=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
+      const id=current.edition.id;
+      const saved=await workspace.commitEdition(id,current.revision,
+        {command:'ui.add-source-direct',targetId:place.id,timestamp:at},old=>{
+          if(!old)throw new Error('Cuaderno no disponible.');
+          if(old.placements.some(p=>p.source.kind==='corpus'&&p.source.sourceId===textId))
+            throw new Error('El texto se ha añadido desde otra pestaña. Recarga el cuaderno.');
+          return validateEdition({...old,updatedAt:at,placements:[...old.placements,place]});
+        });
+      current=saved;draft=structuredClone(saved.edition);
+      editions=editions.map(e=>e.edition.id===id?saved:e);
+      session={...session,activePlacementId:place.id,mode:'text'};
+      academics.clear();vocabPreview=null;exportReview=null;
+      menu='questions';mobile='config';
+      if(autoApply){
+        const p=selection();
+        if(p&&p.vocabulary.length===0){
+          try{applyVocabularyAutomatically(p,true);await flush();}
+          catch(err){setMessage('Texto añadido. Revisa el vocabulario: '+String(err),true);}
+        }
+      }
+      paint();
+      setMessage('Texto incorporado y guardado en este cuaderno.');
+      return true;
+    }catch(e){
+      setMessage('No se pudo añadir: '+(e instanceof Error?e.message:String(e)),true);return false;
+    }
+  }
+  async function selectPlacement(placementId:string):Promise<boolean>{
+    if(!draft?.placements.some(p=>p.id===placementId)||!session||!await flush())return false;
+    session=moveSession(draft,session,{placementId});
+    academics.clear();vocabPreview=null;exportReview=null;paint();
+    return true;
+  }
+  async function setActiveTags(ids:readonly string[]):Promise<boolean>{
+    const p=selection();
+    if(!p||!draft)return false;
+    const unique=[...new Set(ids)];
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(x=>x.id===p.id?{...x,grammaticalTagIds:unique}:x)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function renameActiveNotebook(title:string):Promise<boolean>{
+    if(!draft||!title.trim()||title.trim().length>250)return false;
+    apply((edition,at)=>validateEdition({...edition,title:title.trim(),updatedAt:at}));
+    const saved=await flush();paint();return saved;
+  }
+  function closeEdition():void{
+    if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null;}
+    active=null;current=null;draft=null;session=null;
+    academics.clear();vocabPreview=null;exportReview=null;
+    paint();
   }
   async function createNotebook():Promise<void>{
     if(!await flush())return;
@@ -1136,5 +1228,9 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     paintPreview();
   }
   return {element,open:()=>refresh(),flush,importLegacyNotebook,
-    openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource};
+    openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource,
+    createNotebookNamed,addSourceToNotebook,selectPlacement,
+    activePlacement:()=>selection()?structuredClone(selection()!):null,
+    activeEdition:()=>draft?structuredClone(draft):null,
+    setActiveTags,renameActiveNotebook,closeEdition};
 }
