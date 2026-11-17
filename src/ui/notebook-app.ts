@@ -742,7 +742,10 @@ export function mountNotebookApp(root:HTMLElement):void{
       if(!await composer.flush())return;
       await reload();stage='home';view='edit';render();
     }));
-    head.append(actions);main.append(head);
+    // La ventana modal de biblioteca tiene su propia barra: evitar dos
+    // juegos de controles iguales detrás de ella (Safari/WebKit e iPad).
+    if(view!=='sources'&&view!=='authors')head.append(actions);
+    main.append(head);
     const sourceMode=view==='sources'||view==='authors';
     const layout=el('div','notebook-editor-layout'+(sourceMode?' source-mode':'')),
       aside=el('aside','notebook-editor-aside');
@@ -800,7 +803,8 @@ export function mountNotebookApp(root:HTMLElement):void{
     },'simple-tab'+(stage==='home'?' active':'')));
     if(selectedId)tabs.append(button('Editor',()=>{stage='editor';render();},
       'simple-tab'+(stage==='editor'?' active':'')));
-    header.append(tabs);app.append(header);
+    header.append(tabs);
+    if(!(stage==='editor'&&(view==='sources'||view==='authors')))app.append(header);
     app.append(stage==='home'?renderHome():renderEditor());
     const status=el('p','simple-status',feedback);status.role='status';
     status.setAttribute('aria-live','polite');status.dataset.error=String(failed);app.append(status);
