@@ -18,7 +18,7 @@ test('Examinator original como base: cabecera, biblioteca original y cuaderno pe
   await expect(page.locator('#lib .lbody .lcat')).toBeVisible();
   await expect(page.locator('#lib .lbody .lread')).toBeVisible();
   await page.locator('#lib .lf').fill('Eutropio');
-  const row=page.locator('#lib .lrow.have').first();
+  const row=page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first();
   await expect(row).toBeVisible();
   await row.click();
   await expect(page.locator('#lib .rtext .rl').first()).toBeVisible();
@@ -81,7 +81,7 @@ test('título, obra y cita separados; tipografía global, menú de vocabulario y
   await page.locator('#btnNew').click();
   await page.locator('#btnLib').click();
   await page.locator('#lib .lf').fill('Eutropio');
-  await page.locator('#lib .lrow.have').first().click();
+  await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
   await page.locator('#lib .rtext .rl').first().click();
   await page.locator('#lib [data-act=use]').click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
@@ -119,7 +119,7 @@ test('preguntas autocreadas usando bancos docentes sin formulario previo',async(
   await page.locator('#btnNew').click();
   await page.locator('#btnLib').click();
   await page.locator('#lib .lf').fill('Eutropio');
-  await page.locator('#lib .lrow.have').first().click();
+  await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
   await page.locator('#lib .rtext .rl').first().click();
   await page.locator('#lib [data-act=use]').click();
   await expect(page.locator('.edition-questions > li')).toHaveCount(4);
