@@ -87,7 +87,7 @@ test('fidelidad visual iPad: biblioteca completa, columna de 440px y lector Gent
   expect(geometry.head).toBe(46);
   expect(geometry.catalog).toBe(440);
   expect(geometry.read).toBeGreaterThan(350);
-  await expect(page.locator('.exlib-more')).not.toHaveAttribute('open');
+  await expect(page.locator('.exlib-more')).not.toHaveAttribute('open','');
   await page.getByRole('searchbox',{name:'Autor u obra'}).fill('Eutropio');
   const row=page.locator('.exlib-row.available').first();
   await expect(row).toBeVisible();
