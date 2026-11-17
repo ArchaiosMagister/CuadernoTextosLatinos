@@ -99,6 +99,10 @@ jobs:
               "'cuaderno-textos-latinos-workspace'",
               "'cuaderno-textos-latinos-workspace-prueba-pr14'"
             ),
+            'storage/downloaded-works.js':(
+              "'cuaderno-textos-latinos-biblioteca-examinator2'",
+              "'cuaderno-textos-latinos-biblioteca-examinator2-prueba'"
+            ),
           }
           for rel,(before,after) in db_map.items():
             file=preview/rel
@@ -150,6 +154,8 @@ jobs:
           assert (preview/'ui/notebook-app.js').is_file()
           assert (preview/'core/notebook-overview.js').is_file()
           assert (preview/'core/online-sources.js').is_file()
+          assert (preview/'core/examinator-library.js').is_file()
+          assert (preview/'library/examinator-catalog.json').is_file()
           assert 'addSourceToNotebook' in (preview/'ui/edition-app.js').read_text()
           tags=(preview/'core/grammar-tags.js').read_text()
           assert 'gram.inf.perfecto' in tags
@@ -200,7 +206,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/examinator-library.js prueba/storage/downloaded-works.js prueba/library/examinator-catalog.json prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -248,6 +254,10 @@ jobs:
                 grep -q 'summarizeNotebook' /tmp/cuaderno-public ;;
               "prueba/core/online-sources.js")
                 grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
+              "prueba/core/examinator-library.js")
+                grep -q 'searchExaminatorWorks' /tmp/cuaderno-public ;;
+              "prueba/storage/downloaded-works.js")
+                grep -q "'cuaderno-textos-latinos-biblioteca-examinator2-prueba'" /tmp/cuaderno-public ;;
               "prueba/main.js")
                 grep -q 'mountNotebookApp' /tmp/cuaderno-public
                 grep -q 'mountSimpleApp' /tmp/cuaderno-public
