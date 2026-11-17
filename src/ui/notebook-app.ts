@@ -342,11 +342,11 @@ export function mountNotebookApp(root:HTMLElement):void{
       if(!response.ok)throw new Error('No se ha obtenido la obra ('+response.status+').');
       const page=parseOnlinePage(await response.json());
       const html=new DOMParser().parseFromString(page.html,'text/html');
-      for(const hidden of html.querySelectorAll(
-        'script,style,nav,table,.mw-editsection,.reference,.reflist,.toc,.navbox,.metadata,.noprint'))
+      for(const hidden of Array.from(html.querySelectorAll(
+        'script,style,nav,table,.mw-editsection,.reference,.reflist,.toc,.navbox,.metadata,.noprint')))
         hidden.remove();
       const content=html.querySelector('.mw-parser-output')??html.body;
-      const paragraphs=[...content.querySelectorAll('p,blockquote,pre')]
+      const paragraphs=Array.from(content.querySelectorAll('p,blockquote,pre'))
         .map(p=>p.textContent?.replace(/\s+/g,' ').trim()??'').filter(Boolean);
       const extracted=paragraphs.length?paragraphs.join('\n\n'):content.textContent?.trim()??'';
       if(extracted.length<20)throw new Error('La página no ofrece un texto latino legible.');
