@@ -17,7 +17,7 @@ test('Wikisource latina: búsqueda en línea, revisión manual y alta en cuadern
   await page.goto('/?nuevo=1');
   page.once('dialog',dialog=>dialog.accept('Textos externos'));
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
-  await page.locator('.notebook-editor-head').getByRole('button',{name:'Autores online'}).click();
+  await page.locator('.exlib-footer').getByRole('button',{name:'Autores online'}).click();
   await page.getByRole('searchbox',{name:'Buscar obras online'}).fill('Cicero');
   await page.getByRole('button',{name:'Buscar online'}).click();
   await page.getByRole('button',{name:'Cicero/De officiis'}).click();
