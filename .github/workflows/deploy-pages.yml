@@ -1,4 +1,4 @@
-name: Publicar Cuaderno de textos latinos estable
+name: Cuaderno estable + prueba aislada del editor de cuadernos
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 22
+    timeout-minutes: 32
     steps:
       - name: Obtener exclusivamente la versión estable desde main
         uses: actions/checkout@v4
@@ -42,9 +42,127 @@ jobs:
           test ! -e dist/prueba
       - name: Verificar en WebKit que ambas copias JSON de /prueba/ son recuperables
         run: node scripts/smoke-recovery.mjs
+      - name: Obtener exactamente la revisión publicada para la prueba aislada
+        uses: actions/checkout@v4
+        with:
+          repository: ArchaiosMagister/CuadernoTextosLatinos
+          ref: ${{ github.sha }}
+          path: experimental
+          persist-credentials: false
+      - name: Compilar la versión experimental sin tocar la estable
+        working-directory: experimental
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run check
+      - name: Ejecutar pruebas Safari/WebKit del rediseño
+        working-directory: experimental
+        run: npm run test:e2e
+      - name: Agregar /prueba/ preservando la web estable y copias de la prueba anterior
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, shutil
+
+          root=Path('dist')
+          source=Path('experimental/dist')
+          preview=root/'prueba'
+          assert (root/'recuperar-prueba/index.html').is_file(), 'Falta recuperación de PR10'
+          assert not preview.exists(), 'La web estable contiene /prueba/ inesperadamente'
+          originals={p.relative_to(root):hashlib.sha256(p.read_bytes()).hexdigest()
+                     for p in root.rglob('*') if p.is_file()}
+          shutil.copytree(source,preview)
+
+          html=preview/'index.html'
+          contents=html.read_text()
+          assert contents.count('<body>')==1
+          notice=(
+            '<div role="note" style="font:14px system-ui;'
+            'padding:10px 14px;background:#fff3ce;color:#332700;'
+            'border-bottom:1px solid #ba9941">'
+            '<strong>VISTA DE PRUEBA — REDISEÑO DE CUADERNOS</strong>'
+            ' · La web definitiva está en la dirección sin /prueba/.'
+            ' Guarda una copia JSON de los cuadernos que crees aquí.'
+            '</div>'
+          )
+          contents=contents.replace('<body>','<body>\n'+notice,1)
+          contents=contents.replace('<head>','<head>\n<meta name="robots" content="noindex, nofollow">',1)
+          html.write_text(contents)
+
+          db_map={
+            'storage/indexeddb-corpus-repository.js':(
+              "'cuaderno-textos-latinos'",
+              "'cuaderno-textos-latinos-prueba-pr14'"
+            ),
+            'storage/workspace-repository.js':(
+              "'cuaderno-textos-latinos-workspace'",
+              "'cuaderno-textos-latinos-workspace-prueba-pr14'"
+            ),
+          }
+          for rel,(before,after) in db_map.items():
+            file=preview/rel
+            code=file.read_text()
+            assert code.count(before)==1, 'No se pudo aislar IndexedDB: '+rel
+            file.write_text(code.replace(before,after,1))
+          sw=preview/'service-worker.js'
+          code=sw.read_text()
+          assert code.count('cuaderno-textos-')>=2
+          sw.write_text(code.replace('cuaderno-textos-','cuaderno-preview-pr14-'))
+
+          for rel,digest in originals.items():
+            assert hashlib.sha256((root/rel).read_bytes()).hexdigest()==digest, (
+              'Cambió la app estable: '+str(rel)
+            )
+          css=(preview/'styles.css').read_text()
+          assert '.edition-preview-stack' in css
+          assert '.simple-tabs' in css
+          assert '.notebook-first' in css
+          assert '.simple-prepare-layout' in css
+          # El puente Cuadernos -> editor debe estar en la copia publicada.
+          editor=(preview/'ui/edition-app.js').read_text()
+          assert 'importLegacyNotebook' in editor
+          assert 'Preparar cuaderno seleccionado' in editor
+          library=(preview/'ui/library-app.js').read_text()
+          assert 'Cuaderno terminado' in library
+          assert 'Etiquetas gramaticales' in library
+          assert 'Filtrar por etiquetas gramaticales' in library
+          simple=(preview/'ui/simple-app.js').read_text()
+          assert 'Preparar cuaderno' in simple
+          assert 'Buscar autores' in simple
+          assert 'simple-grammar-summary' in simple
+          assert 'openSourceText' in editor
+          assert 'prepareFromIds' in editor
+          assert 'removeWorkingSource' in editor
+          assert 'applyVocabularyAutomatically' in editor
+          controls=(preview/'ui/academic-controls.js').read_text()
+          assert 'Dos verbos de partida' in controls
+          assert 'Generar ' in controls
+          assert 'commitPlanDirect' in controls
+          assert (preview/'core/preverb-selection.js').is_file()
+          assert (preview/'core/vocabulary-format.js').is_file()
+          assert 'quotedMeaning' in (preview/'export/notebook-documents.js').read_text()
+          assert 'removeSourceText' in simple
+          counts=(preview/'core/notebook-selection.js').read_text()
+          assert 'summarizeSelection' in counts
+          assert 'mountSimpleApp' in (preview/'main.js').read_text()
+          assert 'mountNotebookApp' in (preview/'main.js').read_text()
+          assert (preview/'ui/notebook-app.js').is_file()
+          assert (preview/'core/notebook-overview.js').is_file()
+          assert (preview/'core/online-sources.js').is_file()
+          assert 'addSourceToNotebook' in (preview/'ui/edition-app.js').read_text()
+          tags=(preview/'core/grammar-tags.js').read_text()
+          assert 'gram.inf.perfecto' in tags
+          assert 'gram.inf.pasivo' in tags
+          assert 'gram.agente' in tags
+          assert 'gram.relativo.enlace' in tags
+          assert 'min-height:0!important;height:auto!important' in css
+          print('OK: /prueba/ creada, IndexedDB y SW independientes.')
+          print('OK: '+str(len(originals))+' archivos estables byte a byte idénticos.')
+          PY
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
-      - name: Empaquetar exclusivamente la versión estable y recuperación
+      - name: Empaquetar estable, recuperación y rediseño provisional
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
@@ -55,11 +173,134 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}prueba/?nuevo=1
     permissions:
       pages: write
       id-token: write
     steps:
-      - name: Publicar la aplicación estable
+      - name: Publicar estable y ruta experimental separada
         id: deployment
         uses: actions/deploy-pages@v4
+
+
+  verificar-vista-publica:
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      ROOT: https://archaiosmagister.github.io/CuadernoTextosLatinos/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar HTTPS, bases aisladas y web estable intacta
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+            url="$ROOT$f"
+            echo "Verificando $url"
+            curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
+              -o /tmp/cuaderno-public "$url"
+            test -s /tmp/cuaderno-public
+            case "$f" in
+              "index.html")
+                if grep -q "VISTA DE PRUEBA — REDISEÑO" /tmp/cuaderno-public; then
+                  echo "::error::La portada estable contiene la marca experimental"
+                  exit 1
+                fi ;;
+              "recuperar-prueba/index.html")
+                grep -q 'cuaderno-textos-latinos-workspace-prueba-pr10' /tmp/cuaderno-public ;;
+              "prueba/index.html")
+                grep -q 'VISTA DE PRUEBA — REDISEÑO DE CUADERNOS' /tmp/cuaderno-public ;;
+              "prueba/styles.css")
+                grep -q 'edition-preview-stack' /tmp/cuaderno-public
+                grep -q 'min-height:0!important;height:auto!important' /tmp/cuaderno-public ;;
+              "prueba/core/grammar-tags.js")
+                grep -q 'gram.inf.pasivo' /tmp/cuaderno-public
+                grep -q 'gram.agente' /tmp/cuaderno-public ;;
+              "prueba/ui/library-app.js")
+                grep -q 'Cuaderno terminado' /tmp/cuaderno-public
+                grep -q 'Etiquetas gramaticales' /tmp/cuaderno-public ;;
+              "prueba/ui/simple-app.js")
+                grep -q 'Preparar cuaderno' /tmp/cuaderno-public
+                grep -q 'Buscar autores' /tmp/cuaderno-public ;;
+              "prueba/core/notebook-selection.js")
+                grep -q 'summarizeSelection' /tmp/cuaderno-public ;;
+              "prueba/core/preverb-selection.js")
+                grep -q 'choosePreverbBases' /tmp/cuaderno-public ;;
+              "prueba/core/vocabulary-format.js")
+                grep -q 'quotedMeaning' /tmp/cuaderno-public ;;
+              "prueba/ui/academic-controls.js")
+                grep -q 'Dos verbos de partida' /tmp/cuaderno-public ;;
+              "prueba/storage/workspace-repository.js")
+                grep -q "'cuaderno-textos-latinos-workspace-prueba-pr14'" /tmp/cuaderno-public ;;
+              "prueba/storage/indexeddb-corpus-repository.js")
+                grep -q "'cuaderno-textos-latinos-prueba-pr14'" /tmp/cuaderno-public ;;
+              "prueba/service-worker.js")
+                grep -q 'cuaderno-preview-pr14-' /tmp/cuaderno-public ;;
+              "prueba/ui/notebook-app.js")
+                grep -q 'mountNotebookApp' /tmp/cuaderno-public ;;
+              "prueba/core/notebook-overview.js")
+                grep -q 'summarizeNotebook' /tmp/cuaderno-public ;;
+              "prueba/core/online-sources.js")
+                grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
+              "prueba/main.js")
+                grep -q 'mountNotebookApp' /tmp/cuaderno-public
+                grep -q 'mountSimpleApp' /tmp/cuaderno-public
+                grep -q 'mountLibraryApp' /tmp/cuaderno-public ;;
+            esac
+          done
+      - name: Instalar Safari/WebKit
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps webkit
+      - name: Abrir prueba publicada en WebKit iPad
+        run: |
+          node --input-type=module <<'JS'
+          import {webkit} from '@playwright/test';
+          const browser=await webkit.launch({headless:true});
+          try {
+            const page=await browser.newPage({
+              viewport:{width:820,height:1180},isMobile:true,hasTouch:true,deviceScaleFactor:2
+            });
+            const errors=[];
+            page.on('pageerror',e=>errors.push(e.message));
+            const url=process.env.ROOT+'prueba/';
+            const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
+            await page.getByRole('navigation',{name:'Navegación principal'})
+              .getByRole('button').first().waitFor({state:'visible',timeout:40000});
+            const tabs=page.getByRole('navigation',{name:'Navegación principal'});
+            if(await tabs.getByRole('button').count()!==2)throw Error('La interfaz debe tener dos apartados');
+            if(!(await page.locator('body').innerText()).includes('VISTA DE PRUEBA — REDISEÑO DE CUADERNOS'))
+              throw Error('Falta marca provisional');
+            await page.getByRole('button',{name:'Buscar autores',exact:true}).click();
+            await page.locator('.simple-work-item').first().waitFor();
+            await page.locator('.simple-work-item').first().click();
+            await page.locator('.simple-reader-line').first().waitFor();
+            await page.locator('.simple-reader-line').first().click();
+            await page.locator('.edition-paper').first().waitFor({state:'visible'});
+            await page.locator('.edition-preview-stack .edition-navigation').waitFor();
+            await page.locator('.edition-question-panel').first().waitFor();
+            await page.getByRole('button',{name:'Preparar cuaderno',exact:true}).click();
+            await page.locator('.simple-grammar-summary').waitFor();
+            await page.screenshot({path:'preview-redisenio-ipad.png',fullPage:false});
+            await page.goto(url+'?classic=1',{waitUntil:'domcontentloaded'});
+            await page.getByRole('button',{name:'Biblioteca',exact:true}).waitFor();
+            const beta=await page.goto(url+'?nuevo=1',{waitUntil:'domcontentloaded'});
+            await page.getByRole('button',{name:'+ Crear cuaderno'}).waitFor({state:'visible',timeout:40000});
+            if(beta?.status()!==200)throw Error('No carga el editor nuevo en la prueba aislada');
+            console.log('Preview HTTP:',res?.status(),'2 apartados, editor A4 y vista clásica. Errores JS:',errors);
+            if(res?.status()!==200||errors.length)throw Error('Fallo carga Safari WebKit');
+          } finally {await browser.close();}
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vista-redisenio-ipad-cuadernos
+          path: preview-redisenio-ipad.png
+          if-no-files-found: ignore
+          retention-days: 7
