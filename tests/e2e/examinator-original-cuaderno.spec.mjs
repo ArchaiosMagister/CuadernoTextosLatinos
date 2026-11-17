@@ -138,3 +138,34 @@ test('preguntas autocreadas usando bancos docentes sin formulario previo',async(
   await expect(page.locator('.edition-paper .edition-choice-options li').nth(1))
     .not.toHaveText('Evolución fonética.');
 });
+
+
+test('Collatinus original: solo nombres propios/gentilicios de inicio; el resto no se impone',async({page})=>{
+  test.setTimeout(120000);
+  const errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',d=>d.accept('Cuaderno nombres propios'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLists').click();
+  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  const modal=page.locator('.modal');
+  await modal.getByRole('textbox',{name:'Título'}).fill('Paso del Rubicón');
+  await modal.getByRole('textbox',{name:'Autor'}).fill('Julio César');
+  await modal.getByRole('textbox',{name:'Obra'}).fill('Commentarii');
+  await modal.getByRole('textbox',{name:'Referencia'}).fill('I 1');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill(
+    'Caesar in Gallia est. Milites magna cum cura laborant.');
+  await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  const chosen=page.locator('.edition-paper .edition-vocabulary-line');
+  await expect(chosen.filter({hasText:/Caesar/i}).first()).toBeVisible({timeout:90000});
+  const words=(await chosen.allTextContents()).join(' ');
+  expect(words.toLowerCase()).not.toContain('milites');
+  expect(words.toLowerCase()).not.toContain('laborant');
+  await page.getByRole('navigation',{name:'Secciones del cuaderno'})
+    .getByRole('button',{name:'Vocabulario'}).click();
+  await expect(page.locator('#editor .edition-vocabulary-control')).not.toHaveCount(0);
+  expect(errors).toEqual([]);
+});
