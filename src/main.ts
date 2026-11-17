@@ -1,4 +1,6 @@
 import { mountLibraryApp } from './ui/library-app.js';
+import { mountSimpleApp } from './ui/simple-app.js';
+import { mountNotebookApp } from './ui/notebook-app.js';
 import { createBackup, MAX_BACKUP_CHARACTERS, readBackup } from './core/backup.js';
 import { serializeCorpus } from './core/archive.js';
 import type { LatinText } from './core/model.js';
@@ -267,7 +269,14 @@ void (async () => {
 })();
 
 /** El banco y el editor comparten la misma persistencia de la fase 1. */
-mountLibraryApp(required<HTMLElement>('phase2'));
+const route=new URLSearchParams(window.location.search);
+if(route.get('classic')==='1'){
+  mountLibraryApp(required<HTMLElement>('phase2'));
+}else if(route.get('nuevo')==='1'){
+  mountNotebookApp(required<HTMLElement>('phase2'));
+}else{
+  mountSimpleApp(required<HTMLElement>('phase2'));
+}
 window.addEventListener('corpus-updated', () => {
   if (busy) return;
   void (async () => {

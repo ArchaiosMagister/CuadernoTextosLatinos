@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('interfaz editorial: crea cuaderno, reutiliza texto y conserva cambios al navegar',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     const repo=new IndexedDbCorpusRepository();
@@ -47,7 +47,7 @@ test('interfaz editorial: crea cuaderno, reutiliza texto y conserva cambios al n
 });
 
 test('interfaz editorial: editor manual no altera pregunta ni apartados vecinos',async({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.getByRole('button',{name:'Preparar cuaderno'}).click();
   page.once('dialog',d=>d.accept('Cuaderno sin datos'));
   await page.getByRole('button',{name:'+ Cuaderno'}).click();

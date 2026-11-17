@@ -9,7 +9,7 @@ import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStat
   editSlotManual, editVocabulary, insertManualVocabulary, movePlacement, moveSession,
   scorePlacement, setQuestionPoints, toggleOption, toggleQuestion,
 } from '../core/edition-operations.js';
-import { validateEdition } from '../core/edition-validation.js';
+import { fingerprintForMark, validateEdition } from '../core/edition-validation.js';
 import type { EditorSessionV1 } from '../core/edition-model.js';
 import { IndexedDbCorpusRepository } from '../storage/indexeddb-corpus-repository.js';
 import { WorkspaceConflictError, WorkspaceRepository, type EditionSnapshotV1 } from '../storage/workspace-repository.js';
@@ -20,6 +20,7 @@ import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
 import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
+import {quotedMeaning} from '../core/vocabulary-format.js';
 
 const workspace = new WorkspaceRepository();
 const legacy = new IndexedDbCorpusRepository();
@@ -102,7 +103,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
     for(const v of included){
       const item=node('p','edition-vocabulary-line');
       item.append(node('em','',v.headword));
-      item.append(document.createTextNode(v.meaning?': '+v.meaning:': [significado pendiente]'));
+      item.append(document.createTextNode(v.meaning?': '+quotedMeaning(v.meaning):': [significado pendiente]'));
       if(v.note)item.append(document.createTextNode(' ('+v.note+')'));
       box.append(item);
     }
@@ -124,7 +125,8 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
         for(const segment of splitInlineItalics(statement)){
           row.append(segment.italic?node('em','',segment.text):document.createTextNode(segment.text));
         }
-        if(option.slots.length){
+        // Los derivados preverbiales son datos internos: nunca imprimir un solucionario.
+        if(option.kind!=='preverb'&&option.slots.length){
           row.append(document.createTextNode(' '));
           option.slots.forEach((slot,index)=>{
             if(index)row.append(document.createTextNode(', '));
@@ -158,9 +160,33 @@ function now():string{return new Date().toISOString();}
 function formatPoints(p:TextPlacementV1):string {
   return (scorePlacement(p)/100).toLocaleString('es-ES')+' / 8 puntos';
 }
+/** Edición de trabajo: los textos preparados se guardan aquí hasta que
+ * el docente elige qué apariciones incluir en uno o varios cuadernos. */
+export const WORKING_EDITION_ID='ed.seleccion-textos';
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
-export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;flush:()=>Promise<boolean>} {
+export function createEditionPane(options:{autoApply?:boolean}={}):{
+  element:HTMLElement;
+  open:()=>Promise<void>;
+  flush:()=>Promise<boolean>;
+  importLegacyNotebook:(id:string)=>Promise<boolean>;
+  openSourceText:(textId:string)=>Promise<boolean>;
+  prepareFromIds:(textIds:readonly string[],title:string)=>Promise<boolean>;
+  openEdition:(editionId:string)=>Promise<boolean>;
+  syncSourceTags:(textId:string,tagIds:readonly string[])=>Promise<boolean>;
+  removeWorkingSource:(textId:string)=>Promise<boolean>;
+  createNotebookNamed:(title:string)=>Promise<string|null>;
+  addSourceToNotebook:(textId:string)=>Promise<boolean>;
+  selectPlacement:(placementId:string)=>Promise<boolean>;
+  activePlacement:()=>TextPlacementV1|null;
+  activeEdition:()=>NotebookEditionV1|null;
+  setActiveTags:(ids:readonly string[])=>Promise<boolean>;
+  addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
+  removeGrammarSpan:(id:string)=>Promise<boolean>;
+  renameActiveNotebook:(title:string)=>Promise<boolean>;
+  closeEdition:()=>void;
+} {
+  const autoApply=options.autoApply===true;
   const element=node('section','edition-shell');
   element.setAttribute('aria-label','Editor del cuaderno');
   let editions:EditionSnapshotV1[]=[];
@@ -187,7 +213,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       paint();
     },
     status:setMessage,repaint:paint,
-  });
+  },{autoApply});
   document.addEventListener('selectionchange',()=>{
     const pages=element.querySelector<HTMLElement>('.edition-paper-pages');
     if(pages)academics.savePaperSelection(pages);
@@ -293,6 +319,114 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       paint();
     })();
   }
+  /** El cuaderno nace vacío, con ID e historial propio: no hay edición intermedia. */
+  async function createNotebookNamed(title:string):Promise<string|null>{
+    if(!title.trim()||title.trim().length>250){
+      setMessage('Escribe un título válido de hasta 250 caracteres.',true);return null;
+    }
+    if(!await flush())return null;
+    const at=now(),id=freshId('ed');
+    try{
+      const fresh=createEdition({id,legacyNotebookId:null,title:title.trim(),timestamp:at,placements:[]});
+      const saved=await workspace.commitEdition(id,0,
+        {command:'ui.create-direct-notebook',targetId:id,timestamp:at},()=>fresh);
+      editions=[...editions,saved];
+      await changeEdition(id);
+      return id;
+    }catch(e){
+      setMessage('No se ha creado el cuaderno: '+(e instanceof Error?e.message:String(e)),true);
+      return null;
+    }
+  }
+  /** Añadir al cuaderno ACTIVO sin modificar ni clonar otros cuadernos. */
+  async function addSourceToNotebook(textId:string):Promise<boolean>{
+    if(!await flush()||!current||!draft||!session)return false;
+    try{
+      const text=(await legacy.load()).corpus.texts.find(t=>t.id===textId);
+      if(!text)throw new Error('El texto ya no existe en la biblioteca.');
+      const existing=draft.placements.find(p=>p.source.kind==='corpus'&&p.source.sourceId===textId);
+      if(existing){
+        await navigate({placementId:existing.id});
+        setMessage('Este texto ya figura en el cuaderno; se abre sin duplicarlo.');
+        return true;
+      }
+      const at=now(),place=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
+      const id=current.edition.id;
+      const saved=await workspace.commitEdition(id,current.revision,
+        {command:'ui.add-source-direct',targetId:place.id,timestamp:at},old=>{
+          if(!old)throw new Error('Cuaderno no disponible.');
+          if(old.placements.some(p=>p.source.kind==='corpus'&&p.source.sourceId===textId))
+            throw new Error('El texto se ha añadido desde otra pestaña. Recarga el cuaderno.');
+          return validateEdition({...old,updatedAt:at,placements:[...old.placements,place]});
+        });
+      current=saved;draft=structuredClone(saved.edition);
+      editions=editions.map(e=>e.edition.id===id?saved:e);
+      session={...session,activePlacementId:place.id,mode:'text'};
+      academics.clear();vocabPreview=null;exportReview=null;
+      menu='questions';mobile='config';
+      if(autoApply){
+        const p=selection();
+        if(p&&p.vocabulary.length===0){
+          try{applyVocabularyAutomatically(p,true);await flush();}
+          catch(err){setMessage('Texto añadido. Revisa el vocabulario: '+String(err),true);}
+        }
+      }
+      paint();
+      setMessage('Texto incorporado y guardado en este cuaderno.');
+      return true;
+    }catch(e){
+      setMessage('No se pudo añadir: '+(e instanceof Error?e.message:String(e)),true);return false;
+    }
+  }
+  async function selectPlacement(placementId:string):Promise<boolean>{
+    if(!draft?.placements.some(p=>p.id===placementId)||!session||!await flush())return false;
+    session=moveSession(draft,session,{placementId});
+    academics.clear();vocabPreview=null;exportReview=null;paint();
+    return true;
+  }
+  async function setActiveTags(ids:readonly string[]):Promise<boolean>{
+    const p=selection();
+    if(!p||!draft)return false;
+    const unique=[...new Set(ids)];
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(x=>x.id===p.id?{...x,grammaticalTagIds:unique}:x)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function addGrammarSpan(start:number,end:number,tagId:string):Promise<boolean>{
+    const placement=selection();
+    if(!placement||!draft||!tagId)return false;
+    const latin=placement.text.latin;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)
+      ||start<0||end>latin.length||end<=start||!latin.slice(start,end).trim()){
+      setMessage('Selecciona un fragmento latino no vacío.',true);return false;
+    }
+    const span={id:freshId('span'),startUtf16:start,endUtf16:end,
+      exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
+      tagIds:[tagId],reviewRequired:false};
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(p=>p.id===placement.id
+        ?{...p,grammaticalSpans:[...(p.grammaticalSpans??[]),span]}:p)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function removeGrammarSpan(id:string):Promise<boolean>{
+    const placement=selection();
+    if(!placement||!draft||!(placement.grammaticalSpans??[]).some(x=>x.id===id))return false;
+    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+      placements:edition.placements.map(p=>p.id===placement.id
+        ?{...p,grammaticalSpans:(p.grammaticalSpans??[]).filter(x=>x.id!==id)}:p)}));
+    const saved=await flush();paint();return saved;
+  }
+  async function renameActiveNotebook(title:string):Promise<boolean>{
+    if(!draft||!title.trim()||title.trim().length>250)return false;
+    apply((edition,at)=>validateEdition({...edition,title:title.trim(),updatedAt:at}));
+    const saved=await flush();paint();return saved;
+  }
+  function closeEdition():void{
+    if(saveTimer!==null){clearTimeout(saveTimer);saveTimer=null;}
+    active=null;current=null;draft=null;session=null;
+    academics.clear();vocabPreview=null;exportReview=null;
+    paint();
+  }
   async function createNotebook():Promise<void>{
     if(!await flush())return;
     const title=window.prompt('Título del nuevo cuaderno');
@@ -304,6 +438,265 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       editions=[...editions,saved];await changeEdition(id);
     }catch(e){setMessage('No se ha creado: '+(e instanceof Error?e.message:String(e)),true);}
   }
+  /** Solo retira la aparición de trabajo; preserva sin cambios todos los
+   * cuadernos exportables que ya se hayan preparado a partir de ella. */
+  async function removeWorkingSource(textId:string):Promise<boolean>{
+    if(!await flush())return false;
+    try{
+      const saved=await workspace.loadEdition(WORKING_EDITION_ID);
+      if(!saved)return true;
+      if(!saved.edition.placements.some(p=>p.source.sourceId===textId))return true;
+      const at=now();
+      const updated=await workspace.commitEdition(WORKING_EDITION_ID,saved.revision,
+        {command:'ui.remove-working-source',targetId:textId,timestamp:at},previous=>{
+          if(!previous)throw new Error('La edición de trabajo no está disponible');
+          return validateEdition({...previous,updatedAt:at,
+            placements:previous.placements.filter(p=>p.source.sourceId!==textId)});
+        });
+      editions=editions.map(e=>e.edition.id===WORKING_EDITION_ID?updated:e);
+      if(active===WORKING_EDITION_ID){
+        current=updated;draft=structuredClone(updated.edition);
+        if(session)session={...session,activePlacementId:draft.placements[0]?.id??null};
+        paint();
+      }
+      return true;
+    }catch(err){
+      setMessage('El texto original se ha eliminado, pero queda una copia de trabajo. '+
+        (err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
+  /** Selección directa: un texto guardado se añade sin duplicar la fuente
+   * a la edición de trabajo; preguntas, vocabulario y cambios se conservan. */
+  async function openSourceText(textId:string):Promise<boolean>{
+    await refresh();
+    if(!await flush())return false;
+    try{
+      const text=(await legacy.load()).corpus.texts.find(t=>t.id===textId);
+      if(!text)throw new Error('No existe el texto seleccionado. Recarga la lista.');
+      editions=await workspace.listEditions();
+      const previous=editions.find(x=>x.edition.id===WORKING_EDITION_ID);
+      let entry=previous?.edition.placements.find(p=>
+        p.source.kind==='corpus'&&p.source.sourceId===textId)??null;
+      const at=now();
+      if(!previous){
+        entry=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
+        const fresh=createEdition({
+          id:WORKING_EDITION_ID,legacyNotebookId:null,
+          title:'Textos seleccionados',timestamp:at,placements:[entry],
+        });
+        const created=await workspace.commitEdition(WORKING_EDITION_ID,0,
+          {command:'ui.open-source',targetId:textId,timestamp:at},()=>fresh);
+        editions.push(created);
+      }else if(!entry){
+        entry=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
+        const added=entry;
+        const updated=await workspace.commitEdition(WORKING_EDITION_ID,previous.revision,
+          {command:'ui.open-source',targetId:textId,timestamp:at},prior=>{
+            if(!prior)throw new Error('Falta la edición de trabajo.');
+            if(prior.placements.some(p=>p.source.kind==='corpus'&&p.source.sourceId===textId))
+              return prior;
+            return validateEdition({...prior,updatedAt:at,placements:[...prior.placements,added]});
+          });
+        editions=editions.map(x=>x.edition.id===WORKING_EDITION_ID?updated:x);
+      }
+      await changeEdition(WORKING_EDITION_ID);
+      if(session&&entry)session={...session,activePlacementId:entry.id,mode:'text'};
+      menu='questions';
+      mobile='config';
+      if(autoApply&&entry){
+        const currentPlacement=selection();
+        if(currentPlacement&&currentPlacement.id===entry.id&&currentPlacement.vocabulary.length===0){
+          try{applyVocabularyAutomatically(currentPlacement,true);await flush();}
+          catch(err){setMessage('El texto se ha abierto; revisa su vocabulario: '+String(err),true);}
+        }
+      }
+      paint();
+      setMessage('Texto listo para editar: preguntas, vocabulario y vista previa A4.');
+      return true;
+    }catch(err){
+      setMessage('No se pudo abrir el texto: '+(err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
+  /** Crea una edición independiente solo con los textos elegidos. Copia las
+   * preguntas editadas de la selección sin modificar sus originales. */
+  async function prepareFromIds(textIds:readonly string[],title:string):Promise<boolean>{
+    if(!await flush())return false;
+    const chosen=[...new Set(textIds)];
+    if(!chosen.length||!title.trim()){
+      setMessage('Elige al menos un texto y escribe el título del cuaderno.',true);return false;
+    }
+    try{
+      const corpus=(await legacy.load()).corpus;
+      const byId=new Map(corpus.texts.map(t=>[t.id,t]));
+      for(const id of chosen)if(!byId.has(id))throw new Error('Texto no encontrado: '+id);
+      const working=await workspace.loadEdition(WORKING_EDITION_ID);
+      const drafts=new Map(working?.edition.placements.filter(p=>p.source.kind==='corpus'&&p.source.sourceId)
+        .map(p=>[p.source.sourceId!,p])??[]);
+      const at=now();
+      const placements=chosen.map(id=>{
+        const saved=drafts.get(id);
+        const source=byId.get(id)!;
+        if(!saved)return placementFromCorpus(source,freshId('place'),at,()=>freshId('item'));
+        return {...structuredClone(saved),id:freshId('place'),grammaticalTagIds:[...source.tagIds]};
+      });
+      const id=freshId('ed');
+      const edition=createEdition({
+        id,legacyNotebookId:null,title:title.trim(),timestamp:at,placements,
+      });
+      const created=await workspace.commitEdition(id,0,
+        {command:'ui.prepare-selected',targetId:id,timestamp:at},()=>edition);
+      editions=await workspace.listEditions();
+      if(!editions.some(e=>e.edition.id===created.edition.id))editions.push(created);
+      await changeEdition(id);
+      menu='notebook';
+      mobile='config';
+      paint();
+      setMessage('Cuaderno preparado: '+placements.length+' textos seleccionados. Listo para Word/PDF.');
+      return true;
+    }catch(err){
+      setMessage('No se pudo preparar el cuaderno: '+(err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
+  async function openEdition(editionId:string):Promise<boolean>{
+    if(!await flush())return false;
+    editions=await workspace.listEditions();
+    if(!editions.some(e=>e.edition.id===editionId))return false;
+    await changeEdition(editionId);
+    menu='notebook';paint();return true;
+  }
+
+  /** Sincronizar solo las etiquetas de la edición de trabajo tras guardar el
+   * corpus docente. La operación no regenera ninguna pregunta ni vocabulario. */
+  async function syncSourceTags(textId:string,tagIds:readonly string[]):Promise<boolean>{
+    if(!await flush())return false;
+    try{
+      const currentWorking=await workspace.loadEdition(WORKING_EDITION_ID);
+      if(!currentWorking)return true;
+      const p=currentWorking.edition.placements.find(p=>p.source.kind==='corpus'&&p.source.sourceId===textId);
+      if(!p || JSON.stringify(p.grammaticalTagIds)===JSON.stringify(tagIds))return true;
+      const at=now();
+      const saved=await workspace.commitEdition(WORKING_EDITION_ID,currentWorking.revision,
+        {command:'ui.sync-grammar',targetId:p.id,timestamp:at},prior=>{
+          if(!prior)throw new Error('No existe la edición de trabajo.');
+          return validateEdition({...prior,updatedAt:at,placements:prior.placements.map(x=>
+            x.id===p.id?{...x,grammaticalTagIds:[...tagIds]}:x)});
+        });
+      editions=editions.map(e=>e.edition.id===WORKING_EDITION_ID?saved:e);
+      if(current?.edition.id===WORKING_EDITION_ID){
+        current=saved;draft=structuredClone(saved.edition);paint();
+      }
+      return true;
+    }catch(err){setMessage('Etiquetas guardadas en el texto, pero la vista editorial requiere actualización: '+
+      (err instanceof Error?err.message:String(err)),true);return false;}
+  }
+
+  /**
+   * Puente no destructivo entre «Cuadernos» (CorpusV1) y el compositor A4.
+   * Un cuaderno histórico se importa una sola vez; importaciones sucesivas
+   * agregan únicamente los IDs de texto pendientes, sin sobrescribir el
+   * texto, vocabulario, preguntas ni orden que el docente editó en A4.
+   */
+  async function importLegacyNotebook(legacyNotebookId:string):Promise<boolean>{
+    if(!await flush())return false;
+    try{
+      const source=await legacy.load();
+      const book=source.corpus.notebooks.find(item=>item.id===legacyNotebookId);
+      if(!book)throw new Error('El cuaderno original ya no existe. Actualiza la biblioteca.');
+      const texts=new Map(source.corpus.texts.map(text=>[text.id,text]));
+      for(const textId of book.textIds){
+        if(!texts.has(textId))throw new Error('Falta un texto del cuaderno original: '+textId);
+      }
+      // Refrescar antes de decidir si el cuaderno ya se importó (otra pestaña
+      // podría haberlo creado). Nunca generar un duplicado por pulsar dos veces.
+      editions=await workspace.listEditions();
+      const previous=editions.find(item=>item.edition.legacyNotebookId===book.id);
+      const at=now();
+      if(previous){
+        const assigned=new Set(previous.edition.placements.map(p=>p.source.sourceId));
+        const pending=book.textIds.filter(id=>!assigned.has(id));
+        if(!pending.length){
+          await changeEdition(previous.edition.id);
+          menu='notebook';paint();
+          setMessage('«'+book.title+'» ya está preparado. No se han duplicado textos.');
+          return true;
+        }
+        const added=pending.map(id=>placementFromCorpus(texts.get(id)!,freshId('place'),at,
+          ()=>freshId('item')));
+        const saved=await workspace.commitEdition(previous.edition.id,previous.revision,
+          {command:'ui.import-legacy',targetId:book.id,timestamp:at},edition=>{
+            if(!edition || edition.legacyNotebookId!==book.id){
+              throw new Error('El cuaderno editorial cambió durante la importación.');
+            }
+            // Revalidar sobre el estado de la transacción evita sobrescribir
+            // cualquier otra modificación del documento.
+            return validateEdition({...edition,updatedAt:at,
+              placements:[...edition.placements,...added]});
+          });
+        editions=editions.map(item=>item.edition.id===saved.edition.id?saved:item);
+        await changeEdition(saved.edition.id);
+        menu='notebook';paint();
+        setMessage('Se han incorporado '+pending.length+' texto(s) nuevos de «'+book.title+
+          '». Las preguntas, el vocabulario y los textos ya editados se conservan.');
+        return true;
+      }
+      const placements=book.textIds.map(id=>placementFromCorpus(texts.get(id)!,freshId('place'),
+        at,()=>freshId('item')));
+      const id=freshId('ed');
+      const edition=createEdition({id,legacyNotebookId:book.id,title:book.title,
+        timestamp:at,placements});
+      const saved=await workspace.commitEdition(id,0,
+        {command:'ui.import-legacy',targetId:book.id,timestamp:at},()=>edition);
+      editions=[...editions,saved];
+      await changeEdition(saved.edition.id);
+      menu='notebook';paint();
+      setMessage('Cuaderno «'+book.title+'» preparado con '+placements.length+
+        ' texto(s). Los originales continúan en «Cuadernos».');
+      return true;
+    }catch(err){
+      setMessage('No se pudo preparar el cuaderno original: '+
+        (err instanceof Error?err.message:String(err)),true);
+      return false;
+    }
+  }
+
+  function legacyNotebookPicker():HTMLElement {
+    const container=node('section','edition-import-legacy');
+    container.append(node('h3','','Traer cuaderno existente'),
+      node('p','hint','Copia al editor los textos de «Cuadernos» en el orden guardado. Si ya estaba preparado, añade solo los textos nuevos sin cambiar tus preguntas ni el vocabulario.'));
+    const choice=node('select','field-control');
+    choice.setAttribute('aria-label','Elegir cuaderno de Cuadernos');
+    const importButton=action('Preparar cuaderno seleccionado',async()=>{
+      if(!choice.value)return;
+      await importLegacyNotebook(choice.value);
+    },'btn btn-primary');
+    importButton.disabled=true;
+    const row=node('div','edition-inline-edit');
+    row.append(choice,importButton);
+    container.append(row);
+    void legacy.load().then(snapshot=>{
+      if(!container.isConnected)return;
+      choice.replaceChildren();
+      for(const notebook of snapshot.corpus.notebooks){
+        const option=node('option','',
+          notebook.title+' ('+notebook.textIds.length+' texto(s))');
+        option.value=notebook.id;
+        choice.append(option);
+      }
+      importButton.disabled=!snapshot.corpus.notebooks.length;
+      if(!snapshot.corpus.notebooks.length){
+        choice.append(node('option','','Primero crea un cuaderno en «Cuadernos»'));
+        importButton.disabled=true;
+      }
+    }).catch(err=>setMessage('No se pudieron listar los cuadernos: '+String(err),true));
+    return container;
+  }
+
   async function undo():Promise<void>{
     if(!current||!await flush())return;
     try{
@@ -372,25 +765,50 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
+    // Índice compacto a la manera de Examinator2: navegar a cada tarjeta sin
+    // duplicar sus campos ni modificar las palabras y decisiones del docente.
+    const names:Record<string,string>={
+      translation:'Traducción',syntax:'Sintaxis',morphology:'Morfología',choice:'Elección',
+    };
+    const overview=node('nav','edition-question-index');
+    overview.setAttribute('aria-label','Ir a una pregunta');
+    overview.append(node('strong','','Preguntas del texto'));
+    const shortcuts=node('div','edition-question-shortcuts');
+    for(const [index,q] of p.questions.entries()){
+      const jump=action(String(index+1)+'. '+(names[q.kind]??q.kind),()=>{
+        panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
+          ?.scrollIntoView({block:'nearest',behavior:'auto'});
+      },'btn btn-outline edition-question-jump');
+      if(!q.enabled)jump.classList.add('is-inactive');
+      shortcuts.append(jump);
+    }
+    overview.append(shortcuts);
+    panel.append(overview);
     for(const q of p.questions){
       const section=node('section','edition-question-panel');
+      section.dataset.kind=q.kind;
+      if(!q.enabled)section.classList.add('is-inactive');
       const top=node('div','edition-question-top');
       const check=node('input');check.type='checkbox';check.checked=q.enabled;
       check.setAttribute('aria-label','Incluir pregunta '+q.kind);
       check.addEventListener('change',()=>{
         apply((e,at)=>toggleQuestion(e,p.id,q.id,check.checked,at));paint();
       });
-      top.append(check,node('h3','',({
+      const heading=({
         translation:'1. Traducción',syntax:'2. Sintaxis',
         morphology:'3. Morfología',choice:'4. Elección',
-      } as Record<string,string>)[q.kind]??q.kind));
+      } as Record<string,string>)[q.kind]??q.kind;
+      top.append(check,node('h3','',heading),
+        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'));
       section.append(top);
       section.append(textField('Enunciado',q.statement.value,value=>{
         apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
       }));
-      section.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
+      const points=node('div','edition-question-points');
+      points.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
         apply((e,at)=>setQuestionPoints(e,p.id,q.id,Math.round(value*100),at));paint();
       }));
+      section.append(points);
       if(q.kind==='morphology')academics.renderMorph(section,p,q);
       if(q.kind==='choice'){
         const options=q.options;
@@ -445,9 +863,35 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     panel.append(node('p',total===800?'edition-score':'edition-error',
       'Total activo: '+formatPoints(p)+(total===800?'':' · revisión necesaria')));
   }
+  function applyVocabularyAutomatically(p:TextPlacementV1,onlyWhenEmpty=false):number{
+    if(!draft||(onlyWhenEmpty&&p.vocabulary.length))return 0;
+    vocabularyBank??=createOfflineTeacherBankV1();
+    const proposals=suggestVocabulary(p,vocabularyBank.bank);
+    if(!proposals.length)return 0;
+    // Lemas inequívocos del banco; los demás conservan la forma textual y
+    // se guardan como pendientes de revisión, nunca como lemas verificados.
+    const seen=new Set<string>();
+    const decisions=proposals.map(item=>{
+      const headword=item.lemma??item.surface;
+      const normalized=headword.toLocaleLowerCase('es').normalize('NFC');
+      const selected=!seen.has(normalized);
+      seen.add(normalized);
+      return {surface:item.surface,selected,headword,meaning:''};
+    });
+    apply((e,at)=>acceptVocabulary(e,p.id,proposals,decisions,
+      ()=>freshId('voc'),at));
+    return decisions.filter(x=>x.selected).length;
+  }
   function prepareVocabulary(p:TextPlacementV1):void{
     if(!draft)return;
     try{
+      if(autoApply){
+        const n=applyVocabularyAutomatically(p);
+        setMessage(n?'Añadidas '+n+' entradas editables. Formas ambiguas o desconocidas: revisión pendiente.':
+          'No hay nuevas formas para añadir al vocabulario.');
+        paint();
+        return;
+      }
       vocabularyBank??=createOfflineTeacherBankV1();
       const proposals=suggestVocabulary(p,vocabularyBank.bank);
       vocabPreview={placementId:p.id,baseline:JSON.stringify(draft),
@@ -503,11 +947,27 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     panel.append(section);
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
-    panel.append(action('Proponer vocabulario del texto',()=>prepareVocabulary(p),'btn btn-primary'));
+    panel.append(action(autoApply?'Lematizar y actualizar vocabulario':'Proponer vocabulario del texto',
+      ()=>prepareVocabulary(p),'btn btn-primary'));
     renderVocabularySuggestions(panel,p);
     const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
+    const documented=items.filter(v=>v.provenance!==null).length;
+    const provisional=items.filter(v=>v.origin==='generated'&&v.provenance===null).length;
+    const manual=items.filter(v=>v.origin==='manual').length;
+    if(items.length){
+      panel.append(node('p','hint','Lematización parcial del texto: '+documented+
+        ' lemas documentados · '+provisional+' formas provisionales · '+manual+
+        ' entradas o decisiones manuales. Los significados no se deducen automáticamente.'));
+    }
     for(const v of items){
       const group=node('div','edition-vocabulary-control');
+      const evidenceLabel=v.provenance!==null
+        ?(v.meaning?'Lema documentado; significado introducido por docente':
+          'Lema documentado; significado pendiente de revisión docente')
+        :v.origin==='generated'
+          ?'Forma provisional: lema sin respaldo inequívoco; revisar'
+          :'Entrada editada manualmente; no presentada como lema verificado';
+      group.append(node('p','hint',evidenceLabel));
       const check=node('input');check.type='checkbox';check.checked=v.included;
       check.setAttribute('aria-label','Incluir '+v.headword);
       check.addEventListener('change',()=>{apply((e,at)=>editVocabulary(e,p.id,v.id,'included',check.checked,at));paint();});
@@ -575,6 +1035,7 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
     const e=draft;
+    panel.append(legacyNotebookPicker());
     panel.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
@@ -707,6 +1168,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
       empty.append(node('h3','','Comienza un cuaderno editorial'),
         node('p','','La biblioteca y tus cuadernos anteriores se conservan. Puedes migrarlos de forma explícita con una copia verificada o crear un cuaderno nuevo.'));
       const migration=action('Preparar migración de cuadernos antiguos',prepareMigration,'btn btn-outline');
+      empty.append(legacyNotebookPicker());
+      empty.append(node('p','hint','Importación completa de la biblioteca anterior (avanzado):'));
       empty.append(migration);
       if(pendingMigration){
         empty.append(node('p','hint',
@@ -740,7 +1203,8 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     const whole=action(session.mode==='whole-notebook'?'Ver texto seleccionado':'Ver cuaderno completo',
       ()=>navigate(session?.mode==='whole-notebook'?{placementId:selection()?.id??draft!.placements[0]?.id??''}:'whole'));
     whole.disabled=!n;
-    nav.append(whole);element.append(nav);
+    nav.append(whole);
+    nav.setAttribute('aria-label','Navegación de textos encima de la vista previa');
     const review=academics.review();
     if(review)element.append(review);
     const exportNotice=renderExportReview();
@@ -769,6 +1233,10 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     else if(placement && menu==='vocabulary')menuVocabulary(panel,placement);
     else panel.append(node('p','hint','Añade un texto desde el menú «Cuaderno» para comenzar.'));
     editor.append(panel);
+    // La barra pertenece a la columna de la hoja, pero permanece visible
+    // cuando la vista previa está temporalmente oculta en iPad vertical.
+    const previewStack=node('div','edition-preview-stack');
+    previewStack.append(nav);
     const preview=node('section','edition-preview'+(mobile==='config'?' edition-mobile-hidden':''));
     const papers=node('div','edition-paper-pages');
     papers.addEventListener('pointerup',()=>academics.savePaperSelection(papers));
@@ -777,10 +1245,18 @@ export function createEditionPane():{element:HTMLElement;open:()=>Promise<void>;
     bar.append(node('strong','','Vista A4'));
     bar.append(numberField('Zoom (%)',zoom,50,130,5,value=>{zoom=value;paintPreview();}));
     bar.append(academics.renderPaperSelect(papers));
+    // Los controles Anterior / Siguiente van justo encima del papel; no se
+    // reproducen en la cabecera ni alteran el modelo al cambiar de posición.
     preview.append(bar,papers);
     preview.append(node('p','edition-preview-note','Vista en pantalla · sin exportación todavía.'));
-    layout.append(editor,preview);element.append(layout);
+    previewStack.append(preview);
+    layout.append(editor,previewStack);element.append(layout);
     paintPreview();
   }
-  return {element,open:()=>refresh(),flush};
+  return {element,open:()=>refresh(),flush,importLegacyNotebook,
+    openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource,
+    createNotebookNamed,addSourceToNotebook,selectPlacement,
+    activePlacement:()=>selection()?structuredClone(selection()!):null,
+    activeEdition:()=>draft?structuredClone(draft):null,
+    setActiveTags,addGrammarSpan,removeGrammarSpan,renameActiveNotebook,closeEdition};
 }

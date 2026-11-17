@@ -428,6 +428,42 @@ export class WorkspaceRepository {
     });
   }
 
+  /** Eliminación atómica de la edición y su historial con control de revisión.
+   * El corpus histórico y los demás cuadernos no se modifican.
+   */
+  async deleteEdition(id:string,expectedRevision:number):Promise<void>{
+    if(!validId(id))throw new WorkspaceStorageError('ID de edición inválido.');
+    checkExpected(expectedRevision);
+    return this.transact(['editions','history','meta'],'readwrite',(tx,finish,abort)=>{
+      const oldQuery=tx.objectStore('editions').get(id);
+      const historyQuery=tx.objectStore('history').getAll();
+      const epochQuery=tx.objectStore('meta').get(EPOCH_KEY);
+      let pending=3;
+      const ready=()=>{
+        if(--pending)return;
+        try{
+          const old=oldQuery.result===undefined?null:editionRow(oldQuery.result);
+          const previous=old?.revision??0;
+          const ep=epoch(epochQuery.result);
+          if(previous!==expectedRevision)throw new WorkspaceConflictError(expectedRevision,previous);
+          if(!old)throw new WorkspaceStorageError('El cuaderno ya no existe.');
+          if(old.edition.legacyNotebookId!==null)
+            throw new WorkspaceStorageError('Cuaderno histórico protegido: eliminarlo rompería la trazabilidad de la migración.');
+          if(!ep||ep>=MAX_REVISION)throw new WorkspaceStorageError('Revisión global inválida.');
+          const own=(historyQuery.result as unknown[]).map(historyRow)
+            .filter(row=>row.event.editionId===id);
+          if(!own.some(row=>row.event.revisionAfter===previous))
+            throw new WorkspaceHistoryError('Falta el historial de la revisión actual.');
+          for(const row of own)tx.objectStore('history').delete(row.key);
+          tx.objectStore('editions').delete(id);
+          tx.objectStore('meta').put({key:EPOCH_KEY,value:ep+1});
+          finish(undefined);
+        }catch(e){abort(e);}
+      };
+      oldQuery.onsuccess=ready;historyQuery.onsuccess=ready;epochQuery.onsuccess=ready;
+    });
+  }
+
   /** Deshace la última acción pendiente, incluso después de recargar la página. */
   async undoLast(id: string, expectedRevision: number, at: string): Promise<EditionSnapshotV1> {
     if (!validId(id) || !validIso(at)) throw new WorkspaceHistoryError('Solicitud de deshacer inválida.');

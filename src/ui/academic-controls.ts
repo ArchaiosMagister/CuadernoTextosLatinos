@@ -14,6 +14,8 @@ import {
 } from '../core/academic-morph-selection.js';
 import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/academic-teacher-bank.js';
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
+import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
+import {validateEdition} from '../core/edition-validation.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -71,13 +73,18 @@ function rangeInParagraph(p:HTMLElement,selection:Selection):{start:number;end:n
   return safeToken(p.textContent??'',start,end)?{start,end}:null;
 }
 
-export function createAcademicControls(repository:WorkspaceRepository,bind:Bindings){
+export function createAcademicControls(repository:WorkspaceRepository,bind:Bindings,
+  options:{autoApply?:boolean}={}){
   // El banco congelado no se modifica y se instancia únicamente cuando se abre un control.
   let services:ReturnType<typeof createOfflineTeacherBankV1>|null=null;
   let engine:AcademicQuestionEngineV1|null=null,selector:AcademicMorphTokenSelectorV1|null=null;
   const bases=teacherPreverbBases(academicTeacherSnapshotV1);
+  const autoApply=options.autoApply===true;
   const counts=new Map<string,number>();
   const sourceForms=new Map<string,string[]>();
+  const selectedBases=new Map<string,PreverbSelection>();
+  const baseUsageSignatures=new Map<string,string>();
+  const manuallySelectedBases=new Set<string>();
   const ruleFilters=new Map<string,Set<string>>();
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
@@ -103,7 +110,37 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function countFor(o:ChoiceOptionV1):number{
     return counts.get(o.id)??(o.slots.length||defaults[o.kind]);
   }
-  function sourceFor(o:ChoiceOptionV1,count=countFor(o)):string[]{
+  function usedPreverbKeys(excludingOptionId:string):string[]{
+    const edition=bind.snapshot()?.edition;
+    if(!edition)return [];
+    const used=new Set<string>();
+    for(const placement of edition.placements)for(const question of placement.questions){
+      if(question.kind!=='choice')continue;
+      for(const option of question.options){
+        if(option.id===excludingOptionId||option.kind!=='preverb'||!option.enabled)continue;
+        const found=option.statement.value.match(/\*([^*]+)\* \(3\) y de \*([^*]+)\* \(2\)/u);
+        if(!found)continue;
+        for(const form of [found[1]!,found[2]!]){
+          const key=preverbBaseKeyForForm(academicTeacherSnapshotV1,form);
+          if(key)used.add(key);
+        }
+      }
+    }
+    return [...used].sort();
+  }
+  function preverbBasesFor(o:ChoiceOptionV1,p:TextPlacementV1):PreverbSelection{
+    const used=usedPreverbKeys(o.id),signature=used.join('\0');
+    let selected=selectedBases.get(o.id);
+    if(!selected||(!manuallySelectedBases.has(o.id)&&baseUsageSignatures.get(o.id)!==signature)){
+      selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin,Math.random,used);
+      selectedBases.set(o.id,selected);
+      baseUsageSignatures.set(o.id,signature);
+      sourceForms.set(o.id,[...selected.sourceKeys]);
+    }
+    return selected;
+  }
+  function sourceFor(o:ChoiceOptionV1,count=countFor(o),p?:TextPlacementV1):string[]{
+    if(o.kind==='preverb'&&p)preverbBasesFor(o,p);
     const values=sourceForms.get(o.id)??[];
     return Array.from({length:count},(_,i)=>values[i]??'');
   }
@@ -111,11 +148,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     return rulesEnabled.has(q.id)?[...(ruleFilters.get(q.id)??new Set(allRules))]:undefined;
   }
   function replaceFor(id:string):boolean{return replaceGroups.has(id);}
-  function fieldsFor(o:ChoiceOptionV1){
-    const count=countFor(o);
+  function fieldsFor(o:ChoiceOptionV1,p?:TextPlacementV1){
+    const count=o.kind==='preverb'?5:countFor(o);
     return {
       count,
-      sourceForms:o.kind==='preverb'?sourceFor(o,count):undefined,
+      sourceForms:o.kind==='preverb'?sourceFor(o,count,p):undefined,
       newSlotIds:Array.from({length:Math.max(0,count-o.slots.length)},()=> 'slot.'+crypto.randomUUID()),
     };
   }
@@ -138,7 +175,13 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const rec=report.bank.findVerified(item.candidateId);
         if(!rec)throw new Error('Candidato inexistente o no elegible.');
         const audit=teacherAuditRecord(report,item.candidateId);
+        const existingSlots=old.placements.flatMap(placement=>placement.questions.flatMap(question=>
+          question.kind==='choice'?question.options.flatMap(other=>other.slots):[]));
+        const seenBefore=existingSlots.some(slot=>slot.id!==item.slotId&&
+          slot.value.normalize('NFC').toLocaleLowerCase('es')===
+            rec.value.normalize('NFC').toLocaleLowerCase('es'));
         details.push(optionName(option.kind)+': '+previous+' → '+rec.value+
+          (seenBefore?' (reutilizada: no quedan nuevas candidatas compatibles)':'')+
           (audit?.semanticReviewRequired?' (significado orientativo; revisar)':''));
       }
     }
@@ -171,8 +214,76 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
             (data?.sourceForm?' · base '+data.sourceForm:'')};
     });
   }
+  async function commitPlanDirect(plan:AcademicPlanV1,label:string,
+    preverb?:{placementId:string;questionId:string;optionId:string;forms:readonly [string,string]}):Promise<void>{
+    let saved=await service().engine.commit(repository,plan,new Date().toISOString());
+    if(preverb){
+      const at=new Date().toISOString();
+      const text=preverbStatement(preverb.forms);
+      // Enunciados editados manualmente no se reescriben al regenerar.
+      const placement=saved.edition.placements.find(p=>p.id===preverb.placementId);
+      const question=placement?.questions.find(q=>q.id===preverb.questionId);
+      const option=question?.kind==='choice'
+        ?question.options.find(o=>o.id===preverb.optionId):null;
+      // El ejercicio pide al alumnado CINCO derivados: no deben aparecer
+      // impresos en el examen. El motor utiliza cinco candidatos internos,
+      // pero la hoja muestra solo los dos verbos de partida (3 + 2).
+      // Las entradas añadidas manualmente por el profesor no se eliminan.
+      if(option){
+        saved=await repository.commitEdition(saved.edition.id,saved.revision,
+          {command:'ui.preverb-statement',targetId:preverb.optionId,timestamp:at},original=>{
+            if(!original)throw new Error('Se ha perdido el cuaderno editorial.');
+            return validateEdition({...original,updatedAt:at,
+              placements:original.placements.map(p=>p.id!==preverb.placementId?p:{
+                ...p,questions:p.questions.map(q=>q.id!==preverb.questionId||q.kind!=='choice'?q:{
+                  ...q,options:q.options.map(o=>o.id!==preverb.optionId?o:{
+                    ...o,
+                    ...(o.statement.locked&&o.statement.origin==='manual'?{}:{
+                      statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
+                    }),
+                    slots:o.slots.filter(slot=>slot.origin==='manual'),
+                  }),
+                }),
+              }),
+            });
+          });
+      }
+    }
+    pending=null;paperRange=null;replaceGroups.clear();
+    bind.saved(saved);
+    const repeated=prepareDetails(plan).filter(x=>x.includes('(reutilizada:')).length;
+    bind.status(label+' aplicado directamente. Puedes cambiar cada término individualmente.'+
+      (repeated?' Reutilizadas por agotamiento del banco: '+repeated+'.':''));
+  }
+  async function chooseCandidateDirect(kind:CandidatePending['kind'],
+    target:CandidatePending['target'],rows:Candidate[],locked:boolean):Promise<void>{
+    if(!rows.length)throw new Error('No hay propuestas documentadas para esta palabra.');
+    if(locked){
+      bind.status('Palabra manual protegida: se conserva sin reemplazarla.');
+      return;
+    }
+    const chosen=rows[0]!.id;
+    const saved=current();
+    let next:EditionSnapshotV1;
+    const {engine,selector}=service();
+    if(kind==='token'){
+      const plan=selector.prepare(saved.edition,target as MorphTokenTargetV1,chosen);
+      next=await selector.commit(repository,plan,new Date().toISOString());
+    }else if(kind==='morph'){
+      const plan=engine.prepareMorph(saved.edition,target as AcademicMorphTargetV1,chosen,false);
+      next=await engine.commit(repository,plan,new Date().toISOString());
+    }else{
+      const plan=engine.prepareSlot(saved.edition,target as AcademicSlotTargetV1,chosen,
+        randomSeed(),false);
+      next=await engine.commit(repository,plan,new Date().toISOString());
+    }
+    bind.saved(next);
+    bind.status('Aplicado directamente'+(rows.length>1?
+      ' · varias lecturas posibles: revisa la forma elegida.':'.'));
+  }
+
   function requestSlot(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const target:AcademicSlotTargetV1={
         placementId:p.id,questionId:q.id,optionId:o.id,slotId,expectedRevision:s.revision,
         ...(o.kind==='preverb'?{sourceForm:sourceFor(o)[index]??''}:{}),
@@ -180,25 +291,27 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       };
       const academic=service().engine;
       const view=academic.previewSlot(s.edition,target);
-      showCandidate('slot','Sustituir una palabra de '+optionName(o.kind),target,
-        candidateRows(o.kind,view.candidates),view.status==='locked',
-        JSON.stringify(s.edition),s.revision);
+      const rows=candidateRows(o.kind,view.candidates);
+      if(autoApply)await chooseCandidateDirect('slot',target,rows,view.status==='locked');
+      else showCandidate('slot','Sustituir una palabra de '+optionName(o.kind),target,
+        rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
     });
   }
   function requestMorph(p:TextPlacementV1,q:Morph,wordId:string):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const target:AcademicMorphTargetV1={
         placementId:p.id,questionId:q.id,wordId,expectedRevision:s.revision,
       };
       const view=service().engine.previewMorph(s.edition,target);
-      showCandidate('morph','Reanalizar únicamente esta aparición',target,
-        candidateRows('morphology',view.candidates),view.status==='locked',
-        JSON.stringify(s.edition),s.revision);
+      const rows=candidateRows('morphology',view.candidates);
+      if(autoApply)await chooseCandidateDirect('morph',target,rows,view.status==='locked');
+      else showCandidate('morph','Reanalizar únicamente esta aparición',target,
+        rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
     });
   }
   function requestGroup(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1):void{
-    void withSaved(s=>{
-      const f=fieldsFor(o);
+    void withSaved(async s=>{
+      const f=fieldsFor(o,p);
       const plan=service().engine.prepareSubquestion(s.edition,{
         placementId:p.id,questionId:q.id,optionId:o.id,expectedRevision:s.revision,
         desiredCount:f.count,newSlotIds:f.newSlotIds,
@@ -210,17 +323,23 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       if(!plan.assignments.some(g=>g.items.some(x=>x.candidateId))){
         throw new Error('No hay términos que sustituir; las palabras manuales permanecen protegidas.');
       }
-      pending={type:'plan',label:'Regenerar solo '+optionName(o.kind),plan,details};
-      bind.repaint();
+      if(autoApply){
+        const picked=o.kind==='preverb'?preverbBasesFor(o,p):null;
+        await commitPlanDirect(plan,optionName(o.kind),
+          picked?{placementId:p.id,questionId:q.id,optionId:o.id,forms:picked.forms}:undefined);
+      }else{
+        pending={type:'plan',label:'Regenerar solo '+optionName(o.kind),plan,details};
+        bind.repaint();
+      }
     });
   }
   function requestQuestion(p:TextPlacementV1,q:Choice):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const desiredCountByKind:Partial<Record<AcademicSlotKindV1,number>>={};
       const sourceFormsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
       const newSlotIdsByKind:Partial<Record<AcademicSlotKindV1,readonly string[]>>={};
       for(const o of q.options.filter(x=>x.enabled)){
-        const f=fieldsFor(o);
+        const f=fieldsFor(o,p);
         desiredCountByKind[o.kind]=f.count;
         newSlotIdsByKind[o.kind]=f.newSlotIds;
         if(f.sourceForms)sourceFormsByKind[o.kind]=f.sourceForms;
@@ -234,12 +353,19 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const details=prepareDetails(plan);
       if(!plan.assignments.some(g=>g.items.some(x=>x.candidateId)))
         throw new Error('No hay términos que regenerar.');
-      pending={type:'plan',label:'Regenerar solo la pregunta 4',plan,details};
-      bind.repaint();
+      if(autoApply){
+        const preverb=q.options.find(o=>o.kind==='preverb'&&o.enabled);
+        const picked=preverb?preverbBasesFor(preverb,p):null;
+        await commitPlanDirect(plan,'Pregunta 4',
+          preverb&&picked?{placementId:p.id,questionId:q.id,optionId:preverb.id,forms:picked.forms}:undefined);
+      }else{
+        pending={type:'plan',label:'Regenerar solo la pregunta 4',plan,details};
+        bind.repaint();
+      }
     });
   }
   function requestToken(target:RangeTarget):void{
-    void withSaved(s=>{
+    void withSaved(async s=>{
       const p=s.edition.placements.find(x=>x.id===target.placementId);
       const q=p?.questions.find(x=>x.kind==='morphology');
       if(!p||!q)throw new Error('No se encontró la pregunta de morfología.');
@@ -253,7 +379,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const view=service().selector.preview(s.edition,t);
       const rows=view.candidates.map(x=>({id:x.id,value:view.surface,
         detail:x.lemmaId+' · '+x.analysis+' · '+x.reference}));
-      showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
+      if(autoApply)await chooseCandidateDirect('token',t,rows,false);
+      else showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
         JSON.stringify(s.edition),s.revision);
     });
   }
@@ -334,27 +461,41 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     tools.append(accept,cancel);box.append(tools);
     return box;
   }
-  function setSourcesUi(section:HTMLElement,o:ChoiceOptionV1):void{
+  function setSourcesUi(section:HTMLElement,p:TextPlacementV1,o:ChoiceOptionV1):void{
     if(o.kind!=='preverb')return;
-    const count=countFor(o);
+    const picked=preverbBasesFor(o,p);
     const wrap=el('fieldset','edition-source-forms');
-    wrap.append(el('legend','','Base para cada derivado preverbial'));
-    const sourceValues=sourceFor(o,count);
-    for(let i=0;i<count;i++){
+    wrap.append(el('legend','','Dos verbos de partida: tres derivados + dos derivados'));
+    const values=sourceFor(o,5,p);
+    for(const [index,count] of [[0,3],[1,2]] as const){
       const label=el('label','edition-field');
-      label.append(el('span','edition-field-label','Derivado '+(i+1)));
+      label.append(el('span','edition-field-label',
+        'Verbo '+(index+1)+' · '+count+' derivados'+
+        (picked.forms[index]?' · '+picked.forms[index]:'') ));
       const select=el('select','field-control');
-      const blank=el('option','','Elegir base documentada');blank.value='';select.append(blank);
       for(const base of bases){
         const opt=el('option','',base.enunciado+(base.requiresDisambiguation?' · homónimo':''));opt.value=base.selectionKey;
         select.append(opt);
       }
-      select.value=sourceValues[i]??'';
+      select.value=values[index===0?0:3]??'';
       select.addEventListener('change',()=>{
-        const arr=sourceFor(o,count);arr[i]=select.value;sourceForms.set(o.id,arr);
+        const first=index===0?select.value:values[0]!;
+        const second=index===1?select.value:values[3]!;
+        sourceForms.set(o.id,[first,first,first,second,second]);
+        manuallySelectedBases.add(o.id);
+        // Una elección manual sustituye la forma tomada del pasaje
+        // por el lema del banco, sin declarar que aparece en el texto.
+        const baseA=bases.find(x=>x.selectionKey===first);
+        const baseB=bases.find(x=>x.selectionKey===second);
+        if(baseA&&baseB){
+          selectedBases.set(o.id,{sourceKeys:[first,first,first,second,second],
+            forms:[baseA.lemma,baseB.lemma],source:'bank'});
+        }
+        bind.repaint();
       });
       label.append(select);wrap.append(label);
     }
+    wrap.append(el('p','hint','Se priorizan bases del pasaje no utilizadas en otros textos; después se buscan nuevas en el banco. Solo se reutilizan si no quedan bases válidas.'));
     section.append(wrap);
   }
   function phoneticControls(section:HTMLElement,q:Choice):void{
@@ -400,16 +541,17 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const label=el('label','edition-field');
     label.append(el('span','edition-field-label','Cantidad para este apartado (sin regenerar automáticamente)'));
     const count=el('input','field-control');count.type='number';count.min='1';count.max='30';
-    count.value=String(countFor(o));
+    count.value=String(o.kind==='preverb'?5:countFor(o));
+    if(o.kind==='preverb')count.disabled=true;
     count.addEventListener('change',()=>{
       const n=Number(count.value);
       if(!Number.isInteger(n)||n<1||n>30){count.value=String(countFor(o));return;}
       counts.set(o.id,n);bind.repaint();
     });
     label.append(count);ui.append(label);
-    setSourcesUi(ui,o);
+    setSourcesUi(ui,p,o);
     consent(ui,o.id);
-    ui.append(button('Proponer apartado '+optionName(o.kind),()=>requestGroup(p,q,o)));
+    ui.append(button((autoApply?'Generar ':'Proponer apartado ')+optionName(o.kind),()=>requestGroup(p,q,o)));
     section.append(ui);
   }
   function renderSlot(section:HTMLElement,p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
@@ -419,8 +561,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const ui=el('div','edition-academic-question');
     phoneticControls(ui,q);
     consent(ui,q.id);
-    ui.append(button('Proponer pregunta 4 completa',()=>requestQuestion(p,q)),
-      el('p','hint','Los apartados desactivados y las otras preguntas quedan intactos. Las propuestas se revisan antes de guardar.'));
+    ui.append(button(autoApply?'Generar pregunta 4':'Proponer pregunta 4 completa',()=>requestQuestion(p,q)),
+      el('p','hint',autoApply?'Los candidatos documentados se aplican directamente. Puedes editarlos después.':
+        'Los apartados desactivados y las otras preguntas quedan intactos. Las propuestas se revisan antes de guardar.'));
     section.append(ui);
   }
   function renderMorph(section:HTMLElement,p:TextPlacementV1,q:Morph):void{

@@ -5,7 +5,7 @@ import {
   type PageFormatV1, type QuestionKindV1, type QuestionStyleV1,
   type QuestionV1, type QuestionWordSlotV1, type ReviewFlagV1,
   type SourceLinkV1, type TextMarkV1, type TextPlacementV1,
-  type VocabularyEntryV1,
+  type VocabularyEntryV1, type GrammarSpanV1,
 } from './edition-model.js';
 
 export class InvalidEditionError extends Error {
@@ -16,10 +16,11 @@ function fail(path: string, explanation: string): never {
   throw new InvalidEditionError(`${path}: ${explanation}`);
 }
 
-function object(value: unknown, path: string, keys: readonly string[]): Record<string, unknown> {
+function object(value: unknown, path: string, keys: readonly string[],optional: readonly string[]=[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'se esperaba un objeto');
   const row = value as Record<string, unknown>;
-  for (const key of Object.keys(row)) if (!keys.includes(key)) fail(`${path}.${key}`, 'campo desconocido');
+  for (const key of Object.keys(row))
+    if (!keys.includes(key)&&!optional.includes(key)) fail(`${path}.${key}`, 'campo desconocido');
   for (const key of keys) if (!Object.hasOwn(row, key)) fail(`${path}.${key}`, 'campo obligatorio ausente');
   return row;
 }
@@ -197,12 +198,33 @@ function reviewFlag(input:unknown,path:string):ReviewFlagV1 {
   const d=object(input,path,['id','scopeId','reason']);
   return {id:id(d.id,`${path}.id`),scopeId:id(d.scopeId,`${path}.scopeId`),reason:str(d.reason,`${path}.reason`,1000)};
 }
+function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
+  const d=object(input,path,['id','startUtf16','endUtf16','exact','textFingerprint','tagIds','reviewRequired']);
+  const start=integer(d.startUtf16,`${path}.startUtf16`,0,latin.length);
+  const end=integer(d.endUtf16,`${path}.endUtf16`,1,latin.length);
+  if(start>=end)fail(path,'fragmento vacío o invertido');
+  const exact=str(d.exact,`${path}.exact`,200_000);
+  const fp=str(d.textFingerprint,`${path}.textFingerprint`,32);
+  if(!hashPattern.test(fp))fail(path,'huella del fragmento inválida');
+  const reviewRequired=flag(d.reviewRequired,`${path}.reviewRequired`);
+  if(!reviewRequired&&(latin.slice(start,end)!==exact||fingerprintForMark(latin,start,end)!==fp))
+    fail(path,'fragmento desanclado sin marca de revisión');
+  const tagIds=array(d.tagIds,`${path}.tagIds`,200).map((v,i)=>id(v,`${path}.tagIds[${i}]`));
+  if(!tagIds.length||new Set(tagIds).size!==tagIds.length)
+    fail(path,'el fragmento necesita etiquetas sin repetir');
+  return {id:id(d.id,`${path}.id`),startUtf16:start,endUtf16:end,exact,
+    textFingerprint:fp,tagIds,reviewRequired};
+}
 function placement(input:unknown,path:string):TextPlacementV1 {
-  const d=object(input,path,['id','source','text','questions','vocabulary','grammaticalTagIds','reviewFlags']);
-  return {id:id(d.id,`${path}.id`),source:source(d.source,`${path}.source`),text:text(d.text,`${path}.text`),
+  const d=object(input,path,['id','source','text','questions','vocabulary','grammaticalTagIds','reviewFlags'],
+    ['grammaticalSpans']);
+  const sourceText=text(d.text,`${path}.text`);
+  return {id:id(d.id,`${path}.id`),source:source(d.source,`${path}.source`),text:sourceText,
     questions:array(d.questions,`${path}.questions`,20).map((v,i)=>question(v,`${path}.questions[${i}]`)),
     vocabulary:array(d.vocabulary,`${path}.vocabulary`,4000).map((v,i)=>vocabulary(v,`${path}.vocabulary[${i}]`)),
     grammaticalTagIds:array(d.grammaticalTagIds,`${path}.grammaticalTagIds`,2000).map((v,i)=>id(v,`${path}.grammaticalTagIds[${i}]`)),
+    ...(Object.hasOwn(d,'grammaticalSpans')?{grammaticalSpans:array(d.grammaticalSpans,
+      `${path}.grammaticalSpans`,1000).map((v,i)=>grammarSpan(v,`${path}.grammaticalSpans[${i}]`,sourceText.latin))}:{}),
     reviewFlags:array(d.reviewFlags,`${path}.reviewFlags`,4000).map((v,i)=>reviewFlag(v,`${path}.reviewFlags[${i}]`))};
 }
 /** Rechaza campos extraños y referencias rotas; devuelve una copia normalizada independiente. */
@@ -224,6 +246,7 @@ export function validateEdition(input:unknown):NotebookEditionV1 {
     const path=`edition.placements[${i}]`;
     register(p,path+'.id');
     for(const m of p.text.markup)register(m,path+'.text.markup');
+    for(const span of p.grammaticalSpans??[])register(span,path+'.grammaticalSpans');
     for(const q of p.questions){
       register(q,path+'.questions');
       if(q.kind==='morphology'){

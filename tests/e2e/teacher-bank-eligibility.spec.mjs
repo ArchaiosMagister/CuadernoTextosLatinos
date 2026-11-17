@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('WebKit: selección docente real, normas fonéticas y homonimia no se convierten en bloqueos', async ({page})=>{
-  await page.goto('/');
+  await page.goto('/?classic=1');
   const outcome=await page.evaluate(async()=>{
     const [{createOfflineTeacherBankV1},{AcademicQuestionEngineV1},{createPlacement,createEdition}]=await Promise.all([
       import('/core/academic-teacher-bank.js'),import('/core/academic-engine.js'),import('/core/edition-factory.js'),

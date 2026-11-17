@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 async function setup(page){
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     const repository=new IndexedDbCorpusRepository();

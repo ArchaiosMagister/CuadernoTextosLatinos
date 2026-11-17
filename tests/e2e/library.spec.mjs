@@ -18,7 +18,7 @@ async function selectText(page, startLine, startOffset, endLine, endOffset) {
 
 
 test('biblioteca Examinator: buscar, elegir pasajes y guardarlos en un cuaderno', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   const author = page.getByRole('combobox', { name: 'Filtrar por autor' });
   await author.selectOption('Julio César');
@@ -52,7 +52,7 @@ test('biblioteca Examinator: buscar, elegir pasajes y guardarlos en un cuaderno'
 });
 
 test('tres autores y navegación por cita', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   const author=page.getByRole('combobox',{name:'Filtrar por autor'});
   await author.selectOption('Cornelio Nepote');
@@ -70,7 +70,7 @@ test('tres autores y navegación por cita', async ({ page }) => {
 });
 
 test('la caché offline incluye realmente las 28 obras completas y el arranque', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
@@ -108,7 +108,7 @@ test('la caché offline incluye realmente las 28 obras completas y el arranque',
 });
 
 test('la biblioteca funciona montada en la subcarpeta de GitHub Pages', async ({ page }) => {
-  await page.goto('/CuadernoTextosLatinos/');
+  await page.goto('/CuadernoTextosLatinos/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.getByRole('combobox',{name:'Filtrar por autor'}).selectOption('Julio César');
   await page.locator('.lib-sidebar .work-row').filter({hasText:'De bello Gallico'}).click();
@@ -122,7 +122,7 @@ test('la biblioteca funciona montada en la subcarpeta de GitHub Pages', async ({
 });
 
 test('selecciona exactamente parte de una frase sin copiar la referencia', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
   const add = page.getByRole('button', { name: 'Añadir selección a mis textos' });
@@ -141,7 +141,7 @@ test('selecciona exactamente parte de una frase sin copiar la referencia', async
 });
 
 test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de frase', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
   // showWork carga el JSON de forma asíncrona: esperar al lector, no asumir
@@ -170,7 +170,7 @@ test('selección nativa que abarca cuatro pasajes y empieza y termina a mitad de
 });
 
 test('la selección fuera del lector no activa el botón de incorporación', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await expect(page.locator('#phase2-status')).toContainText('Biblioteca cargada');
   await page.locator('.lib-sidebar .work-row').filter({ hasText: 'De bello Gallico' }).click();
   const add = page.getByRole('button',{ name:'Añadir selección a mis textos' });

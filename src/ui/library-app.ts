@@ -10,6 +10,10 @@ import type { CorpusSnapshot } from '../ports/corpus-repository.js';
 import { readReaderSelection, type ReaderFragment } from './reader-selection.js';
 import { IndexedDbCorpusRepository, RevisionConflictError } from '../storage/indexeddb-corpus-repository.js';
 import { createEditionPane } from './edition-app.js';
+import type { GrammarTag } from '../core/model.js';
+import { allGrammarTags, attachGrammarTags, catalogDepth, findTagByLabel,
+  GRAMMAR_GROUP_IDS, isCustomTagLabelValid, matchesGrammarFilters, matchesGrammarTag,
+} from '../core/grammar-tags.js';
 
 type Tab = 'library' | 'texts' | 'notebooks' | 'compose';
 const repository = new IndexedDbCorpusRepository();
@@ -43,6 +47,69 @@ function field(labelText: string, value: string, change: (value:string)=>void, m
 }
 function notify(id: string): void { window.dispatchEvent(new CustomEvent(id)); }
 
+/** Selector de árboles compacto: grupo/forma/función nunca se confunden. */
+function grammarPicker(tags:readonly GrammarTag[],selected:ReadonlySet<string>,
+  changed:(id:string,checked:boolean)=>void,cls:string):HTMLElement{
+  const root=el('div',cls);
+  const byParent=new Map<string|null,GrammarTag[]>();
+  for(const tag of tags){
+    const siblings=byParent.get(tag.parentId)??[];
+    siblings.push(tag);byParent.set(tag.parentId,siblings);
+  }
+  function addChildren(parent:string,body:HTMLElement,level=0):void{
+    for(const tag of byParent.get(parent)??[]){
+      const label=el('label','grammar-item');
+      label.style.setProperty('--level',String(Math.min(level,3)));
+      const input=el('input');
+      input.type='checkbox';
+      input.checked=selected.has(tag.id);
+      input.setAttribute('aria-label',tag.label);
+      input.addEventListener('change',()=>changed(tag.id,input.checked));
+      label.append(input,el('span','',tag.label));
+      body.append(label);
+      if(level<5)addChildren(tag.id,body,level+1);
+    }
+  }
+  for(const groupId of GRAMMAR_GROUP_IDS){
+    const group=tags.find(tag=>tag.id===groupId);
+    if(!group)continue;
+    const details=el('details','grammar-group');
+    details.open=tags.some(tag=>selected.has(tag.id) &&
+      matchesGrammarTag(tag.id,groupId,tags));
+    details.append(el('summary','',group.label));
+    const body=el('div','grammar-group-body');
+    // El nodo padre es seleccionable por sí mismo.
+    const label=el('label','grammar-item grammar-root');
+    const input=el('input');input.type='checkbox';
+    input.checked=selected.has(groupId);
+    input.setAttribute('aria-label',group.label);
+    input.addEventListener('change',()=>changed(groupId,input.checked));
+    label.append(input,el('span','','Etiquetar: '+group.label));
+    body.append(label);
+    addChildren(groupId,body);
+    details.append(body);root.append(details);
+  }
+  const custom=tags.filter(tag=>tag.kind==='custom');
+  if(custom.length){
+    const details=el('details','grammar-group');
+    details.open=custom.some(tag=>selected.has(tag.id));
+    details.append(el('summary','','Etiquetas personalizadas'));
+    const body=el('div','grammar-group-body');
+    for(const tag of custom){
+      const label=el('label','grammar-item');
+      label.style.setProperty('--level',String(catalogDepth(tag,tags)));
+      const input=el('input');input.type='checkbox';
+      input.checked=selected.has(tag.id);
+      input.setAttribute('aria-label',tag.label);
+      input.addEventListener('change',()=>changed(tag.id,input.checked));
+      label.append(input,el('span','',tag.label));
+      body.append(label);
+    }
+    details.append(body);root.append(details);
+  }
+  return root;
+}
+
 export function mountLibraryApp(root: HTMLElement): void {
   let snapshot: CorpusSnapshot | null = null;
   let catalogue: LibraryEntry[] = [];
@@ -56,6 +123,9 @@ export function mountLibraryApp(root: HTMLElement): void {
   let genreFilter = 'all';
   let query = '';
   let ownQuery = '';
+  const tagFilters=new Set<string>();
+  const selectedTagIds=new Set<string>();
+  let pendingCustomTags:GrammarTag[]=[];
   let editingId: string | null = null;
   let draft = emptyDraft();
   let dirty = false;
@@ -101,7 +171,10 @@ export function mountLibraryApp(root: HTMLElement): void {
     if (t===tab)return;
     if (tab==='compose' && !await composer.flush())return;
     if(t!==tab && !confirmDiscard())return;
-    if(t!=='texts'){draft=emptyDraft();dirty=false;editingId=null;}
+    if(t!=='texts'){
+      draft=emptyDraft();dirty=false;editingId=null;
+      selectedTagIds.clear();pendingCustomTags=[];
+    }
     if(t!=='library'){selectedFragment=null;window.getSelection()?.removeAllRanges();}
     tab=t;
     if(t==='compose')await composer.open();
@@ -116,6 +189,9 @@ export function mountLibraryApp(root: HTMLElement): void {
       author:text.source.author??'',work:text.source.work??'',reference:text.source.reference??'',
     };
     editingId=text.id;
+    selectedTagIds.clear();
+    for(const id of text.tagIds)selectedTagIds.add(id);
+    pendingCustomTags=[];
     dirty=false;tab='texts';render();
   }
   /**
@@ -157,7 +233,8 @@ export function mountLibraryApp(root: HTMLElement): void {
       author:activeWork.author,work:activeWork.latin,reference:frag.reference,
       latin:frag.latin,
     };
-    editingId=null;dirty=true;tab='texts';selectedFragment=null;render();
+    editingId=null;selectedTagIds.clear();pendingCustomTags=[];
+    dirty=true;tab='texts';selectedFragment=null;render();
     message('Fragmento de '+frag.wordCount+' palabras incorporado al editor. Pulsa «Guardar texto».');
   }
 
@@ -189,11 +266,19 @@ export function mountLibraryApp(root: HTMLElement): void {
     finally{busy=false;}
   }
   function renderCatalog(): HTMLElement {
+    // Reproduce el patrón comprobado de Examinator2: catálogo filtrable a la
+    // izquierda, lectura y cita del pasaje a la derecha. Solo UI; las obras,
+    // las selecciones y el almacenamiento conservan sus contratos originales.
     const main=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
+    sidebar.setAttribute('aria-label','Buscar autores y obras');
+    const sidebarHead=el('div','lib-sidebar-heading');
+    sidebarHead.append(el('h2','','Autores y obras'),
+      el('p','hint','Busca un autor o una obra y elige un título para leerlo.'));
+    sidebar.append(sidebarHead);
     const filters=el('div','lib-filters');
     const f=el('input','field-control');
-    f.type='search';f.placeholder='Buscar autor u obra…';f.value=query;f.setAttribute('aria-label','Buscar autor u obra');
+    f.type='search';f.placeholder='Autor u obra…';f.value=query;f.setAttribute('aria-label','Buscar autor u obra');
     const select=el('select','field-control');select.setAttribute('aria-label','Filtrar por autor');
     const authors=[...new Set(catalogue.map(x=>x.author))].sort(cmp.compare);
     for(const author of ['all',...authors]){
@@ -201,51 +286,77 @@ export function mountLibraryApp(root: HTMLElement): void {
       option.value=author;select.append(option);
     }
     select.value=authorFilter;
-    const genre=el('select','field-control');
-    genre.setAttribute('aria-label','Filtrar por género');
+    const genre=el('select','field-control');genre.setAttribute('aria-label','Filtrar por género');
     const genres=[...new Set(catalogue.map(x=>x.genre))].sort(cmp.compare);
-    for(const name of ['all',...genres]) {
+    for(const name of ['all',...genres]){
       const option=el('option','',name==='all'?'Todos los géneros':name);
       option.value=name;genre.append(option);
     }
     genre.value=genreFilter;
-    const hints=el('p','hint','Biblioteca incluida · obras disponibles sin conexión tras la primera carga.');
+    const selectRow=el('div','lib-filter-row');selectRow.append(select,genre);
     const list=el('div','work-list');
-    const counter=el('small','muted');
+    list.setAttribute('aria-label','Obras encontradas');
+    const counter=el('span','lib-result-count');
+    counter.setAttribute('role','status');
+    counter.setAttribute('aria-live','polite');
+    const clear=button('Limpiar filtros',()=>{
+      query='';authorFilter='all';genreFilter='all';f.value='';
+      select.value='all';genre.value='all';updateList();f.focus();
+    },'btn btn-outline lib-clear-filters');
+    const feedback=el('div','lib-filter-feedback');feedback.append(counter,clear);
     const updateList=()=>{
-      const matches=searchWorks(catalogue,query,authorFilter).filter(item=>genreFilter==='all'||item.genre===genreFilter);
-      counter.textContent=matches.length+' obra(s) encontradas';
+      const matches=searchWorks(catalogue,query,authorFilter)
+        .filter(item=>genreFilter==='all'||item.genre===genreFilter);
+      counter.textContent=matches.length+' de '+catalogue.length+' obras';
+      clear.disabled=!query&&authorFilter==='all'&&genreFilter==='all';
       list.replaceChildren();
-      for(const item of matches) {
-        const b=el('button','work-row'+(activeWork?.urn===item.urn?' active':''));
-        b.type='button';
-        const top=el('strong','work-author',item.author);
-        const title=el('span','work-title',item.latin || item.title);
-        const info=el('span','work-desc',item.title+' · '+item.count+' pasajes');
-        const tag=el('span','work-offline','Incluida');
-        b.append(top,title,info,tag);
-        b.addEventListener('click',()=>{void showWork(item);});
-        list.append(b);
+      // Encabezados por autor: el alumno/docente recorre el corpus sin
+      // desplegar listas, y la búsqueda sigue siendo ortográficamente flexible.
+      const groups=new Map<string,LibraryEntry[]>();
+      for(const item of matches){
+        const group=groups.get(item.author)??[];
+        group.push(item);groups.set(item.author,group);
       }
-      if(!matches.length)list.append(el('p','hint','No hay obras con esos filtros.'));
+      for(const [author,works] of groups){
+        const section=el('section','lib-author-group');
+        const title=el('div','lib-author-label');
+        title.append(el('h3','',author),el('span','lib-author-count',String(works.length)));
+        section.append(title);
+        for(const item of works){
+          const row=el('button','work-row'+(activeWork?.urn===item.urn?' active':''));
+          row.type='button';
+          row.setAttribute('aria-label',item.author+', '+(item.latin||item.title));
+          row.setAttribute('aria-pressed',String(activeWork?.urn===item.urn));
+          const heading=el('span','work-title',item.latin||item.title);
+          const subtitle=el('span','work-desc',item.title+' · '+item.count+' pasajes');
+          const source=el('span','work-offline','Incluida · sin conexión');
+          row.append(heading,subtitle,source);
+          row.addEventListener('click',()=>{void showWork(item);});
+          section.append(row);
+        }
+        list.append(section);
+      }
+      if(!matches.length)list.append(el('p','hint','No hay obras con esos filtros. Prueba a buscar por autor o por título.'));
     };
     f.addEventListener('input',()=>{query=f.value;updateList();});
     select.addEventListener('change',()=>{authorFilter=select.value;updateList();});
     genre.addEventListener('change',()=>{genreFilter=genre.value;updateList();});
-    filters.append(f,select,genre,counter,hints);
+    filters.append(f,selectRow,feedback);
     sidebar.append(filters,list);
     updateList();
     const reader=el('section','lib-reader');
-    if(!activeWork) {
+    reader.setAttribute('aria-label','Lector de textos latinos');
+    if(!activeWork){
       const empty=el('div','empty-reader');
-      empty.append(el('h2','','Biblioteca latina'),el('p','','Selecciona una obra en la columna izquierda para leerla y extraer un fragmento.'));
+      empty.append(el('h2','','Lector de textos'),el('p','','Selecciona una obra en la columna izquierda para leerla y extraer un fragmento.'));
       const online=el('p','hint');
-      online.textContent='César, Eutropio y Cornelio Nepote están incorporados. El acceso a otros autores se podrá añadir después, por conexión.';
+      online.textContent='César, Eutropio y Cornelio Nepote están incluidos. El acceso a otros autores se podrá incorporar en una fase posterior.';
       empty.append(online);reader.append(empty);
     }else{
       const head=el('div','reader-head');
-      const tit=el('div');
+      const tit=el('div','reader-heading');
       tit.append(el('h2','',activeWork.author),el('p','reader-work',activeWork.latin+' · '+activeWork.title));
+      const readerTools=el('div','reader-tools');
       const citation=el('input','field-control citation-input');
       citation.placeholder='Ir a 1.1 / 1.1.2'; citation.setAttribute('aria-label','Ir a pasaje');
       const go=button('Ir a',()=>{
@@ -257,12 +368,11 @@ export function mountLibraryApp(root: HTMLElement): void {
         message('Mostrando el pasaje '+citation.value+'.');
       },'btn btn-outline');
       citation.addEventListener('keydown',event=>{if(event.key==='Enter')go.click();});
-      head.append(tit,citation,go);
-      const readInfo=el('p','hint','Selecciona directamente las palabras que quieras, incluso dentro de una frase o entre varios párrafos. En iPad, mantén pulsado y ajusta la selección con los tiradores.');
+      readerTools.append(citation,go);
+      head.append(tit,readerTools);
+      const readInfo=el('p','hint','Selecciona palabras libremente, incluso dentro de una frase o entre varios párrafos. En iPad, mantén pulsado y ajusta los tiradores.');
       const readerLines=el('div','reader-lines');
       readerLines.setAttribute('aria-label','Texto latino seleccionable');
-      // El lector completo permite arrastrar la selección a través de tantos
-      // párrafos como se necesite. No se limita a bloques de 45 pasajes.
       activeWork.lines.forEach((line,index)=>{
         const row=el('div','reader-line');
         row.dataset.index=String(index);
@@ -281,20 +391,18 @@ export function mountLibraryApp(root: HTMLElement): void {
       const add=button('Añadir selección a mis textos',useFragment,'btn btn-primary');
       add.dataset.useSelection='true';
       add.disabled=!selectedFragment || !ready();
-      // Safari puede colapsar el rango al tocar el botón: guardamos el texto
-      // previamente extraído antes de que cambie el foco.
       add.addEventListener('pointerdown',()=>{preservingSelection=true;});
       add.addEventListener('click',()=>{preservingSelection=false;});
       add.addEventListener('pointercancel',()=>{preservingSelection=false;});
-      const clear=button('Limpiar',()=>{
+      const clearSelection=button('Limpiar',()=>{
         selectedFragment=null;
         preservingSelection=false;
         window.getSelection()?.removeAllRanges();
         syncReaderSelection();
       },'btn btn-outline');
-      clear.dataset.clearSelection='true';
-      clear.disabled=!selectedFragment;
-      selection.append(description,add,clear);
+      clearSelection.dataset.clearSelection='true';
+      clearSelection.disabled=!selectedFragment;
+      selection.append(description,add,clearSelection);
       const source=el('p','source-reference');
       source.append(el('span','',activeWork.editorial+' '));
       const link=el('a','','Fuente y edición');
@@ -309,14 +417,34 @@ export function mountLibraryApp(root: HTMLElement): void {
   function renderMyTexts(): HTMLElement {
     const shell=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
-    sidebar.append(el('h2','','Mis textos'));
+    sidebar.append(el('h2','','Mis textos'),
+      el('p','hint','Textos de la biblioteca guardados y fragmentos que hayas escrito tú.'));
     const newBtn=button('Nuevo texto',()=>{
       if(!confirmDiscard())return;
-      draft=emptyDraft();editingId=null;dirty=false;render();
+      draft=emptyDraft();editingId=null;dirty=false;
+      selectedTagIds.clear();pendingCustomTags=[];
+      render();
     },'btn btn-primary');
     const find=el('input','field-control');
     find.type='search';find.placeholder='Buscar en mis textos…';find.value=ownQuery;
     find.setAttribute('aria-label','Buscar en mis textos');
+    const tagFilterDetails=el('details','grammar-filter');
+    const tagFilterSummary=el('summary','','Filtrar por etiquetas gramaticales');
+    tagFilterDetails.append(tagFilterSummary);
+    const tags=allGrammarTags(snapshot?.corpus??{schemaVersion:1,texts:[],tags:[],notebooks:[]});
+    const filterBody=el('div','grammar-filter-inner');
+    filterBody.append(el('p','hint','Marca varias etiquetas para encontrar textos que cumplan todas las condiciones. Una etiqueta general incluye sus subtipos.'));
+    const clearFilters=button('Quitar filtros de etiquetas',()=>{
+      tagFilters.clear();render();
+    },'btn btn-outline');
+    filterBody.append(grammarPicker(tags,tagFilters,(id,checked)=>{
+      if(checked)tagFilters.add(id);else tagFilters.delete(id);
+      draw();
+      clearFilters.disabled=!tagFilters.size;
+    },'grammar-filter-choices'),clearFilters);
+    clearFilters.disabled=!tagFilters.size;
+    tagFilterDetails.append(filterBody);
+    tagFilterDetails.open=tagFilters.size>0;
     const list=el('div','work-list');
     const draw=()=>{
       list.replaceChildren();
@@ -324,19 +452,25 @@ export function mountLibraryApp(root: HTMLElement): void {
       if(!corpus)return;
       const needle=foldLatin(ownQuery);
       const matches=corpus.texts.filter(t=>
-        !needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle)
+        (!needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle))
+        && matchesGrammarFilters(t.tagIds,[...tagFilters],tags)
       ).sort((a,b)=>cmp.compare(a.title,b.title));
       for(const entry of matches){
         const b=el('button','work-row'+(editingId===entry.id?' active':''));
         b.type='button';
         b.append(el('strong','',entry.title),el('span','work-desc',[entry.source.author,entry.source.work,entry.source.reference].filter(Boolean).join(' · ')));
+        if(entry.tagIds.length){
+          const label=el('span','work-tags',
+            entry.tagIds.map(id=>tags.find(tag=>tag.id===id)?.label??id).join(' · '));
+          b.append(label);
+        }
         b.addEventListener('click',()=>editText(entry.id));
         list.append(b);
       }
       if(!matches.length)list.append(el('p','hint','Todavía no hay textos con ese filtro.'));
     };
     find.addEventListener('input',()=>{ownQuery=find.value;draw();});
-    sidebar.append(newBtn,find,list);draw();
+    sidebar.append(newBtn,find,tagFilterDetails,list);draw();
     const editor=el('section','editor-pane');
     editor.append(el('h2','',editingId?'Editar texto':'Nuevo texto'));
     const form=el('form','editor-form');
@@ -348,13 +482,50 @@ export function mountLibraryApp(root: HTMLElement): void {
       field('Libro, capítulo o pasaje',draft.reference,bind('reference')),
       field('Texto latino',draft.latin,bind('latin'),true),
     );
+    const grammar=el('section','grammar-editor');
+    grammar.append(el('h3','','Etiquetas gramaticales'),
+      el('p','hint','Selección docente manual. Clasifica por separado construcción, tiempo y voz del infinitivo, funciones sintácticas y pronombres. No se asignan etiquetas por IA.'));
+    grammar.append(grammarPicker(allGrammarTags(snapshot?.corpus??{
+      schemaVersion:1,texts:[],tags:[],notebooks:[],
+    },pendingCustomTags),selectedTagIds,(id,checked)=>{
+      if(checked)selectedTagIds.add(id);else selectedTagIds.delete(id);
+      dirty=true;message('Etiquetas pendientes de guardar. Pulsa «Guardar texto».');
+    },'grammar-editor-choices'));
+    const customRow=el('div','grammar-custom-row');
+    const customInput=el('input','field-control');
+    customInput.placeholder='Nueva etiqueta personalizada';
+    customInput.setAttribute('aria-label','Nueva etiqueta personalizada');
+    const addCustom=button('Añadir etiqueta',()=>{
+      const label=customInput.value.trim();
+      if(!isCustomTagLabelValid(label)){
+        message('Escribe una etiqueta personalizada de 1 a 160 caracteres.',true);return;
+      }
+      const already=findTagByLabel(label,allGrammarTags(snapshot?.corpus??{
+        schemaVersion:1,texts:[],tags:[],notebooks:[],
+      },pendingCustomTags));
+      if(already){
+        selectedTagIds.add(already.id);
+        message('Etiqueta existente seleccionada. Guarda el texto.');
+      }else{
+        const tag:GrammarTag={id:'custom.'+crypto.randomUUID(),label,
+          kind:'custom',parentId:null};
+        pendingCustomTags.push(tag);selectedTagIds.add(tag.id);
+        message('Etiqueta personalizada añadida al borrador. Guarda el texto.');
+      }
+      dirty=true;render();
+    },'btn btn-outline');
+    customRow.append(customInput,addCustom);
+    grammar.append(customRow);
+    form.append(grammar);
     const action=el('div','editor-actions');
     const save=button('Guardar texto',async()=>{
       if(!ready())return;
       if(!draft.title.trim()||!draft.latin.trim()){message('El título y el texto latino son obligatorios.',true);return;}
       const id=editingId??freshId();
-      const ok=await transaction(corpus=>upsertText(corpus,draft,id,new Date().toISOString()));
-      if(ok){editingId=id;draft.id=id;dirty=false;render();}
+      const chosen=[...selectedTagIds],customs=[...pendingCustomTags];
+      const ok=await transaction(corpus=>attachGrammarTags(
+        upsertText(corpus,draft,id,new Date().toISOString()),id,chosen,customs));
+      if(ok){editingId=id;draft.id=id;dirty=false;pendingCustomTags=[];render();}
     },'btn btn-primary');
     if(!snapshot)save.disabled=true;
     action.append(save);
@@ -364,7 +535,10 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar este texto?'+(references?' Se quitará también de '+references+' cuaderno(s).':'')+' Esta acción no se puede deshacer sin una copia de seguridad.'))return;
         const id=editingId!;
         const ok=await transaction(corpus=>deleteText(corpus,id));
-        if(ok){editingId=null;draft=emptyDraft();dirty=false;render();}
+        if(ok){
+          editingId=null;draft=emptyDraft();dirty=false;
+          selectedTagIds.clear();pendingCustomTags=[];render();
+        }
       },'btn btn-danger');
       action.append(remove);
       if(snapshot?.corpus.notebooks.length){
@@ -391,7 +565,8 @@ export function mountLibraryApp(root: HTMLElement): void {
   function renderNotebooks(): HTMLElement {
     const shell=el('div','library-columns');
     const sidebar=el('aside','lib-sidebar');
-    sidebar.append(el('h2','','Cuadernos'));
+    sidebar.append(el('h2','','1. Seleccionar textos'),
+      el('p','hint','Crea un cuaderno, incorpora textos y ordénalos. Después pulsa «Cuaderno terminado» para entrar en la preparación A4.'));
     const createName=el('input','field-control');
     createName.placeholder='Nombre del cuaderno';createName.maxLength=250;
     sidebar.append(createName);
@@ -414,8 +589,8 @@ export function mountLibraryApp(root: HTMLElement): void {
     const editor=el('section','editor-pane');
     const notebook=snapshot?.corpus.notebooks.find(b=>b.id===currentNotebook);
     if(!notebook) {
-      editor.append(el('h2','','Organiza tus materiales'));
-      editor.append(el('p','hint','Crea un cuaderno y añade textos guardados. Puedes cambiar su orden sin alterar la biblioteca.'));
+      editor.append(el('h2','','Selección de textos'));
+      editor.append(el('p','hint','Crea un cuaderno y añade los textos que quieras. «Cuaderno terminado» abrirá las preguntas, el vocabulario y la vista previa A4.'));
     } else {
       editor.append(el('h2','',notebook.title));
       const rename=el('input','field-control');rename.value=notebook.title;rename.maxLength=250;rename.setAttribute('aria-label','Cambiar nombre del cuaderno');
@@ -427,7 +602,19 @@ export function mountLibraryApp(root: HTMLElement): void {
         if(!window.confirm('¿Eliminar el cuaderno? Los textos continuarán guardados en Mis textos.'))return;
         if(await transaction(corpus=>removeNotebook(corpus,notebook.id))){currentNotebook='';render();}
       },'btn btn-danger'));
+      const finish=button('Cuaderno terminado',async()=>{
+        if(!ready()||!confirmDiscard())return;
+        await composer.open();
+        if(!await composer.importLegacyNotebook(notebook.id))return;
+        tab='compose';render();
+      },'btn btn-primary workflow-finish');
+      finish.disabled=!notebook.textIds.length;
+      actions.append(finish);
       editor.append(rename,actions);
+      editor.append(el('p','hint',
+        notebook.textIds.length
+          ? 'Al pulsar «Cuaderno terminado» se abre la preparación A4. Puedes volver aquí, añadir nuevos textos y pulsarlo otra vez; se conservan las preguntas y el vocabulario.'
+          : 'Añade al menos un texto para habilitar «Cuaderno terminado».'));
       const available=snapshot?.corpus.texts.filter(t=>!notebook.textIds.includes(t.id))??[];
       if(available.length){
         const row=el('div','editor-actions');
@@ -463,12 +650,18 @@ export function mountLibraryApp(root: HTMLElement): void {
   function render():void {
     root.replaceChildren();
     const head=el('div','workspace-header');
-    const brand=el('div');brand.append(el('p','phase','CUADERNO DE TEXTOS LATINOS · VERSIÓN 0.3.1'),el('h1','','Biblioteca y cuadernos'));
+    const brand=el('div','workspace-brand');
+    brand.append(el('p','phase','BIBLIOTECA · SELECCIÓN DE TEXTOS → PREPARACIÓN A4'),
+      el('h1','','Cuaderno de textos latinos'),
+      el('p','workspace-subtitle','Selecciona pasajes, prepara preguntas y compón tus cuadernos.'));
     const tag=el('span','offline-indicator',offlinePrepared?'Biblioteca preparada sin conexión':'Preparando biblioteca sin conexión');
     head.append(brand,tag);
     const tabs=el('nav','workspace-tabs');
     tabs.setAttribute('aria-label','Apartados del cuaderno');
-    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],['notebooks','Cuadernos'],['compose','Preparar cuaderno']];
+    // Conservar los nombres históricos de los apartados para accesibilidad
+    // y compatibilidad; el orden del flujo se explica dentro de Cuadernos.
+    const buttons:[Tab,string][]=[['library','Biblioteca'],['texts','Mis textos'],
+      ['notebooks','Cuadernos'],['compose','Preparar cuaderno']];
     for(const [key,title] of buttons) {
       const b=button(title,()=>setTab(key),'workspace-tab'+(tab===key?' current':''));
       b.setAttribute('aria-current',tab===key?'page':'false');

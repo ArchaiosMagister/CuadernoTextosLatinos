@@ -1,4 +1,4 @@
-name: Cuaderno estable + vista de prueba del rediseño PR14
+name: Cuaderno estable + prueba aislada del editor de cuadernos
 
 on:
   push:
@@ -42,11 +42,11 @@ jobs:
           test ! -e dist/prueba
       - name: Verificar en WebKit que ambas copias JSON de /prueba/ son recuperables
         run: node scripts/smoke-recovery.mjs
-      - name: Obtener revisión verificada de PR #14
+      - name: Obtener exactamente la revisión publicada para la prueba aislada
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 3fbc27d30e42be4ae16bf32726d6d615386c7ea8
+          ref: ${{ github.sha }}
           path: experimental
           persist-credentials: false
       - name: Compilar la versión experimental sin tocar la estable
@@ -81,7 +81,7 @@ jobs:
             '<div role="note" style="font:14px system-ui;'
             'padding:10px 14px;background:#fff3ce;color:#332700;'
             'border-bottom:1px solid #ba9941">'
-            '<strong>VISTA DE PRUEBA — REDISEÑO PR #14</strong>'
+            '<strong>VISTA DE PRUEBA — REDISEÑO DE CUADERNOS</strong>'
             ' · La web definitiva está en la dirección sin /prueba/.'
             ' Guarda una copia JSON de los cuadernos que crees aquí.'
             '</div>'
@@ -117,6 +117,7 @@ jobs:
           css=(preview/'styles.css').read_text()
           assert '.edition-preview-stack' in css
           assert '.simple-tabs' in css
+          assert '.notebook-first' in css
           assert '.simple-prepare-layout' in css
           # El puente Cuadernos -> editor debe estar en la copia publicada.
           editor=(preview/'ui/edition-app.js').read_text()
@@ -145,6 +146,11 @@ jobs:
           counts=(preview/'core/notebook-selection.js').read_text()
           assert 'summarizeSelection' in counts
           assert 'mountSimpleApp' in (preview/'main.js').read_text()
+          assert 'mountNotebookApp' in (preview/'main.js').read_text()
+          assert (preview/'ui/notebook-app.js').is_file()
+          assert (preview/'core/notebook-overview.js').is_file()
+          assert (preview/'core/online-sources.js').is_file()
+          assert 'addSourceToNotebook' in (preview/'ui/edition-app.js').read_text()
           tags=(preview/'core/grammar-tags.js').read_text()
           assert 'gram.inf.perfecto' in tags
           assert 'gram.inf.pasivo' in tags
@@ -167,7 +173,7 @@ jobs:
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}prueba/
+      url: ${{ steps.deployment.outputs.page_url }}prueba/?nuevo=1
     permissions:
       pages: write
       id-token: write
@@ -194,7 +200,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -209,7 +215,7 @@ jobs:
               "recuperar-prueba/index.html")
                 grep -q 'cuaderno-textos-latinos-workspace-prueba-pr10' /tmp/cuaderno-public ;;
               "prueba/index.html")
-                grep -q 'VISTA DE PRUEBA — REDISEÑO PR #14' /tmp/cuaderno-public ;;
+                grep -q 'VISTA DE PRUEBA — REDISEÑO DE CUADERNOS' /tmp/cuaderno-public ;;
               "prueba/styles.css")
                 grep -q 'edition-preview-stack' /tmp/cuaderno-public
                 grep -q 'min-height:0!important;height:auto!important' /tmp/cuaderno-public ;;
@@ -236,7 +242,14 @@ jobs:
                 grep -q "'cuaderno-textos-latinos-prueba-pr14'" /tmp/cuaderno-public ;;
               "prueba/service-worker.js")
                 grep -q 'cuaderno-preview-pr14-' /tmp/cuaderno-public ;;
+              "prueba/ui/notebook-app.js")
+                grep -q 'mountNotebookApp' /tmp/cuaderno-public ;;
+              "prueba/core/notebook-overview.js")
+                grep -q 'summarizeNotebook' /tmp/cuaderno-public ;;
+              "prueba/core/online-sources.js")
+                grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
               "prueba/main.js")
+                grep -q 'mountNotebookApp' /tmp/cuaderno-public
                 grep -q 'mountSimpleApp' /tmp/cuaderno-public
                 grep -q 'mountLibraryApp' /tmp/cuaderno-public ;;
             esac
@@ -262,7 +275,7 @@ jobs:
               .getByRole('button').first().waitFor({state:'visible',timeout:40000});
             const tabs=page.getByRole('navigation',{name:'Navegación principal'});
             if(await tabs.getByRole('button').count()!==2)throw Error('La interfaz debe tener dos apartados');
-            if(!(await page.locator('body').innerText()).includes('VISTA DE PRUEBA — REDISEÑO PR #14'))
+            if(!(await page.locator('body').innerText()).includes('VISTA DE PRUEBA — REDISEÑO DE CUADERNOS'))
               throw Error('Falta marca provisional');
             await page.getByRole('button',{name:'Buscar autores',exact:true}).click();
             await page.locator('.simple-work-item').first().waitFor();
@@ -277,6 +290,9 @@ jobs:
             await page.screenshot({path:'preview-redisenio-ipad.png',fullPage:false});
             await page.goto(url+'?classic=1',{waitUntil:'domcontentloaded'});
             await page.getByRole('button',{name:'Biblioteca',exact:true}).waitFor();
+            const beta=await page.goto(url+'?nuevo=1',{waitUntil:'domcontentloaded'});
+            await page.getByRole('button',{name:'+ Crear cuaderno'}).waitFor({state:'visible',timeout:40000});
+            if(beta?.status()!==200)throw Error('No carga el editor nuevo en la prueba aislada');
             console.log('Preview HTTP:',res?.status(),'2 apartados, editor A4 y vista clásica. Errores JS:',errors);
             if(res?.status()!==200||errors.length)throw Error('Fallo carga Safari WebKit');
           } finally {await browser.close();}
@@ -284,7 +300,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vista-redisenio-ipad-pr14
+          name: vista-redisenio-ipad-cuadernos
           path: preview-redisenio-ipad.png
           if-no-files-found: ignore
           retention-days: 7

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 test('exportar una versión y recuperarla en IndexedDB actualiza el campo, incluso tras recargar', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.locator('#diagnostics').evaluate((element) => { element.open = true; });
   await expect(page.locator('#diagnostics .phase')).toContainText('0.2.2');
   await expect(page.locator('#status')).toContainText('EJEMPLO sin guardar');
@@ -54,7 +54,7 @@ test('exportar una versión y recuperarla en IndexedDB actualiza el campo, inclu
 });
 
 test('bloquea copias que omitirían cambios sin guardar', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.locator('#diagnostics').evaluate((element) => { element.open = true; });
   await expect(page.locator('#status')).toContainText('EJEMPLO sin guardar');
   await page.getByRole('button', { name: 'Exportar copia JSON' }).click();
@@ -68,7 +68,7 @@ test('bloquea copias que omitirían cambios sin guardar', async ({ page }) => {
 });
 
 test('avisa si el JSON no contiene ningún texto de prueba', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.locator('#diagnostics').evaluate((element) => { element.open = true; });
   const validEmptyJson = await page.evaluate(async () => {
     const { createBackup } = await import('/core/backup.js');
@@ -86,7 +86,7 @@ test('avisa si el JSON no contiene ningún texto de prueba', async ({ page }) =>
 });
 
 test('rechaza una copia manipulada sin borrar el texto local', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?classic=1');
   await page.locator('#diagnostics').evaluate((element) => { element.open = true; });
   await page.locator('#latin-test').fill('Salvē, amīce');
   await page.getByRole('button', { name: 'Guardar texto de prueba' }).click();
