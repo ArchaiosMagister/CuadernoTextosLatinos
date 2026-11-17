@@ -41,7 +41,8 @@ test('el resumen gramatical se actualiza por cuaderno, sin modificar otro cuader
   page.once('dialog',dialog=>dialog.accept('Segundo'));
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
   await page.getByRole('button',{name:'Biblioteca',exact:true}).click();
-  await page.getByRole('button',{name:'Mis textos',exact:true}).click();
+  await page.locator('.exlib-more>summary').click();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Mis textos',exact:true}).click();
   await page.getByRole('button',{name:'Texto A',exact:true}).click();
   await expect(page.locator('.simple-grammar-summary')).not.toContainText('Ablativo absoluto');
   await page.reload();
