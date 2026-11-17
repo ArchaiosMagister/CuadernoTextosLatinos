@@ -540,6 +540,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     const shell=el('section','exlib'+(catalogueMode==='my'?' exlib--own':'')),
       appbar=el('div','exlib-appbar'),header=el('div','exlib-head');
     shell.setAttribute('aria-label','Biblioteca de textos latinos');
+    shell.setAttribute('role','dialog');shell.setAttribute('aria-modal','true');
     appbar.append(el('span','exlib-brand','Cuaderno de textos latinos'));
     appbar.append(button('Cuadernos',async()=>{
       if(!await composer.flush())return;
@@ -658,8 +659,11 @@ export function mountNotebookApp(root:HTMLElement):void{
         const at=findCitation(work!,location.value);
         if(at<0){notice('No encuentro ese pasaje.',true);return;}
         startReaderAt=Math.max(0,at-12);readerSelection=null;readerPickedByTap=false;render();
-        root.querySelector<HTMLElement>('.exlib-reading .simple-reader-line[data-index="'+at+'"]')
-          ?.scrollIntoView({block:'center'});
+        const destination=root.querySelector<HTMLElement>(
+          '.exlib-reading .simple-reader-line[data-index="'+at+'"]');
+        destination?.scrollIntoView({block:'center'});
+        destination?.classList.add('flash');
+        window.setTimeout(()=>destination?.classList.remove('flash'),1200);
       };
       location.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();jump();}});
       controls.append(location,button('Ir a',jump,'exlib-jump-button'));
