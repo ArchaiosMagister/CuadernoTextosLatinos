@@ -164,7 +164,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: d8dd04da8b88fcfbab7e6a8c83827bf82de24fe6
+          ref: 4b557ab860613f9b0b7aecf6be411c14d3de5ad8
           path: evaluation
           persist-credentials: false
       - name: Compilar y comprobar selector de Examinator2 para iPad
@@ -399,6 +399,17 @@ jobs:
             await page.getByRole('searchbox',{name:'Autor u obra'}).fill('Eutropio');
             await page.locator('.exlib-row.available .exlib-item').first().click();
             await page.locator('.exlib-reader-lines .simple-reader-line').first().waitFor();
+            const fit=await page.locator('.exlib').evaluate(box=>{
+              const viewport=box.getBoundingClientRect();
+              const bar=box.querySelector('.exlib-appbar').getBoundingClientRect();
+              const catalog=box.querySelector('.exlib-catalog').getBoundingClientRect();
+              const reading=box.querySelector('.exlib-reading').getBoundingClientRect();
+              return {top:viewport.top,width:viewport.width,bar:bar.height,
+                column:catalog.width,reading:reading.width};
+            });
+            if(fit.top!==0||fit.width!==820||fit.bar!==48||
+               fit.column!==440||fit.reading<350)
+              throw Error('La biblioteca ya no reproduce el diseño original: '+JSON.stringify(fit));
             await page.screenshot({path:'biblioteca-examinator2-ipad.png',fullPage:false});
             console.log('Examinator2 preview:',response.status(),'lector y búsqueda disponibles en iPad');
             console.log('Preview HTTP:',res?.status(),'2 apartados, editor A4 y vista clásica. Errores JS:',errors);
