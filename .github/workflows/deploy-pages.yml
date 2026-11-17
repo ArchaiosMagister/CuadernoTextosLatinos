@@ -265,7 +265,7 @@ jobs:
             shutil.copy2(source/name,destination/name)
           for name in ['js','lib','fonts']:
             shutil.copytree(source/name,destination/name)
-          every={p.relative_to(source):hashlib.sha256(p.read_bytes()).hexdigest()
+          every={p.relative_to(destination):hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in destination.rglob('*') if p.is_file()}
           for rel,digest in every.items():
             assert hashlib.sha256((source/rel).read_bytes()).hexdigest()==digest, str(rel)
@@ -479,7 +479,7 @@ jobs:
             if(originalResponse?.status()!==200)
               throw Error('No se abre Examinator2 original');
             await exact.waitForFunction(()=>Boolean(window.M?.S&&
-              document.querySelector('#btnLib')?.onclick),{timeout:120000});
+              document.querySelector('#btnLib')?.onclick),undefined,{timeout:120000});
             await exact.getByRole('button',{name:'Biblioteca',exact:true}).click();
             await exact.locator('#lib .lhead').waitFor({state:'visible',timeout:30000});
             await exact.locator('#lib .lrow').first().waitFor({state:'visible',timeout:90000});
