@@ -292,3 +292,22 @@ test('un metadata global eliminado impide nuevas escrituras en vez de reabrir ep
   await assert.rejects(edit(repo,1,'No debe guardarse'),/Falta la revisión global/);
   assert.deepEqual(await repo.loadEdition('edition.1'),initial);
 });
+
+test('eliminar una edición borra su historial atómicamente y conserva las otras y el corpus',async()=>{
+  const {repo}=setup();
+  await create(repo,'edition.1');
+  await create(repo,'edition.2');
+  await edit(repo,1,'Edición preservada','edition.2');
+  const before=await repo.loadEdition('edition.2');
+  const epoch=(await repo.snapshot()).workspaceRevision;
+  await assert.rejects(repo.deleteEdition('edition.1',0),WorkspaceConflictError);
+  assert.equal((await repo.snapshot()).workspaceRevision,epoch);
+  await repo.deleteEdition('edition.1',1);
+  assert.equal(await repo.loadEdition('edition.1'),null);
+  assert.deepEqual(await repo.history('edition.1'),[]);
+  assert.deepEqual(await repo.loadEdition('edition.2'),before);
+  assert.equal((await repo.history('edition.2')).length,2);
+  assert.equal((await repo.snapshot()).workspaceRevision,epoch+1);
+  await assert.rejects(repo.deleteEdition('edition.1',1),WorkspaceConflictError);
+  assert.deepEqual(await repo.loadEdition('edition.2'),before);
+});

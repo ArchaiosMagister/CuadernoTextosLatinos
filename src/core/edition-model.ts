@@ -132,6 +132,18 @@ export interface SourceLinkV1 {
   importedAt: string;
 }
 
+/** Fragmento gramatical anclado a offsets UTF-16, con revisión tras editar el latín.
+ * Campo opcional en ediciones V1: las copias históricas permanecen sin cambios. */
+export interface GrammarSpanV1 {
+  id: EntityId;
+  startUtf16: number;
+  endUtf16: number;
+  exact: string;
+  textFingerprint: string;
+  tagIds: string[];
+  reviewRequired: boolean;
+}
+
 export interface TextPlacementV1 {
   id: EntityId;
   source: SourceLinkV1;
@@ -139,6 +151,8 @@ export interface TextPlacementV1 {
   questions: QuestionV1[];
   vocabulary: VocabularyEntryV1[];
   grammaticalTagIds: string[];
+  /** Omisión deliberada en documentos anteriores a las etiquetas de fragmento. */
+  grammaticalSpans?: GrammarSpanV1[];
   reviewFlags: ReviewFlagV1[];
 }
 
