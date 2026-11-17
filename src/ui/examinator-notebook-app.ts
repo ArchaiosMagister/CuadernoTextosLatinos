@@ -253,7 +253,7 @@ function pasteText():void{
   for(const [field,name] of [
     ['title','Título'],['author','Autor'],['work','Obra'],
     ['reference','Referencia'],['latin','Texto latino'],
-  ]){
+  ] as const){
     const label=el('label','field'),caption=el('span','',name);
     const input=field==='latin'?el('textarea'):el('input');
     if(field==='latin')(input as HTMLTextAreaElement).rows=7;
