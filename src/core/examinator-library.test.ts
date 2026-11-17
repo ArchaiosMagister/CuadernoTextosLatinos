@@ -17,6 +17,14 @@ test('catalogación idéntica en autor, obra, título latino, género y descarga
   assert.deepEqual(searchExaminatorWorks(catalog.entries,'','',true,new Set([entries[0]!.urn])),[entries[0]]);
   assert.equal(originalWorkUrl(catalog,entries[1]!),base+entries[1]!.path);
 });
+test('conserva alias docentes de las obras ya incluidas sin alterar el autor original',()=>{
+  const records=[{...entries[0]!,author:'Caesar',
+    local:{author:'Julio César',title:'Guerra de las Galias',latin:'De bello Gallico'}}];
+  assert.equal(searchExaminatorWorks(records,'Julio César','',false,new Set()).length,1);
+  assert.equal(searchExaminatorWorks(records,'De bello Gallico','',false,new Set()).length,1);
+  assert.equal(searchExaminatorWorks(records,'Caesar','',false,new Set()).length,1);
+});
+
 test('no permite sustituir URLs ni añadir obras ajenas al catálogo',()=>{
   assert.throws(()=>parseExaminatorCatalogue({version:1,source:'other',
     baseUrl:'https://example.org/',entries}),/Fuente Perseus/);
