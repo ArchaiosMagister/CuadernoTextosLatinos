@@ -226,3 +226,73 @@ test('Decisión 1A: pegar texto sugiere Texto N pero conserva título escrito',a
   await expect(page.locator('.edition-paper-title').first()).toHaveText('La llegada a Roma');
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
 });
+
+test('Safari iPad: conserva fragmento y cita cuando el botón pierde la selección',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Prueba táctil de selección'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await page.locator('#lib .lf').fill('Eutropio');
+  await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
+  const reader=page.locator('#lib .rtext');
+  await expect(reader.locator('.rl').first()).toBeVisible();
+  const button=page.locator('#lib [data-act=use]');
+  await expect(button).toBeEnabled();
+  await expect(reader).toHaveCSS('user-select','text');
+  const expected=await page.evaluate(()=>{
+    const rx=document.querySelector('#lib .rtext .rl .rx');
+    if(!rx)throw Error('Falta el texto del lector');
+    const range=document.createRange();range.selectNodeContents(rx);
+    const text=range.toString().trim();
+    const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    return text;
+  });
+  await expect(page.locator('#lib .rsel')).toContainText('Selección:');
+  // Simular pérdida de foco iPad al tocar «Usar». La selección viva se pierde,
+  // pero la copia textual con la referencia debe permanecer.
+  await page.evaluate(()=>{
+    const btn=document.querySelector('#lib [data-act=use]');
+    btn.dispatchEvent(new Event('touchstart',{bubbles:true}));
+    window.getSelection().removeAllRanges();
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await expect(button).toBeEnabled();
+  await expect(page.locator('#lib .rsel')).toContainText('Selección:');
+  await button.click();
+  await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
+  await expect(page.locator('.edition-paper .edition-latin').first()).toContainText(expected);
+  await expect(page.locator('.edition-paper .edition-paper-source').first()).toContainText('Eutropio');
+});
+
+test('Safari iPad: no añade selección antigua tras abrir otra obra',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Prueba cambio de obra'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLib').click();
+  await page.locator('#lib .lf').fill('Eutropio');
+  await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
+  await expect(page.locator('#lib .rtext .rl').first()).toBeVisible();
+  await page.evaluate(()=>{
+    const rx=document.querySelector('#lib .rtext .rl .rx');
+    const range=document.createRange();range.selectNodeContents(rx);
+    const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await expect(page.locator('#lib .rsel')).toContainText('Selección:');
+  await page.locator('#lib .lf').fill('César');
+  await page.locator('#lib .lrow.have').filter({hasText:'César'}).first().click();
+  await expect(page.locator('#lib .rtext .rl').first()).toBeVisible();
+  await expect(page.locator('#lib [data-act=use]')).toBeEnabled();
+  await page.evaluate(()=>{
+    window.getSelection().removeAllRanges();
+    document.dispatchEvent(new Event('selectionchange'));
+  });
+  await expect(page.locator('#lib .rsel')).not.toContainText('Selección:');
+  await page.locator('#lib [data-act=use]').click();
+  await expect(page.locator('.edition-counter')).toHaveText('Sin textos');
+  await expect(page.locator('#lib .lhead')).toBeVisible();
+});
