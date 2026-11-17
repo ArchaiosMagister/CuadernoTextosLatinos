@@ -267,8 +267,17 @@ export function mountNotebookApp(root:HTMLElement):void{
       const counts=el('div','simple-counts');
       for(const t of info.counts){
         const row=el('div','simple-count-row');
-        row.append(el('span','',t.label),el('strong','',String(t.count)));
-        counts.append(row);
+        row.append(el('span','',t.label));
+        const jump=button(String(t.count),async()=>{
+          const active=composer.activeEdition();
+          const all=allGrammarTags(corpus!.corpus);
+          const hit=active?.placements.find(p=>p.grammaticalTagIds.some(id=>
+            matchesGrammarTag(id,t.id,all)));
+          if(hit&&await composer.selectPlacement(hit.id)){view='edit';render();}
+        },'notebook-count-jump');
+        jump.title='Ver el primer texto con '+t.label;
+        jump.setAttribute('aria-label',t.count+' textos: buscar '+t.label);
+        row.append(jump);counts.append(row);
       }
       card.append(counts);
     }else card.append(el('p','hint','Todavía no se han asignado etiquetas.'));
@@ -422,7 +431,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     actions.append(button('Biblioteca',()=>{view='sources';render();}));
     actions.append(button('Autores offline',()=>{view='authors';render();}));
     actions.append(button('Pegar texto',()=>{form=newForm();view='manual';render();}));
-    actions.append(button('Volver al cuadernos',async()=>{
+    actions.append(button('Volver a cuadernos',async()=>{
       if(!await composer.flush())return;
       await reload();stage='home';view='edit';render();
     }));
@@ -443,8 +452,20 @@ export function mountNotebookApp(root:HTMLElement):void{
     if(view==='sources')content.append(renderSources());
     else if(view==='authors')content.append(renderAuthors());
     else if(view==='manual')content.append(renderManual());
-    else if(edition.placements.length)content.append(composer.element);
-    else{
+    else if(edition.placements.length){
+      const tagBar=el('div','notebook-question-tags');
+      const selected=composer.activePlacement();
+      const catalog=allGrammarTags(corpus!.corpus);
+      const names=(selected?.grammaticalTagIds??[]).map(id=>catalog.find(t=>t.id===id)?.label??id);
+      tagBar.append(el('strong','','Construcciones del texto'),
+        el('span','',names.length?names.join(' · '):'Sin etiquetar'));
+      tagBar.append(button('Editar etiquetas',()=>{
+        tagsOpen=true;render();
+        root.querySelector<HTMLElement>('.notebook-editor-aside .simple-grammar')
+          ?.scrollIntoView({block:'nearest',behavior:'smooth'});
+      }));
+      content.append(tagBar,composer.element);
+    }else{
       const start=el('div','simple-start');
       start.append(el('h2','','Añade el primer texto'),
         el('p','','El cuaderno ya está guardado, pero aún no contiene preguntas ni fichas vacías.'));
