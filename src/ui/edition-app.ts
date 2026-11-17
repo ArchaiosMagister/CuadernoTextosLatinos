@@ -165,7 +165,7 @@ function formatPoints(p:TextPlacementV1):string {
 export const WORKING_EDITION_ID='ed.seleccion-textos';
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
-export function createEditionPane(options:{autoApply?:boolean}={}):{
+export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void}={}):{
   element:HTMLElement;
   open:()=>Promise<void>;
   flush:()=>Promise<boolean>;
@@ -180,6 +180,9 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
   selectPlacement:(placementId:string)=>Promise<boolean>;
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
+  addCollatinusVocabulary:(placementId:string,entries:readonly {
+    headword:string;lemma:string;meaning:string|null;note:string|null
+  }[])=>Promise<boolean>;
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
   addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
   removeGrammarSpan:(id:string)=>Promise<boolean>;
@@ -364,7 +367,7 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       session={...session,activePlacementId:place.id,mode:'text'};
       academics.clear();vocabPreview=null;exportReview=null;
       menu='questions';mobile='config';
-      if(autoApply){
+      if(autoApply && options.autoVocabulary!==false){
         const p=selection();
         if(p&&p.vocabulary.length===0){
           try{applyVocabularyAutomatically(p,true);await flush();}
@@ -505,7 +508,7 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       if(session&&entry)session={...session,activePlacementId:entry.id,mode:'text'};
       menu='questions';
       mobile='config';
-      if(autoApply&&entry){
+      if(autoApply&&options.autoVocabulary!==false&&entry){
         const currentPlacement=selection();
         if(currentPlacement&&currentPlacement.id===entry.id&&currentPlacement.vocabulary.length===0){
           try{applyVocabularyAutomatically(currentPlacement,true);await flush();}
@@ -882,6 +885,41 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       ()=>freshId('voc'),at));
     return decisions.filter(x=>x.selected).length;
   }
+  /** Propuestas del Collatinus original: respetan las entradas manuales y
+   * no se presentan como verificaciones filológicas individuales. */
+  async function addCollatinusVocabulary(placementId:string,entries:readonly {
+    headword:string;lemma:string;meaning:string|null;note:string|null
+  }[]):Promise<boolean>{
+    if(!draft||!current||!draft.placements.some(p=>p.id===placementId))return false;
+    if(!await flush())return false;
+    const p=draft.placements.find(p=>p.id===placementId);
+    if(!p)return false;
+    const clean=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLocaleLowerCase('es').trim();
+    const seen=new Set(p.vocabulary.flatMap(v=>[clean(v.headword),clean(v.lemma)]));
+    let order=p.vocabulary.reduce((m,v)=>Math.max(m,v.order),-1)+1;
+    const next:VocabularyEntryV1[]=[];
+    for(const entry of entries){
+      const headword=entry.headword.trim(),lemma=entry.lemma.trim();
+      if(!headword||!lemma||headword.length>500||seen.has(clean(headword))||
+         seen.has(clean(lemma)))continue;
+      seen.add(clean(headword));seen.add(clean(lemma));
+      next.push({
+        id:freshId('voc'),lemma,headword,meaning:entry.meaning?.trim()||null,
+        note:entry.note?.trim()||null,included:true,order:order++,
+        provenance:null,reviewState:'needs-review',origin:'generated',locked:false,
+      });
+    }
+    if(!next.length)return true;
+    apply((e,at)=>validateEdition({...e,updatedAt:at,
+      placements:e.placements.map(x=>x.id!==placementId?x:{
+        ...x,vocabulary:[...x.vocabulary,...next],
+      })}));
+    const ok=await flush();
+    if(ok)setMessage('Collatinus: '+next.length+
+      ' nombres propios o gentilicios incorporados como propuestas revisables.');
+    return ok;
+  }
   function prepareVocabulary(p:TextPlacementV1):void{
     if(!draft)return;
     try{
@@ -947,7 +985,8 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     panel.append(section);
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
-    panel.append(action(autoApply?'Lematizar y actualizar vocabulario':'Proponer vocabulario del texto',
+    panel.append(action(options.autoVocabulary===false?'Analizar otras palabras (opcional)'
+      :autoApply?'Lematizar y actualizar vocabulario':'Proponer vocabulario del texto',
       ()=>prepareVocabulary(p),'btn btn-primary'));
     renderVocabularySuggestions(panel,p);
     const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
@@ -1219,9 +1258,13 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     const layout=node('div','edition-layout');
     const editor=node('aside','edition-settings'+(mobile==='preview'?' edition-mobile-hidden':''));
     const navMenus=node('div','edition-menu-nav');
+    navMenus.setAttribute('role','navigation');
+    navMenus.setAttribute('aria-label','Secciones del cuaderno');
     for(const m of labels){
-      navMenus.append(action(m.label,()=>{menu=m.key;paint();},
-        'btn '+(menu===m.key?'btn-primary':'btn-outline')));
+      const tab=action(m.label,()=>{menu=m.key;paint();},
+        'btn '+(menu===m.key?'btn-primary':'btn-outline'));
+      tab.setAttribute('aria-current',String(menu===m.key?'page':'false'));
+      navMenus.append(tab);
     }
     editor.append(navMenus);
     const panel=node('div','edition-menu-content');
@@ -1243,6 +1286,8 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
     papers.addEventListener('touchend',()=>window.setTimeout(()=>academics.savePaperSelection(papers),80),{passive:true});
     const bar=node('div','edition-preview-bar');
     bar.append(node('strong','','Vista A4'));
+    if(options.onAddSource)bar.append(action('+ Añadir al cuaderno',
+      options.onAddSource,'btn btn-primary edition-add-source'));
     bar.append(numberField('Zoom (%)',zoom,50,130,5,value=>{zoom=value;paintPreview();}));
     bar.append(academics.renderPaperSelect(papers));
     // Los controles Anterior / Siguiente van justo encima del papel; no se
@@ -1256,6 +1301,7 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
   return {element,open:()=>refresh(),flush,importLegacyNotebook,
     openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource,
     createNotebookNamed,addSourceToNotebook,selectPlacement,
+    addCollatinusVocabulary,
     activePlacement:()=>selection()?structuredClone(selection()!):null,
     activeEdition:()=>draft?structuredClone(draft):null,
     setActiveTags,addGrammarSpan,removeGrammarSpan,renameActiveNotebook,closeEdition};
