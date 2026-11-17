@@ -18,6 +18,8 @@ export function summarizeNotebook(edition:NotebookEditionV1,corpus:CorpusV1):Not
       ? 'corpus:'+p.source.sourceId : 'placement:'+p.id;
     const tagIds=distinct.get(key)??new Set<string>();
     for(const id of p.grammaticalTagIds)tagIds.add(id);
+    for(const span of p.grammaticalSpans??[])
+      for(const id of span.tagIds)tagIds.add(id);
     distinct.set(key,tagIds);
   }
   const tags=allGrammarTags(corpus);

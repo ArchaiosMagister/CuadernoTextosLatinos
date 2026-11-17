@@ -1017,3 +1017,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .notebook-online .simple-manual {display:grid;gap:.6rem;}
 .notebook-online .simple-manual a {color:var(--accent);font-size:.82rem;}
 .notebook-online textarea {min-height:15rem;}
+
+/* Fase 4: etiquetas de fragmento sin edición accidental del latín. */
+.notebook-fragments {border:1px solid var(--edge);border-radius:.45rem;padding:.45rem;}
+.notebook-fragments>summary {font-size:.83rem;font-weight:700;cursor:pointer;color:var(--accent);}
+.notebook-fragment-editor {display:grid;gap:.4rem;padding:.5rem 0;}
+.notebook-fragment-editor textarea {font:italic 1rem Palatino,Georgia,serif;line-height:1.5;
+  min-height:8rem;max-width:100%;margin:0;resize:vertical;}
+.notebook-fragment-editor select {margin:0;max-width:100%;}
+.notebook-fragment-items {display:grid;gap:.35rem;}
+.notebook-fragment-row {display:flex;gap:.45rem;justify-content:space-between;
+  align-items:center;border:1px solid var(--edge);border-radius:.35rem;padding:.4rem;font-size:.8rem;}
+.notebook-fragment-row span {overflow-wrap:anywhere;min-width:0;}
+.notebook-fragment-row .btn {font-size:.75rem;min-height:2rem;padding:.25rem .4rem;}

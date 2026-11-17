@@ -96,10 +96,15 @@ export function mountNotebookApp(root:HTMLElement):void{
     if(!title?.trim()||title.trim()===source.edition.title)return;
     busy=true;
     try{
-      if(!await composer.openEdition(id)||!await composer.renameActiveNotebook(title))
-        throw new Error('No se ha podido cambiar el título.');
+      if(!await composer.flush())throw new Error('No se han guardado los cambios pendientes.');
+      const now=new Date().toISOString();
+      await workspace.commitEdition(id,source.revision,
+        {command:'ui.rename-from-notebooks',targetId:id,timestamp:now},previous=>{
+          if(!previous)throw new Error('El cuaderno no existe.');
+          return {...previous,title:title.trim(),updatedAt:now};
+        });
       await reload();render();notice('Título guardado sin cambiar textos, preguntas ni vocabulario.');
-    }catch(e){notice(String(e),true);}finally{busy=false;}
+    }catch(e){notice('No se ha podido renombrar: '+String(e),true);}finally{busy=false;}
   }
   async function deleteNotebook(id:string):Promise<void>{
     const original=editions.find(x=>x.edition.id===id);
@@ -111,7 +116,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       // Copia íntegra, verificable con SHA-256, anterior a la eliminación.
       const backup=await createWorkspaceBackup(workspace);
       saveJson(backup,'copia-antes-de-eliminar-cuaderno-'+new Date().toISOString().slice(0,10)+'.json');
-      if(!window.confirm('Se ha iniciado la descarga de una copia JSON. ¿Confirmas la eliminación definitiva de «'+original.edition.title+'»?')){
+      if(!window.confirm('Comprueba que has guardado el archivo JSON en Archivos. ¿Confirmas la eliminación definitiva de «'+original.edition.title+'»?')){
         notice('Eliminación cancelada: no se ha modificado ningún cuaderno.');return;
       }
       const latest=await workspace.loadEdition(id);
@@ -261,7 +266,44 @@ export function mountNotebookApp(root:HTMLElement):void{
     input.placeholder='Nueva etiqueta personalizada';
     input.setAttribute('aria-label','Nueva etiqueta gramatical');
     own.append(input,button('Añadir',()=>addCustomTag(input.value)));
-    body.append(own);detail.append(body);return detail;
+    body.append(own);
+    const fragments=el('details','notebook-fragments');
+    fragments.append(el('summary','','Etiquetar fragmentos del texto ('+
+      (placement.grammaticalSpans?.length??0)+')'));
+    const segment=el('div','notebook-fragment-editor');
+    segment.append(el('p','hint','Selecciona una expresión latina dentro del campo siguiente y elige su construcción gramatical.'));
+    const area=el('textarea','field-control');
+    area.readOnly=true;area.rows=6;area.value=placement.text.latin;
+    area.setAttribute('aria-label','Seleccionar fragmento latino');
+    const choose=el('select','field-control');
+    choose.setAttribute('aria-label','Construcción del fragmento');
+    for(const tag of all){
+      const option=el('option','',tag.label);option.value=tag.id;choose.append(option);
+    }
+    const add=button('Etiquetar selección',async()=>{
+      const start=area.selectionStart,end=area.selectionEnd;
+      if(!choose.value||end<=start){notice('Selecciona primero un fragmento latino.',true);return;}
+      if(await composer.addGrammarSpan(start,end,choose.value)){
+        await reload();tagsOpen=true;render();
+        notice('Etiqueta de fragmento guardada sin modificar las preguntas.');
+      }else notice('No se ha podido guardar la etiqueta de fragmento.',true);
+    },'btn btn-primary');
+    segment.append(area,choose,add);
+    const saved=el('div','notebook-fragment-items');
+    for(const span of placement.grammaticalSpans??[]){
+      const row=el('div','notebook-fragment-row');
+      const names=span.tagIds.map(id=>all.find(t=>t.id===id)?.label??id);
+      row.append(el('span','',span.exact+' · '+names.join(', ')+
+        (span.reviewRequired?' · Revisar anclaje':'')));
+      row.append(button('Quitar',async()=>{
+        if(!await composer.removeGrammarSpan(span.id))return;
+        await reload();tagsOpen=true;render();
+        notice('Etiqueta de fragmento retirada; texto y preguntas intactos.');
+      }));
+      saved.append(row);
+    }
+    segment.append(saved);fragments.append(segment);
+    body.append(fragments);detail.append(body);return detail;
   }
   function summaryCard(edition:EditionSnapshotV1):HTMLElement{
     const card=el('section','simple-grammar-summary');
@@ -374,6 +416,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     const results=el('div','notebook-online-results');
     for(const item of onlineResults)results.append(button(item.title,()=>openOnline(item),'simple-source-row'));
     pane.append(results);
+    pane.append(button('Cancelar y volver al texto',()=>{view='edit';render();}));
     if(onlinePage){
       const form=el('section','simple-manual');
       form.append(el('h3','','Revisar y añadir fragmento'),
@@ -428,7 +471,8 @@ export function mountNotebookApp(root:HTMLElement):void{
     section.append(input,list);draw();
     section.append(button('Buscar entre los autores offline',()=>{view='authors';render();},'btn btn-primary'),
       button('Autores online',()=>{view='online';render();}),
-      button('Pegar otro texto',()=>{form=newForm();view='manual';render();}));
+      button('Pegar otro texto',()=>{form=newForm();view='manual';render();}),
+      button('Cancelar y volver al texto',()=>{view='edit';render();}));
     return section;
   }
   function renderAuthors():HTMLElement{
@@ -490,6 +534,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       lines.addEventListener('touchend',()=>window.setTimeout(readerSelectionChanged,90),{passive:true});
       right.append(choose,lines);
     }
+    right.append(button('Cancelar y volver al texto',()=>{view='edit';render();}));
     layout.append(left,right);return layout;
   }
   function renderEditor():HTMLElement{
@@ -533,7 +578,9 @@ export function mountNotebookApp(root:HTMLElement):void{
       const tagBar=el('div','notebook-question-tags');
       const selected=composer.activePlacement();
       const catalog=allGrammarTags(corpus!.corpus);
-      const names=(selected?.grammaticalTagIds??[]).map(id=>catalog.find(t=>t.id===id)?.label??id);
+      const allIds=new Set([...(selected?.grammaticalTagIds??[]),
+        ...(selected?.grammaticalSpans??[]).flatMap(span=>span.tagIds)]);
+      const names=[...allIds].map(id=>catalog.find(t=>t.id===id)?.label??id);
       tagBar.append(el('strong','','Construcciones del texto'),
         el('span','',names.length?names.join(' · '):'Sin etiquetar'));
       tagBar.append(button('Editar etiquetas',()=>{
