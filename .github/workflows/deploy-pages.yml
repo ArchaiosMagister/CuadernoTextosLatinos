@@ -607,14 +607,20 @@ jobs:
             await adapted.locator('#lib .rtext .rl').first().click();
             await adapted.locator('#lib [data-act=use]').click();
             await adapted.locator('.edition-counter').filter({hasText:'Texto 1 de 1'}).waitFor({state:'visible'});
+            // El editor puede reconstruir la hoja al terminar la generación
+            // automática. Consultar un nodo todavía desconectado devuelve
+            // display="" en WebKit móvil. Esperar al DOM conectado y estable.
+            await adapted.waitForFunction(()=>{
+              const node=document.querySelector('.edition-paper-head');
+              return node?.isConnected&&getComputedStyle(node).display==='block'&&
+                node.querySelector('.edition-paper-title')?.textContent==='Texto 1'&&
+                node.querySelector('.edition-paper-source')?.textContent?.includes('Eutropio');
+            },undefined,{timeout:30000});
             const headline=await adapted.locator('.edition-paper-head').first().evaluate(node=>({
-              display:getComputedStyle(node).display,
               title:node.querySelector('.edition-paper-title')?.textContent,
               source:node.querySelector('.edition-paper-source')?.textContent
             }));
-            if(headline.display!=='block'||headline.title!=='Texto 1'||
-               !headline.source?.includes('Eutropio'))
-              throw Error('Título y referencia no aparecen separados: '+JSON.stringify(headline));
+            console.log('Separación bibliográfica verificada:',JSON.stringify(headline));
             await adapted.locator('.edition-menu-nav').waitFor({state:'visible'});
             await adapted.locator('.edition-preview-bar .edition-add-source').waitFor({state:'visible'});
             await adapted.screenshot({path:'cuaderno-examinator-original-adaptado-ipad.png',
