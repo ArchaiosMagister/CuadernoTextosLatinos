@@ -3,11 +3,14 @@
  * Convive con la interfaz previa mientras se valida en ?nuevo=1.
  * La fuente de verdad sigue siendo WorkspaceRepository/NotebookEditionV1.
  */
-import {foldLatin,searchWorks,findCitation,
+import {foldLatin,findCitation,
   type LibraryEntry,type LibraryWork} from '../core/library.js';
 import {readReaderSelection,type ReaderFragment} from './reader-selection.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {createBackup} from '../core/backup.js';
+import {parseExaminatorCatalogue,searchExaminatorWorks,originalWorkUrl,convertPerseusXml,
+  type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
+import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {allGrammarTags,findTagByLabel,GRAMMAR_GROUP_IDS,
   matchesGrammarTag,isCustomTagLabelValid} from '../core/grammar-tags.js';
 import {summarizeNotebook} from '../core/notebook-overview.js';
@@ -23,7 +26,9 @@ import type {TextPlacementV1} from '../core/edition-model.js';
 
 const corpusRepo=new IndexedDbCorpusRepository();
 const workspace=new WorkspaceRepository();
+const downloadedWorks=new DownloadedWorksRepository();
 type Stage='home'|'editor';
+type LibraryItem=ExaminatorEntry & {local?:LibraryEntry};
 type View='edit'|'sources'|'authors'|'manual'|'online';
 type SourceForm={title:string;author:string;work:string;reference:string;latin:string};
 const newForm=():SourceForm=>({title:'',author:'',work:'',reference:'',latin:''});
@@ -51,9 +56,13 @@ export function mountNotebookApp(root:HTMLElement):void{
   let stage:Stage='home',view:View='edit',selectedId:string|null=null;
   let corpus:CorpusSnapshot|null=null,editions:EditionSnapshotV1[]=[];
   let catalogue:LibraryEntry[]=[],work:LibraryWork|null=null,readerSelection:ReaderFragment|null=null;
+  let examinator:ExaminatorCatalogue|null=null,remoteAvailable=new Set<string>();
+  let genreFilter='',onlyDownloaded=false,marked=new Set<string>();
+  let libraryDownloading=false,libraryProgress='',libraryError='',catalogueMode:'all'|'my'='all';
+  let startReaderAt=0;
   const works=new Map<string,LibraryWork>();
   let busy=false,feedback='Abre o crea un cuaderno.',failed=false;
-  let authorSearch='',authorFilter='all',librarySearch='',form=newForm();
+  let authorSearch='',form=newForm();
   let preserveSelection=false,tagsOpen=false;
   let onlineTerm='',onlineResults:OnlineSearchResult[]=[],onlinePage:OnlinePage|null=null;
   let onlineLatin='',onlineAuthor='',onlineTitle='',onlineFeedback='';
@@ -163,24 +172,27 @@ export function mountNotebookApp(root:HTMLElement):void{
     await storeText({title:work.author+' · '+work.latin+' '+reference,
       latin,author:work.author,work:work.latin,reference});
   }
-  async function showWork(meta:LibraryEntry):Promise<void>{
+  async function showWork(meta:LibraryItem):Promise<void>{
     if(busy)return;busy=true;
     try{
       let candidate=works.get(meta.urn);
-      if(!candidate){
-        const response=await fetch(new URL('../library/'+meta.file,import.meta.url));
+      if(!candidate&&meta.local){
+        const response=await fetch(new URL('../library/'+meta.local.file,import.meta.url));
         if(!response.ok)throw new Error('No se pudo abrir la obra ('+response.status+').');
         const raw:unknown=await response.json();
         if(!raw||typeof raw!=='object'||!Array.isArray((raw as LibraryWork).lines)
           ||!(raw as LibraryWork).lines.length||(raw as LibraryWork).urn!==meta.urn)
           throw new Error('Catálogo de pasajes incompleto.');
-        candidate=raw as LibraryWork;works.set(meta.urn,candidate);
+        candidate=raw as LibraryWork;
       }
-      work=candidate;readerSelection=null;render();
+      if(!candidate)candidate=await downloadedWorks.get(meta.urn)??undefined;
+      if(!candidate)throw new Error('Marca la obra y selecciona «Descargar las marcadas».');
+      works.set(meta.urn,candidate);
+      work=candidate;readerSelection=null;startReaderAt=0;render();
     }catch(e){notice(String(e),true);}finally{busy=false;}
   }
   function readerSelectionChanged():void{
-    if(view!=='authors'||!work||preserveSelection)return;
+    if((view!=='authors'&&view!=='sources')||!work||preserveSelection)return;
     const host=root.querySelector<HTMLElement>('.simple-reader-lines');
     if(!host)return;
     const sel=window.getSelection();
@@ -189,6 +201,10 @@ export function mountNotebookApp(root:HTMLElement):void{
     else if(sel?.isCollapsed&&sel.anchorNode&&host.contains(sel.anchorNode))readerSelection=null;
     const action=root.querySelector<HTMLButtonElement>('[data-range-add]');
     if(action)action.disabled=!readerSelection;
+    const message=root.querySelector<HTMLElement>('.exlib-select-status');
+    if(message)message.textContent=readerSelection
+      ?'Selección: '+readerSelection.reference+' ('+readerSelection.wordCount+' palabras)'
+      :'Selecciona con el ratón o el dedo el fragmento que quieras.';
   }
   async function saveTags(ids:readonly string[]):Promise<void>{
     if(busy)return;busy=true;
@@ -448,94 +464,223 @@ export function mountNotebookApp(root:HTMLElement):void{
     formEl.append(actions);formEl.addEventListener('submit',e=>{e.preventDefault();actions.querySelector('button')?.click();});
     section.append(formEl);return section;
   }
-  function renderSources():HTMLElement{
-    const section=el('section','notebook-source-choice');
-    section.append(el('h2','','Biblioteca compartida'),
-      el('p','hint','Elegir un texto crea una aparición independiente en el cuaderno abierto.'));
-    const input=el('input','field-control');input.type='search';
-    input.placeholder='Buscar autor, obra o texto';input.value=librarySearch;
-    input.setAttribute('aria-label','Buscar en biblioteca común');
-    const list=el('div','notebook-source-list');
-    const draw=()=>{
-      list.replaceChildren();
-      const needle=foldLatin(librarySearch);
-      for(const text of (corpus?.corpus.texts??[]).filter(t=>
-        !needle||foldLatin([t.title,t.source.author??'',t.source.work??'',t.latin].join(' ')).includes(needle))){
-        const row=button(text.title,()=>addFromLibrary(text.id),'simple-source-row');
-        row.append(el('small','',[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ')));
-        list.append(row);
-      }
-      if(!list.childElementCount)list.append(el('p','hint','No hay textos guardados con ese filtro.'));
-    };
-    input.addEventListener('input',()=>{librarySearch=input.value;draw();});
-    section.append(input,list);draw();
-    section.append(button('Buscar entre los autores offline',()=>{view='authors';render();},'btn btn-primary'),
-      button('Autores online',()=>{view='online';render();}),
-      button('Pegar otro texto',()=>{form=newForm();view='manual';render();}),
-      button('Cancelar y volver al texto',()=>{view='edit';render();}));
-    return section;
-  }
-  function renderAuthors():HTMLElement{
-    const layout=el('div','simple-authors-layout'),left=el('aside','simple-work-list'),
-      right=el('section','simple-work-reading');
-    left.append(el('h2','','Autores y obras'));
-    const query=el('input','field-control');query.type='search';query.value=authorSearch;
-    query.placeholder='Buscar autor u obra';query.setAttribute('aria-label','Buscar autor u obra');
-    const filter=el('select','field-control');filter.setAttribute('aria-label','Filtrar autores');
-    for(const author of ['all',...[...new Set(catalogue.map(x=>x.author))].sort()]){
-      const opt=el('option','',author==='all'?'Todos los autores':author);opt.value=author;filter.append(opt);
+
+  function libraryItems():LibraryItem[]{
+    const items=new Map<string,LibraryItem>();
+    for(const e of examinator?.entries??[])items.set(e.urn,{...e});
+    for(const local of catalogue){
+      const old=items.get(local.urn);
+      if(old)items.set(local.urn,{...old,local});
+      else items.set(local.urn,{urn:local.urn,path:'',author:local.author,
+        title:local.title,genre:local.genre,latin:local.latin,description:local.editorial,local});
     }
-    filter.value=authorFilter;
-    const list=el('div','simple-work-scroll');
-    const draw=()=>{
-      list.replaceChildren();
-      for(const meta of searchWorks(catalogue,authorSearch,authorFilter))
-        list.append(button(meta.author+' · '+(meta.latin||meta.title),
-          ()=>showWork(meta),'simple-work-item'+(work?.urn===meta.urn?' selected':'')));
-      if(!list.childElementCount)list.append(el('p','hint','No hay obras con ese filtro.'));
+    return [...items.values()];
+  }
+  function knownLocal(meta:LibraryItem):boolean{
+    return Boolean(meta.local)||remoteAvailable.has(meta.urn);
+  }
+  async function downloadSelected():Promise<void>{
+    if(libraryDownloading||!examinator)return;
+    const pending=libraryItems().filter(meta=>marked.has(meta.urn)&&!knownLocal(meta)&&meta.path);
+    if(!pending.length){notice('Marca primero obras de Perseus que no estén descargadas.');return;}
+    libraryDownloading=true;libraryError='';
+    let done=0;const problems:string[]=[];
+    const update=()=>{
+      libraryProgress='Descargando '+done+' de '+pending.length+'…';
+      const node=root.querySelector<HTMLElement>('.exlib-progress');
+      if(node)node.textContent=libraryProgress;
     };
-    query.addEventListener('input',()=>{authorSearch=query.value;draw();});
-    filter.addEventListener('change',()=>{authorFilter=filter.value;draw();});
-    left.append(query,filter,list);draw();
-    if(!work)right.append(el('h2','','Selecciona una obra'),
-      el('p','hint','César, Eutropio y Cornelio Nepote disponibles offline.'));
-    else{
-      right.append(el('h2','',work.author),el('p','simple-work-title',work.latin+' · '+work.title));
-      const jump=el('div','simple-ref-jump'),location=el('input','field-control');
-      location.placeholder='Ir al pasaje: 1.1';location.setAttribute('aria-label','Ir a pasaje');
-      const go=button('Ir a',()=>{
+    update();
+    try{
+      const queue=pending.slice();
+      const worker=async()=>{
+        while(queue.length){
+          const meta=queue.shift();if(!meta)break;
+          try{
+            const url=originalWorkUrl(examinator!,meta);
+            const response=await fetch(url);
+            if(!response.ok)throw new Error('HTTP '+response.status);
+            const xml=await response.text();
+            const converted=convertPerseusXml(xml,meta,url);
+            await downloadedWorks.save(converted);
+            remoteAvailable.add(meta.urn);
+          }catch(e){problems.push(meta.author+' · '+meta.title+': '+String(e));}
+          finally{done++;update();}
+        }
+      };
+      await Promise.all([worker(),worker()]);
+      marked.clear();libraryProgress='Descarga terminada: '+(done-problems.length)+' de '+done+' obras.';
+      libraryError=problems.length?problems.slice(0,4).join(' | '):'';
+      render();notice(libraryError||libraryProgress,Boolean(problems.length));
+    }finally{libraryDownloading=false;}
+  }
+  async function deleteSelectedWorks():Promise<void>{
+    if(libraryDownloading)return;
+    const ids=[...marked].filter(id=>remoteAvailable.has(id)&&!catalogue.some(x=>x.urn===id));
+    if(!ids.length){notice('No hay obras descargadas para eliminar (las incluidas no se borran).');return;}
+    if(!window.confirm('¿Quitar '+ids.length+' obras descargadas de este navegador? Los cuadernos y textos ya incorporados no se modifican.'))return;
+    libraryDownloading=true;
+    try{
+      for(const id of ids){await downloadedWorks.remove(id);remoteAvailable.delete(id);works.delete(id);}
+      if(work&&ids.includes(work.urn)){work=null;readerSelection=null;}
+      marked.clear();libraryProgress=ids.length+' obras descargadas retiradas de la caché.';
+      render();notice(libraryProgress);
+    }catch(e){notice('No se ha podido actualizar la caché: '+String(e),true);}
+    finally{libraryDownloading=false;}
+  }
+  function renderSources():HTMLElement{return renderAuthors();}
+  /** Biblioteca de Examinator2: filtros, descargas y lector en dos paneles. */
+  function renderAuthors():HTMLElement{
+    const shell=el('section','exlib'),header=el('div','exlib-head');
+    header.append(el('strong','','Biblioteca'),
+      el('span','hint','César, Eutropio y Nepote incluidos · catálogo completo de Perseus (Examinator2)'));
+    header.append(button('Volver al cuaderno',()=>{view='edit';render();}));
+    shell.append(header);
+    const body=el('div','exlib-body'),left=el('aside','exlib-catalog'),
+      right=el('section','exlib-reading'),filters=el('div','exlib-filters');
+    const search=el('input','field-control');search.type='search';
+    search.placeholder='Autor u obra…';search.value=authorSearch;
+    search.setAttribute('aria-label','Autor u obra');
+    const genre=el('select','field-control');
+    genre.setAttribute('aria-label','Todos los géneros');
+    const genres=[...new Set(libraryItems().map(e=>e.genre))].sort((a,b)=>a.localeCompare(b,'es'));
+    for(const name of ['',...genres]){
+      const option=el('option','',name||'Todos los géneros');option.value=name;genre.append(option);
+    }
+    genre.value=genreFilter;
+    const only=el('label','exlib-only');
+    const cb=el('input');cb.type='checkbox';cb.checked=onlyDownloaded;
+    only.append(cb,el('span','','solo descargadas'));
+    filters.append(search,genre,only);
+    const tools=el('div','exlib-actions');
+    tools.append(button('Descargar las marcadas',downloadSelected,'btn btn-outline'),
+      button('Eliminar las marcadas',deleteSelectedWorks,'btn btn-outline'));
+    const progress=el('span','exlib-progress',libraryProgress);
+    tools.append(progress);
+    const list=el('div','exlib-list'),listing=()=>{
+      list.replaceChildren();
+      if(catalogueMode==='my'){
+        const needle=foldLatin(authorSearch);
+        const own=corpus?.corpus.texts.filter(t=>
+          !needle||foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle))??[];
+        for(const text of own){
+          const item=el('div','exlib-row exlib-owned');
+          const contents=button(text.title,()=>addFromLibrary(text.id),'exlib-local-title');
+          const descriptor=el('small','',[text.source.author,text.source.work,text.source.reference]
+            .filter(Boolean).join(' · '));
+          item.append(contents,descriptor);list.append(item);
+        }
+        if(!own.length)list.append(el('p','hint','No hay textos propios con ese filtro.'));
+        return;
+      }
+      const have=new Set(libraryItems().filter(knownLocal).map(x=>x.urn));
+      const shown=searchExaminatorWorks(libraryItems(),authorSearch,genreFilter,onlyDownloaded,have);
+      for(const meta of shown){
+        const available=knownLocal(meta);
+        const row=el('div','exlib-row'+(available?' available':'')+(work?.urn===meta.urn?' current':''));
+        row.dataset.urn=meta.urn;
+        const check=el('input');check.type='checkbox';check.checked=marked.has(meta.urn);
+        check.setAttribute('aria-label','Marcar '+meta.author+' '+meta.title);
+        check.addEventListener('change',()=>{if(check.checked)marked.add(meta.urn);else marked.delete(meta.urn);});
+        const content=button('',async()=>{
+          if(!available){notice('Marca esta obra y pulsa «Descargar las marcadas».');return;}
+          await showWork(meta);
+        },'exlib-item');
+        content.append(el('strong','',meta.author+' · '+meta.title));
+        content.append(el('small','',meta.latin+' · '+meta.genre));
+        const badge=el('span','exlib-badge',
+          meta.local?'incluida':remoteAvailable.has(meta.urn)?'descargada':'online');
+        row.append(check,content,badge);list.append(row);
+      }
+      if(!shown.length)list.append(el('p','hint','No hay obras con ese filtro.'));
+      const count=root.querySelector<HTMLElement>('.exlib-count');
+      if(count)count.textContent=shown.length+' obras';
+    };
+    search.addEventListener('input',()=>{authorSearch=search.value;listing();});
+    genre.addEventListener('change',()=>{genreFilter=genre.value;listing();});
+    cb.addEventListener('change',()=>{onlyDownloaded=cb.checked;listing();});
+    const modes=el('div','exlib-modes');
+    modes.append(button('Biblioteca Perseus',()=>{
+      catalogueMode='all';render();
+    },'exlib-mode'+(catalogueMode==='all'?' active':'')),
+    button('Mis textos',()=>{catalogueMode='my';render();},
+      'exlib-mode'+(catalogueMode==='my'?' active':'')));
+    left.append(filters,modes,tools,list);
+    const count=el('div','exlib-count');left.append(count);
+    if(libraryError)left.append(el('p','hint',libraryError));
+    listing();
+    const readerHeader=el('div','exlib-reader-head');
+    if(!work){
+      readerHeader.append(el('p','hint','Elige una obra incluida o descargada para leerla.'));
+      right.append(readerHeader);
+    }else{
+      readerHeader.append(el('div','exlib-reader-title',work.author+', '+work.latin),
+        el('p','hint',work.title+' · '+(work.levels??[]).join(' / ')));
+      const controls=el('div','exlib-reader-controls');
+      const location=el('input','field-control');location.placeholder='Ir a… (p. ej. 1.6)';
+      location.setAttribute('aria-label','Ir a referencia');
+      const jump=()=>{
         const at=findCitation(work!,location.value);
-        if(at<0){notice('No existe esa referencia.',true);return;}
-        right.querySelector<HTMLElement>('[data-index="'+at+'"]')?.scrollIntoView({block:'center'});
-      });
-      jump.append(location,go);right.append(jump);
-      const choose=el('div','simple-selection-toolbar');
-      const add=button('Añadir selección',async()=>{
+        if(at<0){notice('No encuentro ese pasaje.',true);return;}
+        startReaderAt=Math.max(0,at-12);readerSelection=null;render();
+        root.querySelector<HTMLElement>('.exlib-reading .simple-reader-line[data-index="'+at+'"]')
+          ?.scrollIntoView({block:'center'});
+      };
+      location.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();jump();}});
+      controls.append(location,button('Ir a',jump,'btn btn-outline'));
+      const selectionLabel=el('span','exlib-select-status',
+        readerSelection
+        ?'Selección: '+readerSelection.reference+' ('+readerSelection.wordCount+' palabras)'
+        :'Selecciona con el ratón o el dedo el fragmento que quieras.');
+      const add=button('Usar la selección',async()=>{
         if(readerSelection)await addFromWork(readerSelection.latin,readerSelection.reference);
       },'btn btn-primary');
       add.dataset.rangeAdd='true';add.disabled=!readerSelection;
       add.addEventListener('pointerdown',()=>{preserveSelection=true;});
       add.addEventListener('pointercancel',()=>{preserveSelection=false;});
       add.addEventListener('click',()=>{preserveSelection=false;});
-      choose.append(el('span','simple-selection-message','Toca un pasaje o selecciona varias líneas.'),add);
-      const lines=el('div','simple-reader-lines reader-lines');
-      for(const [index,line] of work.lines.entries()){
-        const row=el('div','reader-line simple-reader-line');
+      controls.append(selectionLabel,add);
+      readerHeader.append(controls);right.append(readerHeader);
+      const readArea=el('div','exlib-reader-lines simple-reader-lines reader-lines');
+      const end=Math.min(work.lines.length,startReaderAt+450);
+      let prev='';
+      for(let index=startReaderAt;index<end;index++){
+        const line=work.lines[index]!;
+        const row=el('div','reader-line simple-reader-line exlib-reader-row'+(line.k==='h'?' heading':''));
         row.dataset.index=String(index);row.dataset.c=line.c;row.tabIndex=0;
-        row.append(el('span','reader-ref',line.c),el('span','reader-latin',line.t));
-        row.addEventListener('click',()=>{const sel=window.getSelection();
+        const citation=el('span','reader-ref',line.c===prev?'':line.c);prev=line.c;
+        const latin=el('span','reader-latin',line.t);
+        row.append(citation,latin);
+        row.addEventListener('click',()=>{
+          const sel=window.getSelection();
           if(sel&&!sel.isCollapsed){readerSelectionChanged();return;}
-          void addFromWork(line.t,line.c);
+          readerSelection={latin:line.t,reference:line.c,wordCount:line.t.split(/\s+/u).length,
+            startLine:index,endLine:index};
+          const action=root.querySelector<HTMLButtonElement>('[data-range-add]');
+          if(action)action.disabled=false;
+          const status=root.querySelector<HTMLElement>('.exlib-select-status');
+          if(status)status.textContent='Selección: '+line.c+' ('+readerSelection.wordCount+' palabras)';
         });
-        row.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void addFromWork(line.t,line.c);}});
-        lines.append(row);
+        row.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();row.click();}});
+        readArea.append(row);
       }
-      lines.addEventListener('pointerup',()=>window.setTimeout(readerSelectionChanged,0));
-      lines.addEventListener('touchend',()=>window.setTimeout(readerSelectionChanged,90),{passive:true});
-      right.append(choose,lines);
+      readArea.addEventListener('pointerup',()=>window.setTimeout(readerSelectionChanged,0));
+      readArea.addEventListener('touchend',()=>window.setTimeout(readerSelectionChanged,120),{passive:true});
+      right.append(readArea);
+      const pagination=el('div','exlib-page');
+      pagination.append(el('span','',String(startReaderAt+1)+'–'+end+' / '+work.lines.length+' pasajes'),
+        button('Anterior',()=>{startReaderAt=Math.max(0,startReaderAt-450);readerSelection=null;render();},
+          'btn btn-outline'),
+        button('Siguientes pasajes',()=>{startReaderAt=Math.min(Math.max(0,work!.lines.length-1),startReaderAt+450);
+          readerSelection=null;render();},'btn btn-outline'));
+      right.append(pagination);
     }
-    right.append(button('Cancelar y volver al texto',()=>{view='edit';render();}));
-    layout.append(left,right);return layout;
+    body.append(left,right);shell.append(body);
+    const footer=el('div','exlib-footer');
+    footer.append(el('span','hint','Fuentes: Perseus Digital Library · Eutropio, The Latin Library (incluido) · Nepote, Perseus.'));
+    footer.append(button('Pegar texto propio',()=>{form=newForm();view='manual';render();},
+        'btn btn-outline'),button('Volver al cuaderno',()=>{view='edit';render();}));
+    shell.append(footer);return shell;
   }
   function renderEditor():HTMLElement{
     const main=el('main','notebook-editor'),edition=composer.activeEdition();
@@ -549,8 +694,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       notice('Selecciona un texto o pega uno propio; cancelar no crea ninguna ficha.');
     },'btn btn-primary'));
     actions.append(button('Biblioteca',()=>{view='sources';render();}));
-    actions.append(button('Autores offline',()=>{view='authors';render();}));
-    actions.append(button('Autores online',()=>{view='online';render();}));
+    actions.append(button('Buscar autores y obras',()=>{view='authors';render();}));
     actions.append(button('Pegar texto',()=>{form=newForm();view='manual';render();}));
     actions.append(button('Volver a cuadernos',async()=>{
       if(!await composer.flush())return;
@@ -642,12 +786,18 @@ export function mountNotebookApp(root:HTMLElement):void{
   render();
   void (async()=>{
     try{
-      const [original,response]=await Promise.all([corpusRepo.load(),
-        fetch(new URL('../library/catalog.json',import.meta.url))]);
+      const [original,response,fullResponse,cached]=await Promise.all([corpusRepo.load(),
+        fetch(new URL('../library/catalog.json',import.meta.url)),
+        fetch(new URL('../library/examinator-catalog.json',import.meta.url)),
+        downloadedWorks.list()]);
       if(!response.ok)throw new Error('No se puede cargar el catálogo local.');
       const data:unknown=await response.json();
       if(!data||typeof data!=='object'||!Array.isArray((data as {works?:unknown}).works))
         throw new Error('Catálogo incompleto.');
+      if(!fullResponse.ok)throw new Error('Falta el catálogo Perseus de Examinator2.');
+      const full:unknown=await fullResponse.json();
+      examinator=parseExaminatorCatalogue(full);
+      remoteAvailable=new Set(cached);
       corpus=original;catalogue=(data as {works:LibraryEntry[]}).works;
       await composer.open();await reload();render();
       notice('Listo: abre un cuaderno o crea uno nuevo.');
