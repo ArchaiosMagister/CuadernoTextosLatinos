@@ -206,6 +206,8 @@ test('Decisión 1A: títulos por cuaderno, edición propia y sin duplicar tras b
   await page.getByRole('textbox',{name:'Título del texto'}).fill('El relato de Eutropio');
   await expect(page.locator('.edition-paper-title').first()).toHaveText('El relato de Eutropio');
   await expect(page.locator('.edition-paper-source').first()).toContainText('Eutropio');
+  await choose(2);
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 2');
   await page.locator('#btnSave').click();
 });
 

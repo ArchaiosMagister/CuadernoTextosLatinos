@@ -5,7 +5,9 @@
 export function nextNotebookTextTitle(
   placements: readonly {readonly text:{readonly title:string}}[],
 ):string {
-  let highest=0;
+  // Si el docente renombró un título automático, continúa la secuencia por
+  // el número de apariciones; un título «Texto N» más alto reserva su número.
+  let highest=placements.length;
   for(const placement of placements){
     const match=/^Texto\s+([1-9][0-9]*)$/iu.exec(placement.text.title.trim());
     if(!match)continue;
