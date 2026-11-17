@@ -678,7 +678,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     body.append(left,right);shell.append(body);
     const footer=el('div','exlib-footer');
     footer.append(el('span','hint','Fuentes: Perseus Digital Library · Eutropio, The Latin Library (incluido) · Nepote, Perseus.'));
-    footer.append(button('Pegar texto propio',()=>{form=newForm();view='manual';render();},
+    footer.append(button('Pegar otro texto',()=>{form=newForm();view='manual';render();},
         'btn btn-outline'),button('Volver al cuaderno',()=>{view='edit';render();}));
     shell.append(footer);return shell;
   }
@@ -701,7 +701,9 @@ export function mountNotebookApp(root:HTMLElement):void{
       await reload();stage='home';view='edit';render();
     }));
     head.append(actions);main.append(head);
-    const layout=el('div','notebook-editor-layout'),aside=el('aside','notebook-editor-aside');
+    const sourceMode=view==='sources'||view==='authors';
+    const layout=el('div','notebook-editor-layout'+(sourceMode?' source-mode':'')),
+      aside=el('aside','notebook-editor-aside');
     aside.append(el('h3','','Índice de textos'));
     for(const [index,p] of edition.placements.entries()){
       aside.append(button((index+1)+'. '+p.text.title,async()=>{
