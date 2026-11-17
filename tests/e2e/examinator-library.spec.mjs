@@ -16,7 +16,7 @@ test('biblioteca Examinator2: autor, género, obras offline y lectura en dos pan
   await page.getByRole('combobox',{name:'Todos los géneros'}).selectOption({label:'Biografía'});
   await expect(page.locator('.exlib-list')).toContainText('Cornelio Nepote');
   await page.getByRole('combobox',{name:'Todos los géneros'}).selectOption('');
-  await search.fill('De bello Gallico');
+  await search.fill('Julio César');
   await page.locator('.exlib-row.available .exlib-item').first().click();
   await expect(page.locator('.exlib-reader-lines .simple-reader-line').first()).toBeVisible();
   await page.getByRole('textbox',{name:'Ir a referencia'}).fill('1.1');
@@ -54,6 +54,7 @@ test('obras Perseus: descargar al navegador, reabrir sin red y conservar los cua
   await page.reload();
   await page.getByRole('button',{name:'Abrir',exact:true}).click();
   await expect(page.locator('.notebook-editor-head')).toContainText('0 textos');
+  await page.getByRole('button',{name:'Buscar autores'}).click();
   const cached=page.locator('.exlib-list .exlib-row.available').filter({hasText:name}).first();
   await expect(cached).toBeVisible();
   await cached.locator('.exlib-item').click();
