@@ -917,8 +917,11 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
         ...x,vocabulary:[...x.vocabulary,...next],
       })}));
     const ok=await flush();
-    if(ok)setMessage('Collatinus: '+next.length+
-      ' nombres propios o gentilicios incorporados como propuestas revisables.');
+    if(ok){
+      paint(); // Refrescar también el menú, no solo el documento.
+      setMessage('Collatinus: '+next.length+
+        ' nombres propios o gentilicios incorporados como propuestas revisables.');
+    }
     return ok;
   }
   function prepareVocabulary(p:TextPlacementV1):void{
@@ -1005,7 +1008,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
         ?(v.meaning?'Lema documentado; significado introducido por docente':
           'Lema documentado; significado pendiente de revisión docente')
         :v.origin==='generated'
-          ?'Forma provisional: lema sin respaldo inequívoco; revisar'
+          ?'Propuesta automática sin verificación individual; revisar lema y glosa'
           :'Entrada editada manualmente; no presentada como lema verificado';
       group.append(node('p','hint',evidenceLabel));
       const check=node('input');check.type='checkbox';check.checked=v.included;
@@ -1024,7 +1027,8 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       }));
       panel.append(group);
     }
-    if(!items.length)panel.append(node('p','hint','Sin vocabulario. Las entradas nuevas se identificarán como decisiones manuales; no se inventan significados.'));
+    if(!items.length)panel.append(node('p','hint',
+      'Sin entradas todavía. Collatinus propone nombres propios y gentilicios; puedes añadir y editar los demás sin inventar significados.'));
     const headword=node('input','field-control');headword.placeholder='Enunciado o lema';
     const meaning=node('input','field-control');meaning.placeholder='Significado';
     const add=action('Añadir entrada',()=>{
