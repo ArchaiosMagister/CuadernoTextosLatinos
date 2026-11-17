@@ -347,8 +347,8 @@ export function mountNotebookApp(root:HTMLElement):void{
         hidden.remove();
       const content=html.querySelector('.mw-parser-output')??html.body;
       const paragraphs=[...content.querySelectorAll('p,blockquote,pre')]
-        .map(p=>p.textContent?.replace(/\\s+/g,' ').trim()??'').filter(Boolean);
-      const extracted=paragraphs.length?paragraphs.join('\\n\\n'):content.textContent?.trim()??'';
+        .map(p=>p.textContent?.replace(/\s+/g,' ').trim()??'').filter(Boolean);
+      const extracted=paragraphs.length?paragraphs.join('\n\n'):content.textContent?.trim()??'';
       if(extracted.length<20)throw new Error('La página no ofrece un texto latino legible.');
       onlinePage=page;onlineLatin=extracted.slice(0,100_000);
       onlineTitle=page.title;onlineAuthor='';
