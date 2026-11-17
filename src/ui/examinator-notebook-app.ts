@@ -38,7 +38,11 @@ if(!M)throw new Error('No se ha cargado el código original de Examinator2.');
 const repo=new IndexedDbCorpusRepository();
 const workspace=new WorkspaceRepository();
 const downloads=new DownloadedWorksRepository('cuaderno-original-examinator2-obras');
-const composer=createEditionPane({autoApply:true});
+const composer=createEditionPane({
+  autoApply:true,
+  autoVocabulary:false,
+  onAddSource:()=>openLibrary(),
+});
 const works=new Map<string,LibraryWork>();
 const ownCache=new Set<string>();
 let corpus:CorpusSnapshot;
@@ -172,7 +176,9 @@ async function addText(input:TextDraft):Promise<void>{
 }
 M.setTextFromLibrary=(fragment)=>{
   void addText({
-    title:fragment.author+' · '+fragment.obra+' '+fragment.cita,
+    // Título didáctico provisional, independiente de la referencia literaria.
+    // El docente puede cambiarlo en «Texto». La fórmula definitiva queda pendiente.
+    title:'Texto '+((composer.activeEdition()?.placements.length??0)+1),
     latin:fragment.text,author:fragment.author,work:fragment.obra,reference:fragment.cita,
   }).catch(error=>M.toast('No se ha guardado el fragmento: '+String(error),6500));
 };
