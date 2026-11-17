@@ -286,7 +286,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: e49c999f85fa13fbcbb4a35f5b12e8d92756aa07
+          ref: 89a19fbcdbb9a8e05ed89dfa89e20279d2c1b5f3
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -331,6 +331,12 @@ jobs:
           replace('ui/examinator-notebook-app.js',
             "'cuaderno-original-examinator2-obras'",
             "'cuaderno-original-examinator2-obras-prueba'")
+          replace('examinator-cuadernos/collatinus/shim.js',
+            "'cuaderno-collatinus-examinator-v1'",
+            "'cuaderno-collatinus-examinator-v1-prueba'")
+          replace('examinator-cuadernos/collatinus/shim.js',
+            "'cuaderno-collatinus-examinator-v1.fs:'",
+            "'cuaderno-collatinus-examinator-v1-prueba.fs:'")
           replace('examinator-cuadernos/index.html',
             '../examinator2-original/icon.png',
             '../../examinator2-original/icon.png')
@@ -392,7 +398,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-cuaderno-examinator/examinator-cuadernos/index.html prueba-cuaderno-examinator/examinator-cuadernos/styles.css prueba-cuaderno-examinator/examinator-cuadernos/js/library.js prueba-cuaderno-examinator/ui/examinator-notebook-app.js prueba-cuaderno-examinator/storage/workspace-repository.js prueba-cuaderno-examinator/library/examinator-catalog.json examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-cuaderno-examinator/examinator-cuadernos/index.html prueba-cuaderno-examinator/examinator-cuadernos/styles.css prueba-cuaderno-examinator/examinator-cuadernos/js/library.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/motor.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/shim.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/datos.js prueba-cuaderno-examinator/ui/examinator-notebook-app.js prueba-cuaderno-examinator/storage/workspace-repository.js prueba-cuaderno-examinator/library/examinator-catalog.json examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -446,6 +452,10 @@ jobs:
                 grep -q '#lib { position: fixed;' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/js/library.js")
                 grep -q 'M.openLibrary' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/examinator-cuadernos/collatinus/shim.js")
+                grep -q 'cuaderno-collatinus-examinator-v1-prueba' /tmp/cuaderno-public ;;
+              "prueba-cuaderno-examinator/examinator-cuadernos/collatinus/datos.js")
+                test $(wc -c < /tmp/cuaderno-public) -gt 9000000 ;;
               "prueba-cuaderno-examinator/ui/examinator-notebook-app.js")
                 grep -q 'cuaderno-original-examinator2-obras-prueba' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/storage/workspace-repository.js")
@@ -589,12 +599,24 @@ jobs:
             await adapted.locator('#btnNew').click();
             await adapted.locator('#btnLib').click();
             await adapted.locator('#lib .lf').fill('Eutropio');
-            await adapted.locator('#lib .lrow.have').first().waitFor({state:'visible'});
-            await adapted.locator('#lib .lrow.have').first().click();
+            const eutropio=adapted.locator('#lib .lrow.have')
+              .filter({hasText:'Eutropio'}).first();
+            await eutropio.waitFor({state:'visible'});
+            await eutropio.click();
             await adapted.locator('#lib .rtext .rl').first().waitFor({state:'visible'});
             await adapted.locator('#lib .rtext .rl').first().click();
             await adapted.locator('#lib [data-act=use]').click();
             await adapted.locator('.edition-counter').filter({hasText:'Texto 1 de 1'}).waitFor({state:'visible'});
+            const headline=await adapted.locator('.edition-paper-head').first().evaluate(node=>({
+              display:getComputedStyle(node).display,
+              title:node.querySelector('.edition-paper-title')?.textContent,
+              source:node.querySelector('.edition-paper-source')?.textContent
+            }));
+            if(headline.display!=='block'||headline.title!=='Texto 1'||
+               !headline.source?.includes('Eutropio'))
+              throw Error('Título y referencia no aparecen separados: '+JSON.stringify(headline));
+            await adapted.locator('.edition-menu-nav').waitFor({state:'visible'});
+            await adapted.locator('.edition-preview-bar .edition-add-source').waitFor({state:'visible'});
             await adapted.screenshot({path:'cuaderno-examinator-original-adaptado-ipad.png',
               fullPage:false});
             if(adaptedErrors.length)
