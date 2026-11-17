@@ -62,3 +62,58 @@ test('obras Perseus: descargar al navegador, reabrir sin red y conservar los cua
   await page.getByRole('button',{name:'Usar la selección'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
 });
+
+
+test('fidelidad visual iPad: biblioteca completa, columna de 440px y lector Gentium/Palatino',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/?nuevo=1');
+  page.once('dialog',d=>d.accept('Biblioteca visual'));
+  await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
+  const geometry=await page.locator('.exlib').evaluate(node=>{
+    const main=node.getBoundingClientRect();
+    const appbar=node.querySelector('.exlib-appbar').getBoundingClientRect();
+    const head=node.querySelector('.exlib-head').getBoundingClientRect();
+    const catalog=node.querySelector('.exlib-catalog').getBoundingClientRect();
+    const reading=node.querySelector('.exlib-reading').getBoundingClientRect();
+    return {left:main.left,top:main.top,width:main.width,height:main.height,
+      appbar:appbar.height,head:head.height,catalog:catalog.width,
+      read:reading.width,bodyHeight:reading.height};
+  });
+  expect(geometry.left).toBe(0);
+  expect(geometry.top).toBe(0);
+  expect(geometry.width).toBe(820);
+  expect(geometry.height).toBeGreaterThanOrEqual(1170);
+  expect(geometry.appbar).toBe(48);
+  expect(geometry.head).toBe(46);
+  expect(geometry.catalog).toBe(440);
+  expect(geometry.read).toBeGreaterThan(350);
+  await expect(page.locator('.exlib-more')).not.toHaveAttribute('open');
+  await page.getByRole('searchbox',{name:'Autor u obra'}).fill('Eutropio');
+  const row=page.locator('.exlib-row.available').first();
+  await expect(row).toBeVisible();
+  await expect(row.locator('.exlib-badge')).toHaveText('incluida');
+  await row.locator('.exlib-item').click();
+  await expect(page.locator('.exlib-reader-title i')).toBeVisible();
+  const font=await page.locator('.exlib-reader-lines').evaluate(el=>
+    ({size:getComputedStyle(el).fontSize,height:getComputedStyle(el).lineHeight}));
+  expect(font.size).toBe('17px');
+  expect(Number.parseFloat(font.height)).toBeGreaterThan(26);
+  await page.locator('.exlib-reader-row').first().click();
+  await expect(page.getByRole('button',{name:'Usar la selección'})).toBeEnabled();
+  await page.locator('.exlib-head').getByRole('button',{name:'Volver al cuaderno'}).click();
+  await expect(page.locator('.exlib')).toHaveCount(0);
+});
+
+test('menú discreto conserva acceso a mis textos, pegado propio y Wikisource',async({page})=>{
+  await page.goto('/?nuevo=1');
+  page.once('dialog',d=>d.accept('Biblioteca accesos'));
+  await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
+  await page.locator('.exlib-more>summary').click();
+  await expect(page.locator('.exlib-more-options').getByRole('button',{name:'Mis textos'})).toBeVisible();
+  await expect(page.locator('.exlib-more-options').getByRole('button',{name:'Pegar texto propio'})).toBeVisible();
+  await expect(page.locator('.exlib-more-options').getByRole('button',{name:'Autores online (Wikisource)'})).toBeVisible();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Mis textos'}).click();
+  await expect(page.locator('.exlib-head>strong')).toHaveText('Mis textos');
+  await page.locator('.exlib-appbar').getByRole('button',{name:'Biblioteca',exact:true}).click();
+  await expect(page.locator('.exlib-head>strong')).toHaveText('Biblioteca');
+});
