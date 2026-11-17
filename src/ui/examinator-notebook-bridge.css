@@ -64,3 +64,52 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   #lib .lhead{gap:5px;padding:0 8px;}
   #lib .lhead .small{display:none;}
 }
+/* El header original de Examinator2 es horizontal. El header de una hoja
+   académica tiene título y referencia en DOS renglones independientes. */
+.edition-paper > header.edition-paper-head,
+.edition-print-root .edition-paper > header.edition-paper-head{
+  display:block!important;text-align:center;min-height:0;
+  background:transparent!important;color:#111!important;
+  border-left:0;border-right:0;
+  padding:.55em 0 .65em;white-space:normal;
+}
+.edition-paper .edition-paper-title{
+  display:block;font-family:inherit!important;font-weight:700;
+  font-size:1.06em;line-height:1.32;
+}
+.edition-paper .edition-paper-source{
+  display:block;font-family:inherit!important;font-size:1em;
+  font-weight:400;line-height:1.4;margin:.12em 0 0;
+}
+.edition-paper .edition-vocabulary,
+.edition-paper .edition-vocabulary *,
+.edition-paper .edition-questions,
+.edition-paper .edition-question{
+  font-family:inherit;
+}
+/* Mantener siempre visibles las cinco secciones al desplazar el panel. */
+#editor .edition-settings{overflow:visible;align-content:start;}
+#editor .edition-menu-nav{
+  position:sticky;top:0;z-index:12;display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;
+  padding:7px 0;background:var(--paper);border-bottom:1px solid var(--rule);
+}
+#editor .edition-menu-nav .btn{
+  padding:5px 1px;font-size:11px;white-space:nowrap;
+  min-width:0;text-overflow:clip;
+}
+#editor .edition-preview-bar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+}
+#editor .edition-preview-bar .edition-add-source{
+  background:var(--accent);color:#fff;border-color:var(--accent);
+  font-weight:600;min-height:30px;
+}
+@media(max-width:1100px){
+  #editor .edition-menu-nav{grid-template-columns:repeat(5,minmax(0,1fr));}
+  #editor .edition-menu-nav .btn{font-size:10.5px;}
+}
+@media print{
+  .edition-print-root .edition-paper-head{display:block!important;}
+  .edition-print-root .edition-paper-head h2{font-family:inherit!important;}
+}
