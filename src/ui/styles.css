@@ -1006,3 +1006,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .notebook-question-tags .btn {font-size:.77rem;padding:.38rem .65rem;min-height:2.15rem;}
 .notebook-count-jump {width:auto;min-width:2.4rem;min-height:2rem;padding:.15rem .4rem;
   background:light-dark(#e2eff0,#334b51);color:var(--accent);font-size:.85rem;}
+
+/* Fase 3: consulta online opcional, sin dependencias ni servicios propios. */
+.notebook-online {display:grid;gap:.6rem;align-content:start;border:1px solid var(--edge);
+  padding:.85rem;border-radius:.7rem;background:var(--surface);min-width:0;}
+.notebook-online h2,.notebook-online h3 {margin:0;color:var(--accent);}
+.notebook-online .simple-ref-jump .field-control {max-width:none;}
+.notebook-online-results {display:grid;gap:.2rem;max-height:18rem;overflow-y:auto;}
+.notebook-online-results .simple-source-row {text-align:left;font-size:.83rem;min-height:2.1rem;}
+.notebook-online .simple-manual {display:grid;gap:.6rem;}
+.notebook-online .simple-manual a {color:var(--accent);font-size:.82rem;}
+.notebook-online textarea {min-height:15rem;}
