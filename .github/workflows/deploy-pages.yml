@@ -594,7 +594,7 @@ jobs:
             await adapted.locator('#lib .rtext .rl').first().waitFor({state:'visible'});
             await adapted.locator('#lib .rtext .rl').first().click();
             await adapted.locator('#lib [data-act=use]').click();
-            await adapted.locator('.edition-counter').getByText('Texto 1 de 1').waitFor();
+            await adapted.locator('.edition-counter').filter({hasText:'Texto 1 de 1'}).waitFor({state:'visible'});
             await adapted.screenshot({path:'cuaderno-examinator-original-adaptado-ipad.png',
               fullPage:false});
             if(adaptedErrors.length)
