@@ -81,6 +81,26 @@ for case in ['breve','largo','varios']:
                 if value is None or abs(value[1]-expected)>20:
                     raise RuntimeError(
                         f'{case} {engine}: {key} en {value}, referencia {expected} pt')
+        if case=='breve':
+            # Decisión docente 2A: fidelidad alta (no equivalencia pixel a pixel).
+            # Coordenadas extraídas directamente de la página de Pages aportada:
+            # título x=116.4/y=80.9; referencia x=227.0/y=96.9;
+            # primer término latino x=85.0; pregunta 1 x=119.4.
+            # Se permiten diferencias tipográficas entre Word, Chromium y Safari.
+            for key,expected,tolerance in [
+                ('header_first_word',(116.4,80.9),(50,20)),
+                ('source',(227.0,96.9),(55,20)),
+                ('latin',(85.0,125.4),(17,20)),
+            ]:
+                actual=metrics[key]
+                if actual is None or abs(actual[0]-expected[0])>tolerance[0] or abs(actual[1]-expected[1])>tolerance[1]:
+                    raise RuntimeError(
+                        f'{case} {engine}: {key} {actual} se aleja del PDF modelo {expected}')
+            header_y=metrics['header_first_word'][1]
+            source_y=metrics['source'][1]
+            if not 8 <= source_y-header_y <= 32:
+                raise RuntimeError(
+                    f'{case} {engine}: título y referencia deben ocupar renglones independientes')
         REPORT[case+'_'+engine]=metrics
         # Render real bitmap; compatible con inspección visual humana.
         subprocess.run(['pdftoppm','-f','1','-l','1','-scale-to','1300',

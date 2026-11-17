@@ -176,7 +176,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
   syncSourceTags:(textId:string,tagIds:readonly string[])=>Promise<boolean>;
   removeWorkingSource:(textId:string)=>Promise<boolean>;
   createNotebookNamed:(title:string)=>Promise<string|null>;
-  addSourceToNotebook:(textId:string)=>Promise<boolean>;
+  addSourceToNotebook:(textId:string,titleOverride?:string)=>Promise<boolean>;
   selectPlacement:(placementId:string)=>Promise<boolean>;
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
@@ -342,7 +342,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     }
   }
   /** Añadir al cuaderno ACTIVO sin modificar ni clonar otros cuadernos. */
-  async function addSourceToNotebook(textId:string):Promise<boolean>{
+  async function addSourceToNotebook(textId:string,titleOverride?:string):Promise<boolean>{
     if(!await flush()||!current||!draft||!session)return false;
     try{
       const text=(await legacy.load()).corpus.texts.find(t=>t.id===textId);
@@ -354,6 +354,9 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
         return true;
       }
       const at=now(),place=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
+      // Un pasaje puede tener títulos docentes diferentes en cuadernos distintos.
+      // La biblioteca compartida, los títulos históricos y las fuentes no cambian.
+      if(titleOverride?.trim())place.text.title=titleOverride.trim();
       const id=current.edition.id;
       const saved=await workspace.commitEdition(id,current.revision,
         {command:'ui.add-source-direct',targetId:place.id,timestamp:at},old=>{

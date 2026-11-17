@@ -8,6 +8,7 @@ import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.
 import {WorkspaceRepository,type EditionSnapshotV1} from '../storage/workspace-repository.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
+import {nextNotebookTextTitle} from '../core/notebook-titles.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import type {LibraryEntry,LibraryWork} from '../core/library.js';
@@ -231,7 +232,9 @@ async function addText(input:TextDraft):Promise<void>{
     await repo.save(upsertText(before.corpus,input,id,new Date().toISOString()),before.revision);
     window.dispatchEvent(new CustomEvent('corpus-updated'));
   }
-  if(!await composer.addSourceToNotebook(id))
+  // El título de la aparición es propio del cuaderno, aunque el fragmento
+  // ya exista en la biblioteca con un título distinto (o en otro cuaderno).
+  if(!await composer.addSourceToNotebook(id,input.title))
     throw new Error('No se ha podido añadir el pasaje al cuaderno.');
   await reload();
   render();M.toast('Fragmento incorporado al cuaderno.');
@@ -242,9 +245,8 @@ async function addText(input:TextDraft):Promise<void>{
 }
 M.setTextFromLibrary=(fragment)=>{
   void addText({
-    // Título didáctico provisional, independiente de la referencia literaria.
-    // El docente puede cambiarlo en «Texto». La fórmula definitiva queda pendiente.
-    title:'Texto '+((composer.activeEdition()?.placements.length??0)+1),
+    // 1A: título didáctico numerado dentro de cada cuaderno; nunca obra/capítulo.
+    title:nextNotebookTextTitle(composer.activeEdition()?.placements??[]),
     latin:fragment.text,author:fragment.author,work:fragment.obra,reference:fragment.cita,
   }).catch(error=>M.toast('No se ha guardado el fragmento: '+String(error),6500));
 };
@@ -330,6 +332,7 @@ function pasteText():void{
     const input=field==='latin'?el('textarea'):el('input');
     if(field==='latin')(input as HTMLTextAreaElement).rows=7;
     input.setAttribute('aria-label',name);
+    if(field==='title')input.value=nextNotebookTextTitle(composer.activeEdition()?.placements??[]);
     inputs.set(field,input);label.append(caption,input);form.append(label);
   }
   let close=()=>{};

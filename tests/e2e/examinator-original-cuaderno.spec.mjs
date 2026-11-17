@@ -172,3 +172,55 @@ test('Collatinus original: solo nombres propios/gentilicios de inicio; el resto 
   await expect(page.locator('#editor .edition-vocabulary-control')).not.toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test('Decisión 1A: títulos por cuaderno, edición propia y sin duplicar tras borrar',async({page})=>{
+  test.setTimeout(120000);
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno A'));
+  await page.locator('#btnNew').click();
+  const choose=async(line)=>{
+    await page.locator('#btnLib').click();
+    await page.locator('#lib .lf').fill('Eutropio');
+    await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
+    await page.locator('#lib .rtext .rl').nth(line).click();
+    await page.locator('#lib [data-act=use]').click();
+  };
+  await choose(0);
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 1');
+  await choose(1);
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 2');
+  const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
+  await tabs.getByRole('button',{name:'Cuaderno'}).click();
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('.edition-notebook-row').first().getByRole('button',{name:'Quitar'}).click();
+  await expect(page.locator('.edition-notebook-row')).toHaveCount(1);
+  await choose(2);
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 3');
+  // Segunda libreta: la misma fuente no hereda el número del cuaderno A.
+  page.once('dialog',dialog=>dialog.accept('Cuaderno B'));
+  await page.locator('#btnNew').click();
+  await choose(1);
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 1');
+  await tabs.getByRole('button',{name:'Texto'}).click();
+  await page.getByRole('textbox',{name:'Título del texto'}).fill('El relato de Eutropio');
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('El relato de Eutropio');
+  await expect(page.locator('.edition-paper-source').first()).toContainText('Eutropio');
+  await page.locator('#btnSave').click();
+});
+
+test('Decisión 1A: pegar texto sugiere Texto N pero conserva título escrito',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno de textos propios'));
+  await page.locator('#btnNew').click();
+  await page.locator('#btnLists').click();
+  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  const modal=page.locator('.modal');
+  await expect(modal.getByRole('textbox',{name:'Título'})).toHaveValue('Texto 1');
+  await modal.getByRole('textbox',{name:'Título'}).fill('La llegada a Roma');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Romam venit.');
+  await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
+  await expect(page.locator('.edition-paper-title').first()).toHaveText('La llegada a Roma');
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+});

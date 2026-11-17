@@ -131,3 +131,20 @@ test('DOCX incluye exclusivamente preguntas: no exporta derivados-respuesta ni a
   assert.doesNotMatch(xml,/ANALISIS_OCULTO/);
   assert.match(xml,/Rōma/);
 });
+
+test('La edición Word separa Texto N de autor/obra/capítulo y respeta fuente común',()=>{
+  const edition=fixture();
+  edition.placements[0]!.text.title='Texto 1';
+  edition.format.fontFamily='Georgia';
+  const archive=files(createNotebookDocx(edition));
+  const document=archive.get('word/document.xml')!;
+  const parsed=new DOMParser().parseFromString(document,'text/xml');
+  const paragraphs=Array.from(parsed.getElementsByTagName('w:p'));
+  const paragraphText=(item:Element)=>item.textContent??'';
+  const heading=paragraphs.findIndex(x=>paragraphText(x).includes('Texto 1'));
+  assert.ok(heading>=0,'título editorial presente');
+  assert.equal(paragraphText(paragraphs[heading]!), 'Texto 1');
+  assert.match(paragraphText(paragraphs[heading+1]!),/Julio César.*De bello Gallico.*I 24/);
+  assert.doesNotMatch(paragraphText(paragraphs[heading+1]!),/Texto 1/);
+  assert.match(archive.get('word/styles.xml')!,/w:ascii="Georgia"/);
+});
