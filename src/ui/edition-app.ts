@@ -907,7 +907,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       seen.add(clean(headword));seen.add(clean(lemma));
       next.push({
         id:freshId('voc'),lemma,headword,meaning:entry.meaning?.trim()||null,
-        note:entry.note?.trim()||null,included:true,order:order++,
+        note:entry.note?.trim()||null,included:Boolean(entry.meaning?.trim()),order:order++,
         provenance:null,reviewState:'needs-review',origin:'generated',locked:false,
       });
     }
