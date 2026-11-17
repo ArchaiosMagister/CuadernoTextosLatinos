@@ -16,7 +16,6 @@ import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.
 import {WorkspaceRepository,type EditionSnapshotV1} from '../storage/workspace-repository.js';
 import {createWorkspaceBackup} from '../storage/workspace-backup.js';
 import type {CorpusSnapshot} from '../ports/corpus-repository.js';
-import type {GrammarTag} from '../core/model.js';
 import type {TextPlacementV1} from '../core/edition-model.js';
 
 const corpusRepo=new IndexedDbCorpusRepository();
@@ -51,7 +50,7 @@ export function mountNotebookApp(root:HTMLElement):void{
   let catalogue:LibraryEntry[]=[],work:LibraryWork|null=null,readerSelection:ReaderFragment|null=null;
   const works=new Map<string,LibraryWork>();
   let busy=false,feedback='Abre o crea un cuaderno.',failed=false;
-  let search='',authorSearch='',authorFilter='all',librarySearch='',form=newForm();
+  let authorSearch='',authorFilter='all',librarySearch='',form=newForm();
   let preserveSelection=false,tagsOpen=false;
 
   function notice(text:string,error=false):void{
