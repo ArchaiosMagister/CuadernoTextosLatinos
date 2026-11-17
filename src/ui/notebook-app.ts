@@ -10,6 +10,8 @@ import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {allGrammarTags,findTagByLabel,GRAMMAR_GROUP_IDS,
   matchesGrammarTag,isCustomTagLabelValid} from '../core/grammar-tags.js';
 import {summarizeNotebook} from '../core/notebook-overview.js';
+import {onlineSearchUrl,parseOnlineSearch,onlinePageUrl,parseOnlinePage,
+  type OnlinePage,type OnlineSearchResult} from '../core/online-sources.js';
 import {validateCorpus} from '../core/validation.js';
 import {createEditionPane,WORKING_EDITION_ID} from './edition-app.js';
 import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.js';
@@ -21,7 +23,7 @@ import type {TextPlacementV1} from '../core/edition-model.js';
 const corpusRepo=new IndexedDbCorpusRepository();
 const workspace=new WorkspaceRepository();
 type Stage='home'|'editor';
-type View='edit'|'sources'|'authors'|'manual';
+type View='edit'|'sources'|'authors'|'manual'|'online';
 type SourceForm={title:string;author:string;work:string;reference:string;latin:string};
 const newForm=():SourceForm=>({title:'',author:'',work:'',reference:'',latin:''});
 function el<K extends keyof HTMLElementTagNameMap>(kind:K,cls='',text=''):HTMLElementTagNameMap[K]{
@@ -52,6 +54,8 @@ export function mountNotebookApp(root:HTMLElement):void{
   let busy=false,feedback='Abre o crea un cuaderno.',failed=false;
   let authorSearch='',authorFilter='all',librarySearch='',form=newForm();
   let preserveSelection=false,tagsOpen=false;
+  let onlineTerm='',onlineResults:OnlineSearchResult[]=[],onlinePage:OnlinePage|null=null;
+  let onlineLatin='',onlineAuthor='',onlineTitle='',onlineFeedback='';
 
   function notice(text:string,error=false):void{
     feedback=text;failed=error;
@@ -318,6 +322,73 @@ export function mountNotebookApp(root:HTMLElement):void{
     }
     return main;
   }
+  async function searchOnline():Promise<void>{
+    if(busy)return;busy=true;onlineFeedback='Buscando obras en Wikisource latina…';
+    try{
+      const response=await fetch(onlineSearchUrl(onlineTerm));
+      if(!response.ok)throw new Error('El servicio online respondió '+response.status);
+      onlineResults=parseOnlineSearch(await response.json());
+      onlineFeedback=onlineResults.length
+        ?onlineResults.length+' páginas encontradas. Abre una para revisar el latín.'
+        :'No se han encontrado páginas con esa búsqueda.';
+      onlinePage=null;render();
+    }catch(e){onlineFeedback='No ha sido posible consultar Wikisource: '+String(e);render();}
+    finally{busy=false;}
+  }
+  async function openOnline(item:OnlineSearchResult):Promise<void>{
+    if(busy)return;busy=true;onlineFeedback='Leyendo el texto original…';
+    try{
+      const response=await fetch(onlinePageUrl(item.title));
+      if(!response.ok)throw new Error('No se ha obtenido la obra ('+response.status+').');
+      const page=parseOnlinePage(await response.json());
+      const html=new DOMParser().parseFromString(page.html,'text/html');
+      for(const hidden of html.querySelectorAll(
+        'script,style,nav,table,.mw-editsection,.reference,.reflist,.toc,.navbox,.metadata,.noprint'))
+        hidden.remove();
+      const content=html.querySelector('.mw-parser-output')??html.body;
+      const paragraphs=[...content.querySelectorAll('p,blockquote,pre')]
+        .map(p=>p.textContent?.replace(/\\s+/g,' ').trim()??'').filter(Boolean);
+      const extracted=paragraphs.length?paragraphs.join('\\n\\n'):content.textContent?.trim()??'';
+      if(extracted.length<20)throw new Error('La página no ofrece un texto latino legible.');
+      onlinePage=page;onlineLatin=extracted.slice(0,100_000);
+      onlineTitle=page.title;onlineAuthor='';
+      onlineFeedback='Texto obtenido. Revisa y recorta el fragmento antes de añadirlo.';
+      render();
+    }catch(e){onlineFeedback='No se ha abierto la página: '+String(e);render();}
+    finally{busy=false;}
+  }
+  function renderOnline():HTMLElement{
+    const pane=el('section','notebook-online');
+    pane.append(el('h2','','Autores y obras online · Wikisource latina'),
+      el('p','hint','Consulta pública sin enviar datos de tu cuaderno. Revisa el texto y selecciona el fragmento; no se importa automáticamente.'));
+    const search=el('div','simple-ref-jump'),input=el('input','field-control');
+    input.type='search';input.placeholder='Autor u obra, por ejemplo Cicero';input.value=onlineTerm;
+    input.setAttribute('aria-label','Buscar obras online');
+    input.addEventListener('input',()=>{onlineTerm=input.value;});
+    input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void searchOnline();}});
+    search.append(input,button('Buscar online',searchOnline,'btn btn-primary'));pane.append(search);
+    pane.append(el('p','hint',onlineFeedback));
+    const results=el('div','notebook-online-results');
+    for(const item of onlineResults)results.append(button(item.title,()=>openOnline(item),'simple-source-row'));
+    pane.append(results);
+    if(onlinePage){
+      const form=el('section','simple-manual');
+      form.append(el('h3','','Revisar y añadir fragmento'),
+        el('p','hint','La fuente puede contener encabezados o notas de edición: elimina lo que no sea parte del texto latino.'));
+      form.append(labelled('Título del texto',onlineTitle,v=>{onlineTitle=v;}));
+      form.append(labelled('Autor',onlineAuthor,v=>{onlineAuthor=v;}));
+      form.append(labelled('Fragmento latino (editable)',onlineLatin,v=>{onlineLatin=v;},true));
+      const link=el('a','','Consultar fuente y licencia de la página');
+      link.href=onlinePage.url;link.target='_blank';link.rel='noopener noreferrer';form.append(link);
+      const original=onlinePage;
+      form.append(button('Añadir fragmento revisado',async()=>{
+        await storeText({title:onlineTitle,author:onlineAuthor,work:original.title,
+          reference:'Wikisource latina',latin:onlineLatin});
+      },'btn btn-primary'));
+      pane.append(form);
+    }
+    return pane;
+  }
   function renderManual():HTMLElement{
     const section=el('section','simple-manual'),formEl=el('form','simple-manual-form');
     section.append(el('h2','','Pegar texto propio'),el('p','hint',
@@ -353,6 +424,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     input.addEventListener('input',()=>{librarySearch=input.value;draw();});
     section.append(input,list);draw();
     section.append(button('Buscar entre los autores offline',()=>{view='authors';render();},'btn btn-primary'),
+      button('Autores online',()=>{view='online';render();}),
       button('Pegar otro texto',()=>{form=newForm();view='manual';render();}));
     return section;
   }
@@ -430,6 +502,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     },'btn btn-primary'));
     actions.append(button('Biblioteca',()=>{view='sources';render();}));
     actions.append(button('Autores offline',()=>{view='authors';render();}));
+    actions.append(button('Autores online',()=>{view='online';render();}));
     actions.append(button('Pegar texto',()=>{form=newForm();view='manual';render();}));
     actions.append(button('Volver a cuadernos',async()=>{
       if(!await composer.flush())return;
@@ -451,6 +524,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     const content=el('div','notebook-editor-content');
     if(view==='sources')content.append(renderSources());
     else if(view==='authors')content.append(renderAuthors());
+    else if(view==='online')content.append(renderOnline());
     else if(view==='manual')content.append(renderManual());
     else if(edition.placements.length){
       const tagBar=el('div','notebook-question-tags');
