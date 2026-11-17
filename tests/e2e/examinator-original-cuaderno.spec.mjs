@@ -160,7 +160,10 @@ test('Collatinus original: solo nombres propios/gentilicios de inicio; el resto 
   await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   const chosen=page.locator('.edition-paper .edition-vocabulary-line');
-  await expect(chosen.filter({hasText:/Caesar/i}).first()).toBeVisible({timeout:90000});
+  const normalize=value=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/æ/gi,'ae').toLowerCase();
+  await expect.poll(async()=>normalize((await chosen.allTextContents()).join(' ')),{timeout:90000})
+    .toContain('caesar');
   const words=(await chosen.allTextContents()).join(' ');
   expect(words.toLowerCase()).not.toContain('milites');
   expect(words.toLowerCase()).not.toContain('laborant');
