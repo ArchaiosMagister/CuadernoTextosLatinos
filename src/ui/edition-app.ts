@@ -375,7 +375,8 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
         }
       }
       paint();
-      setMessage('Texto incorporado y guardado en este cuaderno.');
+      if(autoApply)await academics.generateInitial(place.id);
+      setMessage('Texto incorporado con preguntas generadas; puedes modificar cualquiera.');
       return true;
     }catch(e){
       setMessage('No se pudo añadir: '+(e instanceof Error?e.message:String(e)),true);return false;
