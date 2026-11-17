@@ -302,9 +302,11 @@ export function mountNotebookApp(root:HTMLElement):void{
       card.append(el('h3','',saved.edition.title),
         el('p','hint',info.total+' textos · '+info.distinctTexts+' fuentes · '+info.withoutTags+' sin etiquetar'));
       const actions=el('div','simple-actions');
+      const remove=button('Eliminar',()=>deleteNotebook(saved.edition.id),'btn btn-outline notebook-danger');
+      remove.disabled=saved.edition.legacyNotebookId!==null;
+      if(remove.disabled)remove.title='Cuaderno histórico protegido para conservar la migración.';
       actions.append(button('Abrir',()=>openNotebook(saved.edition.id),'btn btn-primary'),
-        button('Renombrar',()=>renameNotebook(saved.edition.id)),
-        button('Eliminar',()=>deleteNotebook(saved.edition.id),'btn btn-outline notebook-danger'));
+        button('Renombrar',()=>renameNotebook(saved.edition.id)),remove);
       card.append(actions);list.append(card);
     }
     if(!books.length)list.append(el('p','hint','No hay cuadernos editoriales. Crea el primero o importa uno anterior.'));
