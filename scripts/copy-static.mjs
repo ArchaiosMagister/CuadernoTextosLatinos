@@ -33,6 +33,22 @@ await writeFile('dist/examinator-cuadernos/index.html',html);
 await copyFile('reference/examinator2/styles.css','dist/examinator-cuadernos/styles.css');
 await copyFile('reference/examinator2/js/util.js','dist/examinator-cuadernos/js/util.js');
 await copyFile('reference/examinator2/js/library.js','dist/examinator-cuadernos/js/library.js');
+// Collatinus de Examinator2 se carga solo al necesitar lematización.
+// El módulo de referencia NO se modifica; una copia del shim utiliza una
+// base y claves propias para que el motor original no toque datos de Examinator2.
+await mkdir('dist/examinator-cuadernos/collatinus',{recursive:true});
+await copyFile('reference/examinator2/js/motor.js',
+  'dist/examinator-cuadernos/collatinus/motor.js');
+const originalShim=await readFile('reference/examinator2/js/shim.js','utf8');
+if(!originalShim.includes("indexedDB.open('examinator', 1)")||
+   !originalShim.includes("const LS = 'examinator.fs:'"))
+  throw new Error('El almacenamiento Collatinus original cambió: revisar el adaptador.');
+await writeFile('dist/examinator-cuadernos/collatinus/shim.js',originalShim
+  .replace("indexedDB.open('examinator', 1)",
+    "indexedDB.open('cuaderno-collatinus-examinator-v1', 1)")
+  .replace("const LS = 'examinator.fs:'",
+    "const LS = 'cuaderno-collatinus-examinator-v1.fs:'"));
+
 await copyFile('reference/examinator2/FUENTES.md','dist/examinator-cuadernos/FUENTES.md');
 await copyFile('src/ui/examinator-notebook-bridge.css','dist/examinator-cuadernos/bridge.css');
 // Se reutiliza la Gentium Book Plus empaquetada en la ruta original: no se
