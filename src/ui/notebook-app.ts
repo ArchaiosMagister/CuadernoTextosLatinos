@@ -71,6 +71,8 @@ export function mountNotebookApp(root:HTMLElement):void{
     feedback=text;failed=error;
     const target=root.querySelector<HTMLElement>('.simple-status');
     if(target){target.textContent=text;target.dataset.error=String(error);}
+    const alert=root.querySelector<HTMLElement>('.exlib-feedback');
+    if(alert){alert.textContent=error?text:'';alert.dataset.error=String(error);}
   }
   function activeEdition():EditionSnapshotV1|undefined{
     return editions.find(e=>e.edition.id===selectedId);
@@ -615,11 +617,18 @@ export function mountNotebookApp(root:HTMLElement):void{
           if(!available){notice('Marca esta obra y pulsa «Descargar las marcadas».');return;}
           await showWork(meta);
         },'exlib-item');
-        content.append(el('strong','',meta.author+' · '+meta.title));
-        content.append(el('small','',meta.latin+' · '+meta.genre));
-        const badge=el('span','exlib-badge',
-          meta.local?'incluida':remoteAvailable.has(meta.urn)?'descargada':'online');
-        row.append(check,content,badge);list.append(row);
+        const title=el('div','exlib-row-title');
+        title.append(el('strong','',meta.author),document.createTextNode(' · '+meta.title));
+        const detail=el('div','exlib-row-detail');
+        detail.append(el('i','',meta.latin),document.createTextNode(' · '+meta.genre));
+        content.append(title,detail);row.append(check,content);
+        if(available)row.append(el('span','exlib-badge',meta.local?'incluida':'descargada'));
+        row.addEventListener('click',event=>{
+          if(event.target===check||check.contains(event.target as Node)
+            ||content.contains(event.target as Node))return;
+          content.click();
+        });
+        list.append(row);
       }
       if(!shown.length)list.append(el('p','hint','No hay obras con ese filtro.'));
       const count=root.querySelector<HTMLElement>('.exlib-count');
@@ -635,11 +644,13 @@ export function mountNotebookApp(root:HTMLElement):void{
     listing();
     const readerHeader=el('div','exlib-reader-head');
     if(!work){
-      readerHeader.append(el('p','hint','Elige una obra incluida o descargada para leerla.'));
+      readerHeader.append(el('div','exlib-reader-title muted','Elige una obra descargada para leerla.'));
       right.append(readerHeader);
     }else{
-      readerHeader.append(el('div','exlib-reader-title',work.author+', '+work.latin),
-        el('p','hint',work.title+' · '+(work.levels??[]).join(' / ')));
+      const title=el('div','exlib-reader-title');
+      title.append(el('strong','',work.author),document.createTextNode(', '),el('i','',work.latin),
+        el('span','exlib-reader-meta',' · '+work.title+' · '+(work.levels??[]).join(' / ')));
+      readerHeader.append(title);
       const controls=el('div','exlib-reader-controls');
       const location=el('input','field-control');location.placeholder='Ir a… (p. ej. 1.6)';
       location.setAttribute('aria-label','Ir a referencia');
@@ -651,7 +662,7 @@ export function mountNotebookApp(root:HTMLElement):void{
           ?.scrollIntoView({block:'center'});
       };
       location.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();jump();}});
-      controls.append(location,button('Ir a',jump,'btn btn-outline'));
+      controls.append(location,button('Ir a',jump,'exlib-jump-button'));
       const selectionLabel=el('span','exlib-select-status',
         readerSelection
         ?'Selección: '+readerSelection.reference+' ('+readerSelection.wordCount+' palabras)'
@@ -666,21 +677,26 @@ export function mountNotebookApp(root:HTMLElement):void{
       controls.append(selectionLabel,add);
       readerHeader.append(controls);right.append(readerHeader);
       const readArea=el('div','exlib-reader-lines simple-reader-lines reader-lines');
-      const end=Math.min(work.lines.length,startReaderAt+450);
+      const pageSize=work.lines.length<=2500?work.lines.length:450;
+      const end=Math.min(work.lines.length,startReaderAt+pageSize);
       let prev='';
       for(let index=startReaderAt;index<end;index++){
         const line=work.lines[index]!;
         const row=el('div','reader-line simple-reader-line exlib-reader-row'+(line.k==='h'?' heading':''));
         row.dataset.index=String(index);row.dataset.c=line.c;row.tabIndex=0;
         const citation=el('span','reader-ref',line.c===prev?'':line.c);prev=line.c;
-        const latin=el('span','reader-latin',line.t);
-        row.append(citation,latin);
+        const rightText=el('span','exlib-reader-text');
+        if(line.s)rightText.append(el('span','exlib-speaker',line.s+' '));
+        rightText.append(el('span','reader-latin',line.t));
+        row.append(citation,rightText);
         row.addEventListener('click',()=>{
           const sel=window.getSelection();
           if(sel&&!sel.isCollapsed){readerSelectionChanged();return;}
           readerPickedByTap=true;
           readerSelection={latin:line.t,reference:line.c,wordCount:line.t.split(/\s+/u).length,
             startLine:index,endLine:index};
+          root.querySelectorAll('.exlib-reader-row.chosen').forEach(x=>x.classList.remove('chosen'));
+          row.classList.add('chosen');
           const action=root.querySelector<HTMLButtonElement>('[data-range-add]');
           if(action)action.disabled=false;
           const status=root.querySelector<HTMLElement>('.exlib-select-status');
@@ -699,15 +715,10 @@ export function mountNotebookApp(root:HTMLElement):void{
           'btn btn-outline'),
         button('Siguientes pasajes',()=>{startReaderAt=Math.min(Math.max(0,work!.lines.length-1),startReaderAt+450);
           readerSelection=null;readerPickedByTap=false;render();},'btn btn-outline'));
-      right.append(pagination);
+      if(work.lines.length>pageSize)right.append(pagination);
     }
     body.append(left,right);shell.append(body);
-    const footer=el('div','exlib-footer');
-    footer.append(el('span','hint','Fuentes: Perseus Digital Library · Eutropio, The Latin Library (incluido) · Nepote, Perseus.'));
-    footer.append(button('Pegar otro texto',()=>{form=newForm();view='manual';render();},
-        'btn btn-outline'),button('Autores online (Wikisource)',()=>{view='online';render();},
-        'btn btn-outline'),button('Volver al cuaderno',()=>{view='edit';render();}));
-    shell.append(footer);return shell;
+    return shell;
   }
   function renderEditor():HTMLElement{
     const main=el('main','notebook-editor'),edition=composer.activeEdition();
