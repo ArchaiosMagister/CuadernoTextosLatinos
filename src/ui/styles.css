@@ -946,3 +946,53 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
      @page de arriba pertenecen a hojas físicas, no a apariciones. */
   .edition-print-root .edition-paper-footer{display:none!important;}
 }
+
+/* Notebook-first optativo: no afecta al flujo previo ni a la versión estable. */
+.notebook-first .simple-header {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.65rem;}
+.notebook-first .simple-header h1 {margin:.15rem 0;font-size:clamp(1.25rem,3vw,1.85rem);}
+.notebook-home,.notebook-editor {display:grid;gap:.8rem;padding:.6rem 0;}
+.notebook-home-head,.notebook-editor-head {
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
+  border:1px solid var(--edge);background:var(--surface);padding:.8rem 1rem;border-radius:.7rem;
+}
+.notebook-home-head h2,.notebook-editor-head h2 {margin:0;flex:1 1 100%;}
+.notebook-home-head .hint,.notebook-editor-head .hint {margin:0;flex:1 1 55%;}
+.notebook-cards {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,17rem),1fr));gap:.65rem;}
+.notebook-card {border:1px solid var(--edge);background:var(--surface);border-radius:.75rem;padding:.8rem;}
+.notebook-card h3 {font:700 1.12rem Palatino,Georgia,serif;color:var(--accent);margin:0;}
+.notebook-card .hint {font-size:.83rem;}
+.notebook-card .btn {padding:.38rem .6rem;font-size:.78rem;min-height:2.35rem;}
+.notebook-danger {color:light-dark(#a52d34,#ffb6b9)!important;}
+.notebook-editor-layout {display:grid;grid-template-columns:minmax(12rem,235px) minmax(0,1fr);gap:.75rem;align-items:start;}
+.notebook-editor-aside {display:grid;gap:.4rem;background:var(--surface);
+  border:1px solid var(--edge);padding:.65rem;border-radius:.7rem;min-width:0;}
+.notebook-editor-aside h3 {margin:0;font-size:1rem;color:var(--accent);}
+.notebook-editor-aside .simple-source-row {width:100%;text-align:left;}
+.notebook-editor-content {min-width:0;}
+.notebook-source-choice {display:grid;gap:.6rem;align-content:start;
+  border:1px solid var(--edge);border-radius:.7rem;padding:.85rem;background:var(--surface);}
+.notebook-source-choice h2 {margin:0;}
+.notebook-source-choice .field-control {margin:0;}
+.notebook-source-list {max-height:44vh;overflow-y:auto;display:grid;gap:.2rem;}
+.notebook-source-list .simple-source-row {display:grid;text-align:left;gap:.15rem;}
+.notebook-first .edition-toolbar-actions>select,
+.notebook-first .edition-toolbar-actions>button:nth-of-type(1) {display:none;}
+.notebook-first .edition-toolbar-actions {flex-wrap:wrap;}
+.notebook-first .edition-menu-content {max-height:none;}
+.notebook-first .edition-menu-nav {grid-template-columns:repeat(5,minmax(0,1fr));}
+.notebook-first .simple-work-scroll {max-height:55vh;}
+@media(max-width:1000px){
+  .notebook-editor-layout {grid-template-columns:1fr;}
+  .notebook-editor-aside {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .notebook-editor-aside>h3,.notebook-editor-aside>.simple-grammar,
+  .notebook-editor-aside>.simple-grammar-summary {grid-column:1/-1;}
+  .notebook-first .edition-layout {grid-template-columns:1fr;}
+  .notebook-first .edition-layout>.edition-preview-stack {grid-row:1;}
+  .notebook-first .edition-layout>.edition-settings {grid-row:2;}
+}
+@media(max-width:600px){
+  .notebook-editor-aside {grid-template-columns:1fr;}
+  .notebook-first .edition-menu-nav {grid-template-columns:repeat(3,minmax(0,1fr));}
+  .notebook-first .simple-authors-layout {grid-template-columns:1fr;}
+  .notebook-first .edition-toolbar-actions .btn {font-size:.75rem;padding:.4rem .55rem;min-height:2.2rem;}
+}
