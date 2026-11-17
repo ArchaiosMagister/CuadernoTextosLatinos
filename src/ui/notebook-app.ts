@@ -59,7 +59,7 @@ export function mountNotebookApp(root:HTMLElement):void{
   let examinator:ExaminatorCatalogue|null=null,remoteAvailable=new Set<string>();
   let genreFilter='',onlyDownloaded=false,marked=new Set<string>();
   let libraryDownloading=false,libraryProgress='',libraryError='',catalogueMode:'all'|'my'='all';
-  let startReaderAt=0;
+  let startReaderAt=0,catalogueScroll=0;
   const works=new Map<string,LibraryWork>();
   let busy=false,feedback='Abre o crea un cuaderno.',failed=false;
   let authorSearch='',form=newForm();
@@ -188,7 +188,10 @@ export function mountNotebookApp(root:HTMLElement):void{
       if(!candidate)candidate=await downloadedWorks.get(meta.urn)??undefined;
       if(!candidate)throw new Error('Marca la obra y selecciona «Descargar las marcadas».');
       works.set(meta.urn,candidate);
+      catalogueScroll=root.querySelector<HTMLElement>('.exlib-list')?.scrollTop??0;
       work=candidate;readerSelection=null;readerPickedByTap=false;startReaderAt=0;render();
+      const displayed=root.querySelector<HTMLElement>('.exlib-list');
+      if(displayed)displayed.scrollTop=catalogueScroll;
     }catch(e){notice(String(e),true);}finally{busy=false;}
   }
   function readerSelectionChanged():void{
@@ -532,10 +535,35 @@ export function mountNotebookApp(root:HTMLElement):void{
   function renderSources():HTMLElement{return renderAuthors();}
   /** Biblioteca de Examinator2: filtros, descargas y lector en dos paneles. */
   function renderAuthors():HTMLElement{
-    const shell=el('section','exlib'),header=el('div','exlib-head');
-    header.append(el('strong','','Biblioteca'),
-      el('span','hint','César, Eutropio y Nepote incluidos · catálogo completo de Perseus (Examinator2)'));
-    header.append(button('Volver al cuaderno',()=>{view='edit';render();}));
+    const shell=el('section','exlib'+(catalogueMode==='my'?' exlib--own':'')),
+      appbar=el('div','exlib-appbar'),header=el('div','exlib-head');
+    shell.setAttribute('aria-label','Biblioteca de textos latinos');
+    appbar.append(el('span','exlib-brand','Cuaderno de textos latinos'));
+    appbar.append(button('Cuadernos',async()=>{
+      if(!await composer.flush())return;
+      await reload();stage='home';view='edit';render();
+    },'exlib-header-button'));
+    appbar.append(button('Editor',()=>{view='edit';render();},'exlib-header-button'));
+    appbar.append(el('span','exlib-separator'));
+    appbar.append(button('Biblioteca',()=>{
+      catalogueMode='all';genreFilter='';onlyDownloaded=false;render();
+    },'exlib-header-button'+(catalogueMode==='all'?' active':'')));
+    const more=el('details','exlib-more');
+    more.append(el('summary','exlib-header-button','Otros textos'));
+    const options=el('div','exlib-more-options');
+    options.append(button('Mis textos',()=>{catalogueMode='my';render();},'exlib-menu-button'),
+      button('Pegar texto propio',()=>{form=newForm();view='manual';render();},'exlib-menu-button'),
+      button('Autores online (Wikisource)',()=>{view='online';render();},'exlib-menu-button'));
+    more.append(options);appbar.append(more);
+    appbar.append(el('span','exlib-spacer'));shell.append(appbar);
+    header.append(el('strong','',catalogueMode==='my'?'Mis textos':'Biblioteca'));
+    header.append(el('span','exlib-description',
+      'Eutropio, Julio César y Cornelio Nepote vienen incluidos. Los demás textos de Perseus se pueden descargar para leer sin conexión.'));
+    const credits=el('a','exlib-credits','Fuentes y licencias');
+    credits.href='https://github.com/ArchaiosMagister/examinator2/blob/main/FUENTES.md';
+    credits.target='_blank';credits.rel='noopener noreferrer';header.append(credits);
+    header.append(el('span','exlib-spacer'));
+    header.append(button('Volver al cuaderno',()=>{view='edit';render();},'exlib-header-button'));
     shell.append(header);
     const body=el('div','exlib-body'),left=el('aside','exlib-catalog'),
       right=el('section','exlib-reading'),filters=el('div','exlib-filters');
@@ -600,15 +628,10 @@ export function mountNotebookApp(root:HTMLElement):void{
     search.addEventListener('input',()=>{authorSearch=search.value;listing();});
     genre.addEventListener('change',()=>{genreFilter=genre.value;listing();});
     cb.addEventListener('change',()=>{onlyDownloaded=cb.checked;listing();});
-    const modes=el('div','exlib-modes');
-    modes.append(button('Biblioteca Perseus',()=>{
-      catalogueMode='all';render();
-    },'exlib-mode'+(catalogueMode==='all'?' active':'')),
-    button('Mis textos',()=>{catalogueMode='my';render();},
-      'exlib-mode'+(catalogueMode==='my'?' active':'')));
-    left.append(filters,modes,tools,list);
+    left.append(filters,tools,list);
     const count=el('div','exlib-count');left.append(count);
-    if(libraryError)left.append(el('p','hint',libraryError));
+    const warning=el('div','exlib-feedback',libraryError);warning.role='status';
+    warning.dataset.error=String(Boolean(libraryError));left.append(warning);
     listing();
     const readerHeader=el('div','exlib-reader-head');
     if(!work){
