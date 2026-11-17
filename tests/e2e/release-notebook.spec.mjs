@@ -55,7 +55,7 @@ test('borrar un cuaderno nuevo exige respaldo y no afecta a otro',async({page})=
   page.on('dialog',async d=>{dialogs++;await d.accept();});
   const [download]=await Promise.all([
     page.waitForEvent('download'),
-    page.locator('.notebook-card').filter({hasText:'Eliminar'})
+    page.locator('.notebook-card').filter({has:page.getByRole('heading',{name:'Eliminar',exact:true})})
       .getByRole('button',{name:'Eliminar'}).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/copia-antes-de-eliminar-cuaderno-.*\.json/);
