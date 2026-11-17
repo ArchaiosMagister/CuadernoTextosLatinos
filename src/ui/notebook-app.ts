@@ -63,7 +63,7 @@ export function mountNotebookApp(root:HTMLElement):void{
   const works=new Map<string,LibraryWork>();
   let busy=false,feedback='Abre o crea un cuaderno.',failed=false;
   let authorSearch='',form=newForm();
-  let preserveSelection=false,tagsOpen=false;
+  let preserveSelection=false,tagsOpen=false,readerPickedByTap=false;
   let onlineTerm='',onlineResults:OnlineSearchResult[]=[],onlinePage:OnlinePage|null=null;
   let onlineLatin='',onlineAuthor='',onlineTitle='',onlineFeedback='';
 
@@ -188,7 +188,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       if(!candidate)candidate=await downloadedWorks.get(meta.urn)??undefined;
       if(!candidate)throw new Error('Marca la obra y selecciona «Descargar las marcadas».');
       works.set(meta.urn,candidate);
-      work=candidate;readerSelection=null;startReaderAt=0;render();
+      work=candidate;readerSelection=null;readerPickedByTap=false;startReaderAt=0;render();
     }catch(e){notice(String(e),true);}finally{busy=false;}
   }
   function readerSelectionChanged():void{
@@ -197,8 +197,9 @@ export function mountNotebookApp(root:HTMLElement):void{
     if(!host)return;
     const sel=window.getSelection();
     const next=readReaderSelection(work,host,sel);
-    if(next)readerSelection=next;
-    else if(sel?.isCollapsed&&sel.anchorNode&&host.contains(sel.anchorNode))readerSelection=null;
+    if(next){readerSelection=next;readerPickedByTap=false;}
+    else if(sel?.isCollapsed&&sel.anchorNode&&host.contains(sel.anchorNode)&&!readerPickedByTap)
+      readerSelection=null;
     const action=root.querySelector<HTMLButtonElement>('[data-range-add]');
     if(action)action.disabled=!readerSelection;
     const message=root.querySelector<HTMLElement>('.exlib-select-status');
@@ -622,7 +623,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       const jump=()=>{
         const at=findCitation(work!,location.value);
         if(at<0){notice('No encuentro ese pasaje.',true);return;}
-        startReaderAt=Math.max(0,at-12);readerSelection=null;render();
+        startReaderAt=Math.max(0,at-12);readerSelection=null;readerPickedByTap=false;render();
         root.querySelector<HTMLElement>('.exlib-reading .simple-reader-line[data-index="'+at+'"]')
           ?.scrollIntoView({block:'center'});
       };
@@ -654,6 +655,7 @@ export function mountNotebookApp(root:HTMLElement):void{
         row.addEventListener('click',()=>{
           const sel=window.getSelection();
           if(sel&&!sel.isCollapsed){readerSelectionChanged();return;}
+          readerPickedByTap=true;
           readerSelection={latin:line.t,reference:line.c,wordCount:line.t.split(/\s+/u).length,
             startLine:index,endLine:index};
           const action=root.querySelector<HTMLButtonElement>('[data-range-add]');
@@ -664,15 +666,16 @@ export function mountNotebookApp(root:HTMLElement):void{
         row.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();row.click();}});
         readArea.append(row);
       }
+      readArea.addEventListener('pointerdown',()=>{readerPickedByTap=false;});
       readArea.addEventListener('pointerup',()=>window.setTimeout(readerSelectionChanged,0));
       readArea.addEventListener('touchend',()=>window.setTimeout(readerSelectionChanged,120),{passive:true});
       right.append(readArea);
       const pagination=el('div','exlib-page');
       pagination.append(el('span','',String(startReaderAt+1)+'–'+end+' / '+work.lines.length+' pasajes'),
-        button('Anterior',()=>{startReaderAt=Math.max(0,startReaderAt-450);readerSelection=null;render();},
+        button('Anterior',()=>{startReaderAt=Math.max(0,startReaderAt-450);readerSelection=null;readerPickedByTap=false;render();},
           'btn btn-outline'),
         button('Siguientes pasajes',()=>{startReaderAt=Math.min(Math.max(0,work!.lines.length-1),startReaderAt+450);
-          readerSelection=null;render();},'btn btn-outline'));
+          readerSelection=null;readerPickedByTap=false;render();},'btn btn-outline'));
       right.append(pagination);
     }
     body.append(left,right);shell.append(body);
