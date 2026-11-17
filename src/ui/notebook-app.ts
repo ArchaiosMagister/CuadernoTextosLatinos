@@ -96,10 +96,15 @@ export function mountNotebookApp(root:HTMLElement):void{
     if(!title?.trim()||title.trim()===source.edition.title)return;
     busy=true;
     try{
-      if(!await composer.openEdition(id)||!await composer.renameActiveNotebook(title))
-        throw new Error('No se ha podido cambiar el título.');
+      if(!await composer.flush())throw new Error('No se han guardado los cambios pendientes.');
+      const now=new Date().toISOString();
+      await workspace.commitEdition(id,source.revision,
+        {command:'ui.rename-from-notebooks',targetId:id,timestamp:now},previous=>{
+          if(!previous)throw new Error('El cuaderno no existe.');
+          return {...previous,title:title.trim(),updatedAt:now};
+        });
       await reload();render();notice('Título guardado sin cambiar textos, preguntas ni vocabulario.');
-    }catch(e){notice(String(e),true);}finally{busy=false;}
+    }catch(e){notice('No se ha podido renombrar: '+String(e),true);}finally{busy=false;}
   }
   async function deleteNotebook(id:string):Promise<void>{
     const original=editions.find(x=>x.edition.id===id);
@@ -111,7 +116,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       // Copia íntegra, verificable con SHA-256, anterior a la eliminación.
       const backup=await createWorkspaceBackup(workspace);
       saveJson(backup,'copia-antes-de-eliminar-cuaderno-'+new Date().toISOString().slice(0,10)+'.json');
-      if(!window.confirm('Se ha iniciado la descarga de una copia JSON. ¿Confirmas la eliminación definitiva de «'+original.edition.title+'»?')){
+      if(!window.confirm('Comprueba que has guardado el archivo JSON en Archivos. ¿Confirmas la eliminación definitiva de «'+original.edition.title+'»?')){
         notice('Eliminación cancelada: no se ha modificado ningún cuaderno.');return;
       }
       const latest=await workspace.loadEdition(id);
@@ -411,6 +416,7 @@ export function mountNotebookApp(root:HTMLElement):void{
     const results=el('div','notebook-online-results');
     for(const item of onlineResults)results.append(button(item.title,()=>openOnline(item),'simple-source-row'));
     pane.append(results);
+    pane.append(button('Cancelar y volver al texto',()=>{view='edit';render();}));
     if(onlinePage){
       const form=el('section','simple-manual');
       form.append(el('h3','','Revisar y añadir fragmento'),
@@ -465,7 +471,8 @@ export function mountNotebookApp(root:HTMLElement):void{
     section.append(input,list);draw();
     section.append(button('Buscar entre los autores offline',()=>{view='authors';render();},'btn btn-primary'),
       button('Autores online',()=>{view='online';render();}),
-      button('Pegar otro texto',()=>{form=newForm();view='manual';render();}));
+      button('Pegar otro texto',()=>{form=newForm();view='manual';render();}),
+      button('Cancelar y volver al texto',()=>{view='edit';render();}));
     return section;
   }
   function renderAuthors():HTMLElement{
@@ -527,6 +534,7 @@ export function mountNotebookApp(root:HTMLElement):void{
       lines.addEventListener('touchend',()=>window.setTimeout(readerSelectionChanged,90),{passive:true});
       right.append(choose,lines);
     }
+    right.append(button('Cancelar y volver al texto',()=>{view='edit';render();}));
     layout.append(left,right);return layout;
   }
   function renderEditor():HTMLElement{
