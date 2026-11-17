@@ -567,7 +567,9 @@ export function mountNotebookApp(root:HTMLElement):void{
       const tagBar=el('div','notebook-question-tags');
       const selected=composer.activePlacement();
       const catalog=allGrammarTags(corpus!.corpus);
-      const names=(selected?.grammaticalTagIds??[]).map(id=>catalog.find(t=>t.id===id)?.label??id);
+      const allIds=new Set([...(selected?.grammaticalTagIds??[]),
+        ...(selected?.grammaticalSpans??[]).flatMap(span=>span.tagIds)]);
+      const names=[...allIds].map(id=>catalog.find(t=>t.id===id)?.label??id);
       tagBar.append(el('strong','','Construcciones del texto'),
         el('span','',names.length?names.join(' · '):'Sin etiquetar'));
       tagBar.append(button('Editar etiquetas',()=>{
