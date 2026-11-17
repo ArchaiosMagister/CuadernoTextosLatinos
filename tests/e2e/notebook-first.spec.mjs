@@ -7,14 +7,16 @@ test('flujo directo: crear, pegar, guardar, + NUEVO cancelar, recuperar sin fich
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
   await expect(page.locator('.notebook-editor-head h2')).toHaveText('Cuaderno prueba directa');
   await expect(page.locator('.notebook-editor-head')).toContainText('0 textos');
-  await page.getByRole('button',{name:'Pegar otro texto'}).click();
+  await page.locator('.exlib-more>summary').click();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Pegar texto propio'}).click();
   await page.getByRole('textbox',{name:'Título',exact:true}).fill('César I 1');
   await page.getByRole('textbox',{name:'Texto latino'}).fill('Gallia est omnis divisa in partes tres.');
   await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
   await page.getByRole('button',{name:'+ NUEVO'}).click();
   await expect(page.locator('.notebook-editor-head')).toContainText('1 textos');
-  await page.getByRole('button',{name:'Pegar otro texto'}).click();
+  await page.locator('.exlib-more>summary').click();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Pegar texto propio'}).click();
   await page.getByRole('button',{name:'Cancelar',exact:true}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
   await page.reload();
@@ -27,7 +29,8 @@ test('el resumen gramatical se actualiza por cuaderno, sin modificar otro cuader
   await page.goto('/?nuevo=1');
   page.once('dialog',dialog=>dialog.accept('Primero'));
   await page.getByRole('button',{name:'+ Crear cuaderno'}).click();
-  await page.getByRole('button',{name:'Pegar otro texto'}).click();
+  await page.locator('.exlib-more>summary').click();
+  await page.locator('.exlib-more-options').getByRole('button',{name:'Pegar texto propio'}).click();
   await page.getByRole('textbox',{name:'Título',exact:true}).fill('Texto A');
   await page.getByRole('textbox',{name:'Texto latino'}).fill('Caesar advenit.');
   await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
