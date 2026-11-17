@@ -12,7 +12,7 @@ test('iPad: renombrar desde Cuadernos no cambia de editor ni modifica fichas',as
   await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
   await page.getByRole('button',{name:'+ NUEVO'}).click();
-  await page.getByRole('button',{name:'Cancelar y volver al texto'}).click();
+  await page.locator('.exlib-head').getByRole('button',{name:'Volver al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toHaveText('Texto 1 de 1');
   await page.getByRole('button',{name:'Cuadernos',exact:true}).click();
   page.once('dialog',d=>d.accept('Cuaderno segundo'));
