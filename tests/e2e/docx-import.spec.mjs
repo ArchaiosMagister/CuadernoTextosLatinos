@@ -87,8 +87,9 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   const latin='Omnis homines qui sese student praestare ceteris animalibus summa ope niti decet.';
   const xml='<?xml version="1.0"?>'+
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+
+    p(['Texto de repaso'])+p(['Nombre:     Fecha:'])+
     p(['Salustio. Reflexión inicial'])+p(['Salustio, Bellum Catilinae I 1'])+
-    p([latin])+p(['Traducción del texto. (4p.)'])+
+    p([latin])+p(['Vocabulario'])+p(['Traducción del texto. (4p.)'])+
     p(['Análisis sintáctico del texto. (1p.)'])+
     p(['Análisis morfológico de las palabras subrayadas. (1p.)'])+
     '</w:body></w:document>';
