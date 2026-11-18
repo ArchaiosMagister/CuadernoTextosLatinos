@@ -1140,7 +1140,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
 
     const headword=node('input','field-control');headword.placeholder='Enunciado o lema';
     headword.setAttribute('aria-label','Enunciado nuevo');
-    const meaning=node('input','field-control');meaning.placeholder='Traducción';
+    const meaning=node('input','field-control');meaning.placeholder='Significado';
     meaning.setAttribute('aria-label','Traducción nueva');
     const add=action('Añadir entrada',()=>{
       const lemma=headword.value.trim();
