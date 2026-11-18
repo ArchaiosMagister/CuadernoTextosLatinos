@@ -74,7 +74,8 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
   assert.match(xml,/Elige dos de estas cuatro preguntas \(2p\.\):/);
   assert.match(xml,/w:w="11906" w:h="16838"/);
   assert.match(xml,/w:footer="709"/);
-  assert.match(entries.get('word/styles.xml')!,/w:line="400" w:lineRule="exact"/);
+  assert.match(entries.get('word/styles.xml')!,/w:line="273" w:lineRule="exact"/);
+  assert.match(xml,/w:line="400" w:lineRule="exact"/);
   assert.match(xml,/<w:tblW w:w="\d+" w:type="dxa"\/>/);
   assert.match(xml,/<w:tblGrid><w:gridCol w:w="\d+"\/><\/w:tblGrid>/);
   assert.match(xml,/<w:t xml:space="preserve">Vocabulario<\/w:t>/);
