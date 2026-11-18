@@ -983,7 +983,14 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       })}));
     const ok=await flush();
     if(ok){
-      paint(); // Refrescar también el menú, no solo el documento.
+      // Collatinus se resuelve de forma asíncrona. Nunca reconstruir el menú
+      // mientras el docente está escribiendo una entrada manual: se perdería
+      // el texto de los inputs todavía sin guardar (regresión en WebKit).
+      const focus=document.activeElement;
+      const editingManual=focus instanceof HTMLElement&&
+        focus.closest('.edition-vocab-add')!==null;
+      if(editingManual)paintPreview();
+      else paint();
       setMessage('Collatinus: '+next.length+
         ' nombres propios o gentilicios incorporados como propuestas revisables.');
     }
