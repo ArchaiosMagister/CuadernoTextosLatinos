@@ -27,7 +27,9 @@ jobs:
       - name: Compilar y ejecutar pruebas de tipos y contratos
         run: npm run check
       - name: Instalar WebKit para compatibilidad con iPad Safari
-        run: npx playwright install --with-deps webkit
+        run: |
+          bash scripts/prepare-ubuntu-playwright.sh
+          npx playwright install --with-deps webkit
       - name: Probar exportación, edición, guardado y restauración
         run: npm run test:e2e
       - name: Mantener una vía segura para descargar datos creados en /prueba/
@@ -501,6 +503,7 @@ jobs:
       - name: Instalar Safari/WebKit
         run: |
           npm install --ignore-scripts --no-audit --no-fund
+          bash scripts/prepare-ubuntu-playwright.sh
           npx playwright install --with-deps webkit
       - name: Abrir prueba publicada en WebKit iPad
         run: |
