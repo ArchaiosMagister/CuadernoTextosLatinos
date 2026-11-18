@@ -401,6 +401,11 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       reference:doc.reference,
     },()=>freshId('item'));
     try{
+      // Prevalidar el documento completo antes del primer commit: un DOCX
+      // malformado no debe dejar una aparición a medio importar.
+      const prospective=applyParsedTeacherDocx(place,doc,()=>freshId('item'));
+      validateEdition({...draft,updatedAt:at,
+        placements:[...draft.placements,prospective]});
       const saved=await workspace.commitEdition(editionId,current.revision,
         {command:'ui.import-docx',targetId:place.id,timestamp:at},old=>{
           if(!old)throw Error('No existe el cuaderno.');
