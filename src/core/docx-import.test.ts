@@ -115,10 +115,10 @@ test('César: bases reales se conservan dentro del enunciado de nuestra app',()=
   assert.equal(x.vocabulary[0]?.note,'+ gen.');
 });
 test('Salustio y Nepote: vocabulario relleno A-D se descarta, subrayados y cita se conservan',()=>{
-  for(const [title,ref,under] of [
+  for(const [title,ref,under] of ([
     ['Se encuentra el cuerpo de Catilina, aún con vida','LXI 4–5','repertus est'],
     ['Quieren asesinar a Alcibíades','10','sequi'],
-  ]){
+  ] as const)){
     const doc=parseTeacherDocumentXml(word([
       p(['Texto de repaso Latín II']),p(['Nombre y apellidos: Fecha:']),
       p([title]),p(['Salustio, ',{text:'Bellum Catilinæ',italic:true},' '+ref]),
