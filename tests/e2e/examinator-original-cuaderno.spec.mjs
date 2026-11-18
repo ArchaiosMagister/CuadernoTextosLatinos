@@ -169,7 +169,7 @@ test('Collatinus original: solo nombres propios/gentilicios de inicio; el resto 
   expect(words.toLowerCase()).not.toContain('laborant');
   await page.getByRole('navigation',{name:'Secciones del cuaderno'})
     .getByRole('button',{name:'Vocabulario'}).click();
-  await expect(page.locator('#editor .edition-vocabulary-control')).not.toHaveCount(0);
+  await expect(page.locator('#editor .edition-vocab-row')).not.toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
