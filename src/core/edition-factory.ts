@@ -4,6 +4,7 @@ import {
   type PageFormatV1, type QuestionV1, type SourceLinkV1, type TextPlacementV1,
 } from './edition-model.js';
 import { validateEdition } from './edition-validation.js';
+import {DEFAULT_EXTRA_LATIN_SPACING_PT,exactLatinLineHeightPt} from './latin-spacing.js';
 
 /** Los IDs se inyectan: migraciones y pruebas pueden ser deterministas. */
 export type NextId = () => string;
@@ -11,7 +12,8 @@ export const DEFAULT_PAGE_FORMAT_V1: Readonly<PageFormatV1> = {
   paper:'A4',fontFamily:'Palatino Linotype',fontSizePt:10.5,
   // Aproximación al modelo Pages A4: 2,5 cm verticales y 3 cm laterales.
   // Interlineado exacto: altura TOTAL de línea en puntos, no espacio añadido.
-  marginsPt:{top:70.87,right:85.04,bottom:70.87,left:85.04},lineSpacingPt:20,
+  marginsPt:{top:70.87,right:85.04,bottom:70.87,left:85.04},
+  lineSpacingPt:exactLatinLineHeightPt(10.5,DEFAULT_EXTRA_LATIN_SPACING_PT),
   questionGapPt:7,showPoints:true,pageFooter:'page | total',
 };
 function field(value:string):EditableFieldV1 {
