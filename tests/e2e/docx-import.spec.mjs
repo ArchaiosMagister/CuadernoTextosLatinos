@@ -1,0 +1,76 @@
+import {test,expect} from '@playwright/test';
+import {deflateRawSync} from 'node:zlib';
+
+/** ZIP DOCX comprimido de un fichero, sin librerías de terceros. */
+function sampleDocx(xml){
+  const name=Buffer.from('word/document.xml'),source=Buffer.from(xml,'utf8');
+  const zipped=deflateRawSync(source);
+  const local=Buffer.alloc(30+name.length),central=Buffer.alloc(46+name.length),tail=Buffer.alloc(22);
+  local.writeUInt32LE(0x04034b50,0);local.writeUInt16LE(20,4);
+  local.writeUInt16LE(8,8);local.writeUInt32LE(zipped.length,18);
+  local.writeUInt32LE(source.length,22);local.writeUInt16LE(name.length,26);
+  name.copy(local,30);
+  central.writeUInt32LE(0x02014b50,0);central.writeUInt16LE(20,4);
+  central.writeUInt16LE(20,6);central.writeUInt16LE(8,10);
+  central.writeUInt32LE(zipped.length,20);central.writeUInt32LE(source.length,24);
+  central.writeUInt16LE(name.length,28);name.copy(central,46);
+  tail.writeUInt32LE(0x06054b50,0);tail.writeUInt16LE(1,8);
+  tail.writeUInt16LE(1,10);tail.writeUInt32LE(central.length,12);
+  tail.writeUInt32LE(local.length+zipped.length,16);
+  return Buffer.concat([local,zipped,central,tail]);
+}
+function p(parts){
+  return '<w:p>'+parts.map(part=>{
+    const txt=typeof part==='string'?part:part.text;
+    const u=typeof part==='string'?'':part.under?'<w:rPr><w:u w:val="single"/></w:rPr>':'';
+    return '<w:r>'+u+'<w:t xml:space="preserve">'+txt+'</w:t></w:r>';
+  }).join('')+'</w:p>';
+}
+function documentXml(){
+  return '<?xml version="1.0"?>'+
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+
+    [
+      p(['Texto de repaso\tLatín II']),
+      p(['Nombre y apellidos:       Fecha:']),
+      p(['Los romanos envían legados a Ptolomeo prometiéndole ayuda']),
+      p(['Eutropio, Breviarium III 1']),
+      p(['Finito igitur Punico bello, quod per XXIII annos ',
+        {text:'tractum est',under:true},', Romani iam ',
+        {text:'clarissima',under:true},' gloria ',
+        {text:'noti',under:true},', legatos miserunt auxilia promittentes ',
+        {text:'ei',under:true},'.']),
+      p(['Vocabulario']),
+      p(['Ægyptus, −ī: ‘Egipto’']),
+      p(['grātĭās ăgĕre: “dar las gracias”']),
+      p(['Traducción del texto. (4p.)']),
+      p(['Análisis sintáctico del texto. (1p.)']),
+      p(['Análisis morfológico de las palabras subrayadas. (1p.)']),
+      p(['Elige dos de estas tres preguntas (2p.):']),
+      p(['Modificación preverbial a partir de A (3) y de B (2).']),
+      p(['Evolución fonética de A, B, C y D.']),
+      p(['Señala el prefijo y el significado que aporta a estas palabras: A, B, C, D.']),
+    ].join('')+'</w:body></w:document>';
+}
+test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos generados',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno de importación'));
+  await page.locator('#btnNew').click();
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Importar Word'}).click();
+  await (await chooser).setFiles({name:'eutropio.docx',
+    mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(documentXml())});
+  await expect(page.getByRole('button',{name:'Incorporar al cuaderno'})).toBeVisible();
+  await expect(page.getByText('4 subrayados · 2 entradas reales de vocabulario.')).toBeVisible();
+  await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
+  await expect(page.locator('.edition-paper-title')).toHaveText(
+    'Los romanos envían legados a Ptolomeo prometiéndole ayuda',{timeout:30000});
+  await expect(page.locator('.edition-paper-source')).toContainText('Eutropio');
+  await expect(page.locator('.edition-underlined')).toHaveCount(4);
+  await expect(page.locator('.edition-vocabulary-line')).toHaveCount(2);
+  const edition=page.locator('.edition-paper').first();
+  await expect(edition).toContainText('Latinismos');
+  await expect(edition).not.toContainText('A, B, C y D');
+});

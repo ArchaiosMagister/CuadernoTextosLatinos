@@ -169,8 +169,8 @@ export function parseTeacherDocumentXml(xml:string,parse:(xml:string)=>Document 
   if(vocabIdx<3||questionIdx<=vocabIdx)throw Error('El DOCX no sigue la estructura de texto latino, vocabulario y preguntas.');
   // La referencia precede al latín; puede haber más de un párrafo latino.
   const sourceIdx=ps.findIndex((p,i)=>i>=2&&i<vocabIdx-1&&
-    p.text.includes(',')&&p.runs.some(r=>r.italic)&&
-    /\s+(?:[IVXLCDM]+\s+\d+|\d+)\s*$/iu.test(p.text));
+    p.text.length<250&&p.text.includes(',')&&
+    /\s+(?:[IVXLCDM]+\s+\d+(?:\s*[-–]\s*\d+)?|\d+(?:\s*[-–]\s*\d+)?)\s*$/iu.test(p.text));
   if(sourceIdx<2)throw Error('No se reconoce autor, obra y referencia.');
   const source=ps[sourceIdx]!,title=ps[sourceIdx-1]!;
   const body=importLatin(ps.slice(sourceIdx+1,vocabIdx));
