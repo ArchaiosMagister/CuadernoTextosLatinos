@@ -23,6 +23,8 @@ import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 import {quotedMeaning} from '../core/vocabulary-format.js';
+import {exactLatinLineHeightPt,extraLatinSpacingPt} from '../core/latin-spacing.js';
+import {isUnreviewedAutoVocabulary} from '../core/vocabulary-cleanup.js';
 
 const workspace = new WorkspaceRepository();
 const legacy = new IndexedDbCorpusRepository();
@@ -99,6 +101,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   if(p.text.work){source.append(document.createTextNode(p.text.author?', ':''));source.append(node('em','',p.text.work));}
   if(p.text.reference)source.append(document.createTextNode(' '+p.text.reference));
   const latin=buildMarkedLatin(p);latin.style.lineHeight=f.lineSpacingPt+'pt';
+  latin.style.marginBottom=extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt)+'pt';
   head.append(source);paper.append(head,latin);
   const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
   if(included.length){
@@ -429,7 +432,9 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
           ?applyParsedTeacherDocx(p,doc,()=>freshId('item')):p)});
       vocabPreview=null;exportReview=null;academics.clear();markDirty();
       if(!await flush())throw Error('No se pudo guardar el documento importado.');
-      if(!doc.vocabulary.length){
+      // El modo Examinator2 NO debe poblar automáticamente todo el vocabulario
+      // cuando un DOCX no tenga tabla; solo el proceso conservador Collatinus.
+      if(!doc.vocabulary.length && options.autoVocabulary!==false){
         const selected=selection();
         if(selected)try{applyVocabularyAutomatically(selected,true);await flush();}
           catch(error){setMessage('Documento incorporado; vocabulario pendiente: '+String(error),true);}
@@ -1118,9 +1123,13 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       const next=structuredClone(e);fn(next);next.updatedAt=at;return validateEdition(next);
     });
     panel.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
-      update(x=>{x.format.fontSizePt=n;});paint();
-    }),numberField('Altura de línea latina (pt)',f.lineSpacingPt,6,80,.5,n=>{
-      update(x=>{x.format.lineSpacingPt=n;});paint();
+      update(x=>{
+        const extra=extraLatinSpacingPt(x.format.fontSizePt,x.format.lineSpacingPt);
+        x.format.fontSizePt=n;
+        x.format.lineSpacingPt=exactLatinLineHeightPt(n,extra);
+      });paint();
+    }),numberField('Espacio adicional entre líneas (pt)',extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,.5,n=>{
+      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});paint();
     }),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
       update(x=>{x.format.questionGapPt=n;});paint();
     }));
@@ -1143,7 +1152,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
     points.append(check,node('span','','Mostrar puntuación de las preguntas'));panel.append(points);
-    panel.append(node('p','hint','El interlineado indica la altura total exacta de la línea del texto latino, no puntos adicionales entre líneas. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
+    panel.append(node('p','hint','El interlineado se expresa como espacio adicional al interlineado normal, al estilo de Word: 3 pt suele ser suficiente. Los cuadernos anteriores conservan su altura de línea hasta que se ajuste este valor. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
