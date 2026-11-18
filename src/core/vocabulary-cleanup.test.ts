@@ -18,4 +18,9 @@ test('limpieza solo propone formas generadas sin glosa, conserva decisiones doce
     {...candidate,id:'voc.7',reviewState:'verified' as const,
       provenance:{provider:'collatinus',recordId:'a',bankRevision:'v1',decisionId:null}},
   ])assert.equal(isUnreviewedAutoVocabulary(protectedEntry),false,protectedEntry.id);
+  // Una forma identificada por banco pero NUNCA revisada ni glosada sigue
+  // siendo solo propuesta automática y puede retirarse con consentimiento.
+  assert.equal(isUnreviewedAutoVocabulary({...candidate,provenance:{
+    provider:'banco',recordId:'rec',bankRevision:'sha',decisionId:null,
+  }}),true);
 });
