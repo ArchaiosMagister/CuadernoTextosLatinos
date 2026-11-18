@@ -132,14 +132,27 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
       spaceAfterLatin:vocab.getBoundingClientRect().top-latin.getBoundingClientRect().bottom,
       headingFont:parseFloat(getComputedStyle(heading).fontSize),
       subFont:parseFloat(getComputedStyle(sub).fontSize),
-      textSizeAdjust:getComputedStyle(paper).webkitTextSizeAdjust,
     };
   });
   expect(metrics.latinLineHeight).toBeCloseTo(20.8,0); // (10,5×1,2 + 3) pt
   expect(metrics.spaceAfterLatin).toBeGreaterThanOrEqual(0);
   expect(metrics.spaceAfterLatin).toBeLessThan(12);
   expect(Math.abs(metrics.headingFont-metrics.subFont)).toBeLessThan(0.5);
-  expect(metrics.textSizeAdjust).toBe('100%');
+  // WebKit en Linux puede no exponer webkitTextSizeAdjust en CSSStyleDeclaration.
+  // Comprobamos la regla realmente servida al navegador y la igualdad de tamaños
+  // de letra medida arriba, sin depender de una API CSSOM no portable.
+  const cssDeclarations=await page.locator('link[rel="stylesheet"]').evaluateAll(async links=>
+    Promise.all(links.map(async link=>{
+      const response=await fetch(link.href);
+      if(!response.ok)throw Error('No se ha podido cargar '+link.href);
+      return response.text();
+    })));
+  const paperRules=cssDeclarations
+    .flatMap(css=>[...css.matchAll(/\\.edition-paper\\s*\\{([^}]*)\\}/g)].map(match=>match[1]));
+  expect(paperRules.some(rule=>
+    /(?:^|;)\\s*-webkit-text-size-adjust\\s*:\\s*100%\\s*;/.test(rule) &&
+    /(?:^|;)\\s*text-size-adjust\\s*:\\s*100%\\s*;?/.test(rule)
+  )).toBe(true);
   await tabs.getByRole('button',{name:'Formato'}).click();
   await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
