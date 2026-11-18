@@ -111,7 +111,8 @@ test('César: bases reales se conservan dentro del enunciado de nuestra app',()=
   assert.ok(choice&&choice.kind==='choice');
   const statement=choice.options.find(o=>o.kind==='preverb')!.statement;
   assert.match(statement.value,/\*instituerant\* \(3\) y de \*reficiebant\* \(2\)/u);
-  assert.equal(statement.origin,'generated');
+  assert.equal(statement.origin,'manual');
+  assert.equal(statement.locked,true);
   assert.equal(x.vocabulary[0]?.note,'+ gen.');
 });
 test('Salustio y Nepote: vocabulario relleno A-D se descarta, subrayados y cita se conservan',()=>{
