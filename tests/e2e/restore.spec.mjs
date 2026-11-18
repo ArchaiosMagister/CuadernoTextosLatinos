@@ -90,6 +90,11 @@ test('rechaza una copia manipulada sin borrar el texto local', async ({ page }) 
   await page.locator('#diagnostics').evaluate((element) => { element.open = true; });
   await page.locator('#latin-test').fill('Salvē, amīce');
   await page.getByRole('button', { name: 'Guardar texto de prueba' }).click();
+  // La acción se ejecuta asíncronamente. Si elegimos el archivo antes de
+  // completar IndexedDB, execute() descarta la inspección por estado busy.
+  await expect(page.locator('#revision')).toHaveText('1');
+  await expect(page.locator('#last-text')).toHaveText('Salvē, amīce');
+  await expect(page.locator('#status')).toContainText('Guardado confirmado');
   const corrupt = await page.evaluate(async () => {
     const { createBackup } = await import('/core/backup.js');
     const { emptyCorpus } = await import('/core/model.js');
