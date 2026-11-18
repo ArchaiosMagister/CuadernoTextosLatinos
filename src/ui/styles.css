@@ -444,6 +444,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-paper .edition-choice-options,
 .edition-paper .edition-choice-options li{font-size:1em;line-height:inherit;}
 /* Tabla compacta como la pestaña de vocabulario de Examinator2. */
+ .edition-vocab-column-heads{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;gap:4px;font-size:11px;color:var(--subtle);padding:0 5px;}
 .edition-vocab-list{display:grid;gap:0;border:1px solid var(--edge);border-radius:7px;overflow:hidden;}
 .edition-vocab-row{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;
   align-items:center;gap:4px;padding:4px 5px;border-bottom:1px solid var(--edge);min-width:0;}
@@ -455,7 +456,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-vocab-add{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
 .edition-vocab-add>input{flex:1 1 110px;min-width:0;}
 .edition-vocab-add>.btn{flex:0 0 auto;}
-@media(max-width:540px){.edition-vocab-row{grid-template-columns:22px minmax(0,1fr) 28px;}
+@media(max-width:540px){.edition-vocab-column-heads{display:none;}
+  .edition-vocab-row{grid-template-columns:22px minmax(0,1fr) 28px;}
   .edition-vocab-row .edition-vocab-meaning{grid-column:2;}
   .edition-vocab-row .edition-vocab-note{grid-column:2;}
   .edition-vocab-row .edition-vocab-remove{grid-column:3;grid-row:1;}}
