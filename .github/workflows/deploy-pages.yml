@@ -286,7 +286,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 3a238d77774fa087e4d29294bdf025296ee2646e
+          ref: 0099ab6f8368adc10d2830b2b4ef51da785fc802
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
