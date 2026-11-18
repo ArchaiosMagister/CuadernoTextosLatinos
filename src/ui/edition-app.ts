@@ -89,7 +89,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   const paper=node('article','edition-paper');
   paper.setAttribute('aria-label','Vista previa del texto '+(index+1));
   paper.style.fontFamily='"'+f.fontFamily.replaceAll('"','')+'", Palatino, "Book Antiqua", Georgia, serif';
-  paper.style.fontSize=f.fontSizePt+'pt';paper.style.lineHeight=f.lineSpacingPt+'pt';
+  paper.style.fontSize=f.fontSizePt+'pt';paper.style.lineHeight='1.3';
   paper.style.padding=[f.marginsPt.top,f.marginsPt.right,f.marginsPt.bottom,f.marginsPt.left].map(x=>x+'pt').join(' ');
   paper.style.setProperty('--edition-bottom-padding',f.marginsPt.bottom+'pt');
   const head=node('header','edition-paper-head');
@@ -98,7 +98,8 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   if(p.text.author)source.append(document.createTextNode(p.text.author));
   if(p.text.work){source.append(document.createTextNode(p.text.author?', ':''));source.append(node('em','',p.text.work));}
   if(p.text.reference)source.append(document.createTextNode(' '+p.text.reference));
-  head.append(source);paper.append(head,buildMarkedLatin(p));
+  const latin=buildMarkedLatin(p);latin.style.lineHeight=f.lineSpacingPt+'pt';
+  head.append(source);paper.append(head,latin);
   const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
   if(included.length){
     const box=node('section','edition-vocabulary');
@@ -1118,7 +1119,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     });
     panel.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
       update(x=>{x.format.fontSizePt=n;});paint();
-    }),numberField('Altura de línea (pt, total)',f.lineSpacingPt,6,80,.5,n=>{
+    }),numberField('Altura de línea latina (pt)',f.lineSpacingPt,6,80,.5,n=>{
       update(x=>{x.format.lineSpacingPt=n;});paint();
     }),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
       update(x=>{x.format.questionGapPt=n;});paint();
@@ -1142,7 +1143,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
     points.append(check,node('span','','Mostrar puntuación de las preguntas'));panel.append(points);
-    panel.append(node('p','hint','El interlineado indica la altura total exacta de cada línea, no puntos adicionales entre líneas. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
+    panel.append(node('p','hint','El interlineado indica la altura total exacta de la línea del texto latino, no puntos adicionales entre líneas. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
