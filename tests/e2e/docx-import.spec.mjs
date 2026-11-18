@@ -77,3 +77,54 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   await expect(edition.locator('.edition-choice-options > li').nth(3).locator('em')).toHaveCount(4);
   await expect(edition).not.toContainText('A, B, C y D');
 });
+
+test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantener formato Examinator2',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno de Salustio'));
+  await page.locator('#btnNew').click();
+  const latin='Omnis homines qui sese student praestare ceteris animalibus summa ope niti decet.';
+  const xml='<?xml version="1.0"?>'+
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+
+    p(['Salustio. Reflexión inicial'])+p(['Salustio, Bellum Catilinae I 1'])+
+    p([latin])+p(['Traducción del texto. (4p.)'])+
+    p(['Análisis sintáctico del texto. (1p.)'])+
+    p(['Análisis morfológico de las palabras subrayadas. (1p.)'])+
+    '</w:body></w:document>';
+  const choose=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Importar Word'}).click();
+  await (await choose).setFiles({name:'salustio.docx',
+    mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(xml)});
+  await expect(page.getByText(/0 entradas reales de vocabulario/)).toBeVisible();
+  await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
+  await expect(page.locator('.edition-latin')).toContainText('Omnis homines');
+  const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
+  await tabs.getByRole('button',{name:'Vocabulario'}).click();
+  await expect(page.getByRole('button',{name:/Buscar otras formas/})).toBeVisible();
+  // Ni el importador ni la búsqueda conservadora pueden insertar formas
+  // comunes sin glosa como si fueran un vocabulario docente completo.
+  await expect(page.locator('.edition-vocab-headword')).not.toHaveValue('homines');
+  const all=await page.locator('.edition-vocab-headword').evaluateAll(nodes=>
+    nodes.map(node=>node.value.toLowerCase()));
+  expect(all).not.toContain('homines');
+  expect(all).not.toContain('praestare');
+  const created=await page.locator('.edition-vocab-row').count();
+  expect(created).toBeLessThan(5);
+  // Edición en filas, no una tarjeta apilada por lema.
+  const newWord=page.getByRole('textbox',{name:'Enunciado nuevo'});
+  await newWord.fill('animal, -alis');
+  await page.getByRole('textbox',{name:'Traducción nueva'}).fill('animal');
+  await page.getByRole('button',{name:'Añadir entrada'}).click();
+  await expect(page.locator('.edition-vocab-row')).toHaveCount(created+1);
+  await expect(page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})})).toBeVisible();
+  const newRow=page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})});
+  await expect(newRow.locator('.edition-vocab-meaning')).toHaveValue('animal');
+  await page.locator('#btnSave').click();
+  await page.reload();
+  await page.locator('#btnOpen').click();
+  await page.locator('.original-open-row .hbtn').first().click();
+  await tabs.getByRole('button',{name:'Vocabulario'}).click();
+  await expect(page.getByRole('textbox',{name:'Traducción de animal, -alis'})).toHaveValue('animal');
+});
