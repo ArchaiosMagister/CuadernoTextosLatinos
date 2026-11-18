@@ -111,7 +111,7 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
     nodes.map(node=>node.value.toLowerCase()));
   expect(all).not.toContain('homines');
   expect(all).not.toContain('praestare');
-  expect(created).toBeLessThan(5);
+  expect(all.length).toBeLessThan(5);
   // Edición en filas, no una tarjeta apilada por lema.
   const newWord=page.getByRole('textbox',{name:'Enunciado nuevo'});
   await newWord.fill('animal, -alis');
