@@ -15,6 +15,7 @@ test('limpieza solo propone formas generadas sin glosa, conserva decisiones doce
     {...candidate,id:'voc.4',meaning:'ser'},
     {...candidate,id:'voc.5',note:'nota del docente'},
     {...candidate,id:'voc.6',reviewState:'manual' as const},
-    {...candidate,id:'voc.7',provenance:{provider:'collatinus',recordId:'a',bankRevision:'v1',decisionId:null}},
+    {...candidate,id:'voc.7',reviewState:'verified' as const,
+      provenance:{provider:'collatinus',recordId:'a',bankRevision:'v1',decisionId:null}},
   ])assert.equal(isUnreviewedAutoVocabulary(protectedEntry),false,protectedEntry.id);
 });
