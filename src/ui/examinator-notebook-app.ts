@@ -431,7 +431,8 @@ function render():void{
   document.body.dataset.hasEditor=String(active());
   const summary=el('section','card');
   summary.append(el('h3','','Cuaderno de textos latinos'),
-    el('p','',currentTitle()));
+    el('p','',currentTitle()),
+    el('p','small muted','Prueba 18/11 · interlineado Word · vocabulario compacto'));
   if(active()){
     const edition=composer.activeEdition()!;
     summary.append(el('p','small muted',edition.placements.length+' textos en este cuaderno.'));
