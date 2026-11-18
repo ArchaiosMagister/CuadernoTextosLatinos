@@ -413,10 +413,15 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       // Generación con los bancos antes de insertar las decisiones docentes;
       // así quedan las palabras documentadas como reserva de huecos.
       if(autoApply)await academics.generateInitial(place.id);
-      apply((e,time)=>validateEdition({...e,updatedAt:time,
-        placements:e.placements.map(p=>p.id===place.id
-          ?applyParsedTeacherDocx(p,doc,()=>freshId('item')):p)}));
-      if(!await flush())return false;
+      if(!draft)throw Error('El cuaderno no está disponible.');
+      const updateAt=now();
+      // Validar ANTES de dar la importación por aceptada: a diferencia de
+      // apply(), un fallo de anclajes o datos no puede quedar silenciado.
+      draft=validateEdition({...draft,updatedAt:updateAt,
+        placements:draft.placements.map(p=>p.id===place.id
+          ?applyParsedTeacherDocx(p,doc,()=>freshId('item')):p)});
+      vocabPreview=null;exportReview=null;academics.clear();markDirty();
+      if(!await flush())throw Error('No se pudo guardar el documento importado.');
       if(!doc.vocabulary.length){
         const selected=selection();
         if(selected)try{applyVocabularyAutomatically(selected,true);await flush();}
