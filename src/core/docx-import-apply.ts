@@ -39,8 +39,8 @@ export function applyParsedTeacherDocx(
       if(o.kind==='preverb'){
         return {...o,enabled:true,
           ...(doc.preverbBases?{
-            statement:{value:preverbStatement(doc.preverbBases),origin:'generated' as const,
-              locked:false,lastEditAt:null},
+            statement:{value:preverbStatement(doc.preverbBases),origin:'manual' as const,
+              locked:true,lastEditAt:null},
           }:{}),
         };
       }
