@@ -148,10 +148,10 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
       return response.text();
     })));
   const paperRules=cssDeclarations
-    .flatMap(css=>[...css.matchAll(/\\.edition-paper\\s*\\{([^}]*)\\}/g)].map(match=>match[1]));
+    .flatMap(css=>[...css.matchAll(/\.edition-paper\s*\{([^}]*)\}/g)].map(match=>match[1]));
   expect(paperRules.some(rule=>
-    /(?:^|;)\\s*-webkit-text-size-adjust\\s*:\\s*100%\\s*;/.test(rule) &&
-    /(?:^|;)\\s*text-size-adjust\\s*:\\s*100%\\s*;?/.test(rule)
+    /(?:^|;)\s*-webkit-text-size-adjust\s*:\s*100%\s*;/.test(rule) &&
+    /(?:^|;)\s*text-size-adjust\s*:\s*100%\s*;?/.test(rule)
   )).toBe(true);
   await tabs.getByRole('button',{name:'Formato'}).click();
   await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
