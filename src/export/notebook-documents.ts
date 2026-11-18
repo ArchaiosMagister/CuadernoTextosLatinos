@@ -4,6 +4,7 @@
  * PDF se imprime desde el mismo modelo mediante el sistema del navegador.
  */
 import {quotedMeaning} from '../core/vocabulary-format.js';
+import {extraLatinSpacingPt} from '../core/latin-spacing.js';
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
@@ -77,9 +78,9 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
     cursor=mark.endUtf16;
   }
   body+=run(source.slice(cursor),{italic:true});
-  // El modelo Pages separa ampliamente el pasaje latino y el vocabulario:
-  // 6 em con la fuente elegida, coherente con la hoja HTML de impresión.
-  return '<w:p>'+paraProps({align:'both',after:5.3*f.fontSizePt,linePt:f.lineSpacingPt})+body+'</w:p>';
+  // Espacio posterior del pasaje igual al interlineado adicional (3 pt por defecto),
+  // sin la antigua separación artificial de 6 em.
+  return '<w:p>'+paraProps({align:'both',after:extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),linePt:f.lineSpacingPt})+body+'</w:p>';
 }
 function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
   const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
