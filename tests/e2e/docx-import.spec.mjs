@@ -82,6 +82,7 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
+  await expect(page.getByText('Prueba 18/11 · interlineado Word · vocabulario compacto')).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de Salustio'));
   await page.locator('#btnNew').click();
   const latin='Omnis homines qui sese student praestare ceteris animalibus summa ope niti decet.';
