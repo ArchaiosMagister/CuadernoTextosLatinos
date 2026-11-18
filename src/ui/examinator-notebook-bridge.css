@@ -97,7 +97,7 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   display:block!important;text-align:center;min-height:0;
   background:transparent!important;color:#111!important;
   border-left:0;border-right:0;
-  padding:.55em 0 .65em;white-space:normal;
+  padding:.45em 0 .3em;white-space:normal;
 }
 .edition-paper .edition-paper-title{
   display:block;font-family:inherit!important;font-weight:700;
