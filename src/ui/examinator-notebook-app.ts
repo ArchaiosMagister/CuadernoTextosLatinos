@@ -388,6 +388,10 @@ function reviewWordImport(documentData:ParsedTeacherDocx):void{
     if(!await composer.importTeacherDocument(imported))
       throw Error('No se ha podido guardar el Word importado.');
     close();await reload();render();M.toast('Word añadido y guardado en el cuaderno.');
+    // El DOCX sin glosario sigue el MISMO criterio que un texto pegado:
+    // solo nombres propios y gentilicios; nunca todas las formas latinas.
+    const editionId=currentId,placement=composer.activePlacement();
+    if(editionId&&placement)void enrichVocabulary(imported.latin,placement.id,editionId);
   },'hbtn primary'));
   const modal=M.modal('Revisar importación Word',panel,[{label:'Cancelar'}]);
   close=modal.close;
