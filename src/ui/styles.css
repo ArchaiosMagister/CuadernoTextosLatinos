@@ -420,15 +420,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-paper-pages { display:grid; gap:1rem; justify-items:center; overflow-x:auto; padding: .5rem; }
 .edition-paper { box-sizing:border-box; position:relative; width:210mm; min-height:297mm; max-width:none;
   display:flex; flex-direction:column; padding:54pt; background:#fff; color:#151515;
-  box-shadow:0 2px 12px #0002; overflow-wrap:break-word; }
+  box-shadow:0 2px 12px #0002; overflow-wrap:break-word;
+  -webkit-text-size-adjust:100%;text-size-adjust:100%; }
 .edition-paper-head { text-align:center; border-top: .5pt solid #777; border-bottom:.5pt solid #777; padding:.45em 0 .3em; margin-bottom:.18em; }
 .edition-paper-head h2 { font-family:inherit; font-size:1.06em; font-weight:700; line-height:1.32; margin:0 0 .24em; }
 .edition-paper-source { font-size:1em; margin:0; line-height:1.4; }
-.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.18em 0 6em; line-height:inherit; }
+.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.18em 0 3pt; line-height:inherit; }
 .edition-underlined { text-decoration:underline; text-decoration-thickness: .6pt; text-underline-offset:1pt; }
 .edition-roman { font-style:normal; }
 .edition-review { text-decoration-color:#b33333; text-decoration-style:wavy; }
-.edition-vocabulary { border:.75pt solid #3e3e3e; padding:.4em .55em; margin: .4em 0 1em; }
+.edition-vocabulary { border:.75pt solid #3e3e3e; padding:.4em .55em; margin:0 0 1em; }
 .edition-vocabulary h3 { font-size:1em; font-weight:700; text-align:center; margin:0 0 .6em; }
 .edition-vocabulary-line { margin:.06em 0; line-height:1.35; }
 .edition-questions { margin: .4em 0 1em; padding-left:2.5em; display:grid; gap:.55em; }
@@ -438,6 +439,29 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-choice-options { margin:.7em 0 0; padding-left:1.7em; list-style-type:lower-alpha; display:grid; gap:.3em; }
 .edition-choice-options li { padding-left:.5em; }
 .edition-choice-options li::marker { content:counter(list-item,lower-alpha) ".  "; }
+/* Safari iPhone: evitar ampliación automática del enunciado largo de la pregunta 4. */
+.edition-paper .edition-question > strong,
+.edition-paper .edition-choice-options,
+.edition-paper .edition-choice-options li{font-size:1em;line-height:inherit;}
+/* Tabla compacta como la pestaña de vocabulario de Examinator2. */
+ .edition-vocab-column-heads{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;gap:4px;font-size:11px;color:var(--subtle);padding:0 5px;}
+.edition-vocab-list{display:grid;gap:0;border:1px solid var(--edge);border-radius:7px;overflow:hidden;}
+.edition-vocab-row{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;
+  align-items:center;gap:4px;padding:4px 5px;border-bottom:1px solid var(--edge);min-width:0;}
+.edition-vocab-row:last-child{border-bottom:0;}
+.edition-vocab-row.off{opacity:.62;}
+.edition-vocab-row .field-control{width:100%;min-width:0;min-height:30px;margin:0;padding:4px 5px;font-size:12px;}
+.edition-vocab-row .edition-vocab-headword{font-style:italic;}
+.edition-vocab-row .edition-vocab-remove{min-width:28px;width:28px;min-height:28px;padding:0;font-size:19px;}
+.edition-vocab-add{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+.edition-vocab-add>input{flex:1 1 110px;min-width:0;}
+.edition-vocab-add>.btn{flex:0 0 auto;}
+@media(max-width:540px){.edition-vocab-column-heads{display:none;}
+  .edition-vocab-row{grid-template-columns:22px minmax(0,1fr) 28px;}
+  .edition-vocab-row .edition-vocab-meaning{grid-column:2;}
+  .edition-vocab-row .edition-vocab-note{grid-column:2;}
+  .edition-vocab-row .edition-vocab-remove{grid-column:3;grid-row:1;}}
+
 .edition-paper-footer { position:absolute;left:0;right:0;bottom:12.5mm; margin:0; padding:0; text-align:center; font-size:.84em; color:#333; }
 .edition-preview-note { color:var(--subtle); font-size:.82rem; margin:.7rem .2rem 0; }
 .edition-mobile-switch { display:none; }

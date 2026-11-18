@@ -180,7 +180,7 @@ export function parseTeacherDocumentXml(xml:string,parse:(xml:string)=>Document 
   const lexical=parseLexical(ps.slice(questionIdx+1));
   const review=[...lexical.warnings];
   if(vocab.some(p=>isPlaceholder(p.text)))review.push('El vocabulario contiene letras o huecos: no se importarán como lemas.');
-  if(!vocabulary.length)review.push('No hay entradas reales de vocabulario: se propondrán lemas sin inventar glosas.');
+  if(!vocabulary.length)review.push('No hay entradas reales de vocabulario: el editor permitirá completarlas sin inventar significados.');
   if(!body.underlines.length)review.push('No se detectaron subrayados; revisar la morfología.');
   const citation=parseSource(source);
   return {title:title.text.trim(),...citation,latin:body.latin,underlines:body.underlines,
