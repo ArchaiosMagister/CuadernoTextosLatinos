@@ -121,6 +121,29 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   await expect(page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})})).toBeVisible();
   const newRow=page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})});
   await expect(newRow.locator('.edition-vocab-meaning')).toHaveValue('animal');
+  const metrics=await page.evaluate(()=>{
+    const paper=document.querySelector('.edition-paper');
+    const latin=paper?.querySelector('.edition-latin');
+    const vocab=paper?.querySelector('.edition-vocabulary');
+    const heading=paper?.querySelector('.edition-question:last-child > strong');
+    const sub=paper?.querySelector('.edition-choice-options > li');
+    if(!latin||!vocab||!heading||!sub)throw Error('Falta el texto o un apartado');
+    return {
+      latinLineHeight:parseFloat(getComputedStyle(latin).lineHeight),
+      spaceAfterLatin:vocab.getBoundingClientRect().top-latin.getBoundingClientRect().bottom,
+      headingFont:parseFloat(getComputedStyle(heading).fontSize),
+      subFont:parseFloat(getComputedStyle(sub).fontSize),
+      textSizeAdjust:getComputedStyle(paper).webkitTextSizeAdjust,
+    };
+  });
+  expect(metrics.latinLineHeight).toBeCloseTo(20.8,0); // (10,5×1,2 + 3) pt
+  expect(metrics.spaceAfterLatin).toBeGreaterThanOrEqual(0);
+  expect(metrics.spaceAfterLatin).toBeLessThan(12);
+  expect(Math.abs(metrics.headingFont-metrics.subFont)).toBeLessThan(0.5);
+  expect(metrics.textSizeAdjust).toBe('100%');
+  await tabs.getByRole('button',{name:'Formato'}).click();
+  await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
+  await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await page.locator('#btnSave').click();
   await page.reload();
   await page.locator('#btnOpen').click();
