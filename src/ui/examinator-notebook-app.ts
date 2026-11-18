@@ -162,7 +162,8 @@ host.api={
  * Se carga de forma diferida y NO se reutiliza la base de Examinator2 original.
  * Su análisis no sustituye una verificación individual ni una decisión docente.
  */
-type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean};
+type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean;
+  cands?:Array<{lid:number;trad?:string}>};
 type LatinLemma={lid:number;head:string;trad:string;note:string;proper:boolean};
 type CollatinusApi={call:(method:string,args?:Record<string,unknown>)=>Promise<unknown>};
 let collatinusPromise:Promise<CollatinusApi>|null=null;
@@ -204,11 +205,20 @@ async function enrichVocabulary(latin:string,placementId:string,editionId:string
     if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
     const chosen=new Set(tokens.filter(x=>x.sel&&(!x.amb||x.proper))
       .map(x=>x.sel!.lid));
+    // Aprovechar también la glosa corta del análisis contextual de Collatinus
+    // cuando su ficha de enunciado carece de traducción. No inventar sentidos.
+    const tokenGlosses=new Map<number,string>();
+    for(const token of tokens){
+      if(!token.sel)continue;
+      const gloss=token.cands?.find(c=>c.lid===token.sel?.lid)?.trad?.trim();
+      if(gloss&&!tokenGlosses.has(token.sel.lid))tokenGlosses.set(token.sel.lid,gloss);
+    }
     const approved=entries.filter(x=>{
       const lemma=lexKey(x.head.split(',')[0]??'');
       return chosen.has(x.lid)&&(x.proper||GENTILICS.has(lemma));
     }).map(x=>({
-      headword:x.head,lemma:x.head,meaning:x.trad||null,note:x.note||null,
+      headword:x.head,lemma:x.head,meaning:x.trad?.trim()||tokenGlosses.get(x.lid)||null,
+      note:x.note||null,
     }));
     // No escribir resultados tardíos en otro cuaderno o aparición.
     if(currentId!==editionId||composer.activeEdition()?.id!==editionId||
