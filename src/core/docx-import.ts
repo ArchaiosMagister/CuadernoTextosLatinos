@@ -74,7 +74,7 @@ function parseSource(p:Paragraph):{author:string|null;work:string|null;reference
   const roman=/\s+([IVXLCDM]+(?:\s+\d+(?:\s*[-–]\s*\d+)?)?|\d+(?:\s*[-–]\s*\d+)?)$/iu;
   const match=remainder.match(roman);
   const work=(match?remainder.slice(0,match.index).trim():remainder)||null;
-  const reference=match?.[1].replace(/\s*([–-])\s*/gu,'$1')??null;
+  const reference=match?.[1]?.replace(/\s*([–-])\s*/gu,'$1')??null;
   return {author,work,reference};
 }
 function normalizeGreekQuotes(s:string):string{return s.trim();}
