@@ -39,7 +39,9 @@ jobs:
           cp scripts/smoke-recovery.mjs experimental/scripts/smoke-recovery.mjs
       - name: Instalar WebKit
         working-directory: experimental
-        run: npx playwright install --with-deps webkit
+        run: |
+          bash ../scripts/prepare-ubuntu-playwright.sh
+          npx playwright install --with-deps webkit
       - name: Probar ambas descargas JSON desde Safari/WebKit
         working-directory: experimental
         run: node scripts/smoke-recovery.mjs
