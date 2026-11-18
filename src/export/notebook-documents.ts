@@ -161,7 +161,7 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
   const heading=paragraph(p.text.title,
     paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),
     {bold:true,sizePt:Math.max(8,f.fontSizePt-1)});
-  const source='<w:p>'+paraProps({align:'center',after:16,keepNext:true,bottomBorder:true})+
+  const source='<w:p>'+paraProps({align:'center',after:4,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
   return heading+source+latin(p,f)+vocabulary(p,f)+questions(p,f);
 }
@@ -180,7 +180,8 @@ function wordDocument(edition:NotebookEditionV1):string{
     '<w:pgMar'+attrs({
       'w:top':twips(margin.top),'w:right':twips(margin.right),
       'w:bottom':twips(margin.bottom),'w:left':twips(margin.left),
-      'w:header':360,'w:footer':360,'w:gutter':0,
+      // 1,25 cm desde el borde inferior hasta el pie de página (709 twips).
+      'w:header':360,'w:footer':709,'w:gutter':0,
     })+'/>'+
     '<w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>';
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
@@ -193,7 +194,7 @@ function styles(f:PageFormatV1):string{
     '<w:rFonts'+attrs({'w:ascii':f.fontFamily,'w:hAnsi':f.fontFamily,'w:eastAsia':f.fontFamily})+'/>'+
     '<w:sz w:val="'+Math.round(f.fontSizePt*2)+'"/>'+
     '</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>'+
-    '<w:spacing w:line="'+twips(f.lineSpacingPt)+'" w:lineRule="exact"/>'+
+    '<w:spacing w:line="'+twips(f.fontSizePt*1.3)+'" w:lineRule="exact"/>'+
     '</w:pPr></w:pPrDefault></w:docDefaults>'+
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'+
     '</w:styles>';

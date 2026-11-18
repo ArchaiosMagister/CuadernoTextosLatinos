@@ -3,8 +3,30 @@
  * Examinator2. No modifica las clases originales de su biblioteca.
  */
 :root{color-scheme:light;}
-/* Vista editorial: menús 45 % y hoja 55 %; sin modificar Examinator2 original. */
-body[data-has-editor='true']{--cuaderno-menu-width:45%;}
+/* Tema deliberado y persistente solo del cuaderno experimental.
+   Examinator2 de referencia y el papel A4 no se modifican. */
+html[data-cuaderno-theme='dark']{
+  color-scheme:dark;
+  --paper:#182128;--paper-2:#26333d;--panel:#202b34;
+  --ink:#edf2f3;--ink-2:#c6d3d8;--ink-3:#9cb0b9;
+  --rule:#42535e;--rule-2:#354650;--accent:#a8d9e8;
+  --accent-soft:#294653;--link:#a6c8ff;
+}
+html[data-cuaderno-theme='dark'] #editor .edition-menu-content,
+html[data-cuaderno-theme='dark'] #editor .edition-menu-nav{background:var(--panel);}
+html[data-cuaderno-theme='dark'] #editor .edition-preview-stack{background:#151c22;}
+html[data-cuaderno-theme='dark'] .card input:not([type='checkbox']),
+html[data-cuaderno-theme='dark'] .card textarea,
+html[data-cuaderno-theme='dark'] .card select,
+html[data-cuaderno-theme='dark'] #editor .field-control{
+  background:var(--paper);color:var(--ink);border-color:var(--rule);
+}
+html[data-cuaderno-theme='dark'] .edition-paper{
+  color-scheme:light;background:#fff;color:#151515;
+}
+
+/* Vista editorial: menús 47 % y hoja 53 %; sin modificar Examinator2 original. */
+body[data-has-editor='true']{--cuaderno-menu-width:47%;}
 body[data-has-editor='true'] main#main{grid-template-columns:var(--cuaderno-menu-width) minmax(0,1fr);}
 body[data-has-editor='true'] #editor{min-width:0;}
 #editor .edition-toolbar{display:none!important;}
@@ -19,7 +41,7 @@ body[data-has-editor='true'] #editor{min-width:0;}
 #editor .edition-menu-content{padding:8px;background:var(--panel);border:1px solid var(--rule);border-radius:9px;max-height:none;}
 #editor .edition-menu-content .btn{min-height:30px;font-size:12px;}
 #editor .edition-preview-stack{
-  position:fixed;z-index:2;left:var(--cuaderno-menu-width,45%);top:48px;bottom:0;right:0;
+  position:fixed;z-index:2;left:var(--cuaderno-menu-width,47%);top:48px;bottom:0;right:0;
   min-width:0;min-height:0;max-height:none;display:block!important;
   overflow:auto;background:#d9d6cf;padding:12px;
 }
@@ -75,7 +97,7 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   display:block!important;text-align:center;min-height:0;
   background:transparent!important;color:#111!important;
   border-left:0;border-right:0;
-  padding:.55em 0 .65em;white-space:normal;
+  padding:.45em 0 .3em;white-space:normal;
 }
 .edition-paper .edition-paper-title{
   display:block;font-family:inherit!important;font-weight:700;
@@ -104,6 +126,14 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
 }
 #editor .edition-preview-bar{
   display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+}
+#editor .edition-zoom-controls{
+  display:inline-flex;align-items:end;gap:4px;
+}
+#editor .edition-zoom-controls .edition-field{width:88px;min-width:0;}
+#editor .edition-zoom-controls .edition-zoom-step{
+  flex:0 0 32px;min-width:32px;min-height:32px;padding:2px;
+  font-size:18px;font-weight:650;
 }
 #editor .edition-preview-bar .edition-add-source{
   background:var(--accent);color:#fff;border-color:var(--accent);

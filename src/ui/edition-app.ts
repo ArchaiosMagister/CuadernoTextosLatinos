@@ -89,15 +89,17 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   const paper=node('article','edition-paper');
   paper.setAttribute('aria-label','Vista previa del texto '+(index+1));
   paper.style.fontFamily='"'+f.fontFamily.replaceAll('"','')+'", Palatino, "Book Antiqua", Georgia, serif';
-  paper.style.fontSize=f.fontSizePt+'pt';paper.style.lineHeight=f.lineSpacingPt+'pt';
+  paper.style.fontSize=f.fontSizePt+'pt';paper.style.lineHeight='1.3';
   paper.style.padding=[f.marginsPt.top,f.marginsPt.right,f.marginsPt.bottom,f.marginsPt.left].map(x=>x+'pt').join(' ');
+  paper.style.setProperty('--edition-bottom-padding',f.marginsPt.bottom+'pt');
   const head=node('header','edition-paper-head');
   head.append(node('h2','edition-paper-title',p.text.title));
   const source=node('p','edition-paper-source');
   if(p.text.author)source.append(document.createTextNode(p.text.author));
   if(p.text.work){source.append(document.createTextNode(p.text.author?', ':''));source.append(node('em','',p.text.work));}
   if(p.text.reference)source.append(document.createTextNode(' '+p.text.reference));
-  head.append(source);paper.append(head,buildMarkedLatin(p));
+  const latin=buildMarkedLatin(p);latin.style.lineHeight=f.lineSpacingPt+'pt';
+  head.append(source);paper.append(head,latin);
   const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
   if(included.length){
     const box=node('section','edition-vocabulary');
@@ -1117,7 +1119,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     });
     panel.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
       update(x=>{x.format.fontSizePt=n;});paint();
-    }),numberField('Interlineado (pt)',f.lineSpacingPt,6,80,.5,n=>{
+    }),numberField('Altura de línea latina (pt)',f.lineSpacingPt,6,80,.5,n=>{
       update(x=>{x.format.lineSpacingPt=n;});paint();
     }),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
       update(x=>{x.format.questionGapPt=n;});paint();
@@ -1141,7 +1143,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
     points.append(check,node('span','','Mostrar puntuación de las preguntas'));panel.append(points);
-    panel.append(node('p','hint','Formato común a todos los textos. El zoom de lectura no cambia el tamaño editorial.'));
+    panel.append(node('p','hint','El interlineado indica la altura total exacta de la línea del texto latino, no puntos adicionales entre líneas. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
@@ -1360,7 +1362,25 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     bar.append(node('strong','','Vista A4'));
     if(options.onAddSource)bar.append(action('+ Añadir al cuaderno',
       options.onAddSource,'btn btn-primary edition-add-source'));
-    bar.append(numberField('Zoom (%)',zoom,50,130,5,value=>{zoom=value;paintPreview();}));
+    const zoomControls=node('div','edition-zoom-controls');
+    const zoomField=numberField('Zoom (%)',zoom,50,130,5,value=>{
+      zoom=value;syncZoomButtons();paintPreview();
+    });
+    const zoomInput=zoomField.querySelector('input');
+    const zoomIn=action('+',()=>setZoom(zoom+5),'btn btn-outline edition-zoom-step');
+    const zoomOut=action('−',()=>setZoom(zoom-5),'btn btn-outline edition-zoom-step');
+    zoomIn.setAttribute('aria-label','Aumentar zoom');
+    zoomOut.setAttribute('aria-label','Reducir zoom');
+    function syncZoomButtons():void {
+      zoomIn.disabled=zoom>=130;zoomOut.disabled=zoom<=50;
+      if(zoomInput)zoomInput.value=String(zoom);
+    }
+    function setZoom(value:number):void {
+      zoom=Math.max(50,Math.min(130,value));syncZoomButtons();paintPreview();
+    }
+    syncZoomButtons();
+    zoomControls.append(zoomIn,zoomField,zoomOut);
+    bar.append(zoomControls);
     bar.append(academics.renderPaperSelect(papers));
     // Los controles Anterior / Siguiente van justo encima del papel; no se
     // reproducen en la cabecera ni alteran el modelo al cambiar de posición.

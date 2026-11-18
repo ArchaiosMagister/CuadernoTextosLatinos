@@ -72,15 +72,25 @@ for case in ['breve','largo','varios']:
           'last_page_tail':pages[-1][-180:].strip().replace('\n',' '),
           'first_page_chars':len(pages[0])}
         if case=='breve':
-            # Coordenadas y de la página original proporcionada por el docente.
-            # Tolerancia explícita por sustituciones tipográficas Word/Chromium.
-            reference={'latin':124.3,'vocabulary':220.3,
-                       'first_question':299.3,'choice':356.3}
+            # El interlineado exacto de 20 pt solicitado modifica las
+            # posiciones verticales del vocabulario y las preguntas.
+            # Conservar anclaje del latín al modelo docente; comprobar además
+            # orden, huecos y márgenes, pero NO fijar las Y antiguas de 13,5 pt.
+            reference={'latin':124.3}
             for key,expected in reference.items():
                 value=metrics[key]
                 if value is None or abs(value[1]-expected)>20:
                     raise RuntimeError(
                         f'{case} {engine}: {key} en {value}, referencia {expected} pt')
+            for first,second,lower,upper in [
+                ('latin','vocabulary',45,200),
+                ('vocabulary','first_question',35,150),
+                ('first_question','choice',25,150),
+            ]:
+                a,b=metrics[first],metrics[second]
+                if a is None or b is None or not lower <= b[1]-a[1] <= upper:
+                    raise RuntimeError(
+                        f'{case} {engine}: separación incorrecta {first} → {second}: {a} / {b}')
         if case=='breve':
             # Decisión docente 2A: fidelidad alta (no equivalencia pixel a pixel).
             # Coordenadas extraídas directamente de la página de Pages aportada:

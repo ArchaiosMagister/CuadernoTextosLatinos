@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('editor de cuadernos: menús 45 % y vista previa 55 % en iPad y escritorio',async({page})=>{
+test('editor de cuadernos: menús 47 % y vista previa 53 % en iPad y escritorio',async({page})=>{
   await page.setViewportSize({width:1024,height:900});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
@@ -16,12 +16,32 @@ test('editor de cuadernos: menús 45 % y vista previa 55 % en iPad y escritorio'
       return {leftWidth:left.width,rightX:right.x,rightWidth:right.width,viewport,
         position:getComputedStyle(document.querySelector('#editor .edition-preview-stack')).position};
     });
-    expect(geometry.leftWidth/geometry.viewport).toBeCloseTo(.45,2);
-    expect(geometry.rightWidth/geometry.viewport).toBeCloseTo(.55,2);
+    expect(geometry.leftWidth/geometry.viewport).toBeCloseTo(.47,2);
+    expect(geometry.rightWidth/geometry.viewport).toBeCloseTo(.53,2);
     expect(Math.abs(geometry.rightX-geometry.leftWidth)).toBeLessThan(2);
     expect(geometry.position).toBe('fixed');
     await expect(page.getByRole('navigation',{name:'Secciones del cuaderno'}).getByRole('button')).toHaveCount(5);
   }
+});
+
+test('modo claro y oscuro persistentes; controles del zoom con + a la izquierda',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo oscuro');
+  await page.locator('#btnCuadernoTheme').click();
+  await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','dark');
+  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo claro');
+  await page.reload();
+  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo claro');
+  await page.locator('#btnCuadernoTheme').click();
+  await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','light');
+  page.once('dialog',dialog=>dialog.accept('Cuaderno zoom'));
+  await page.locator('#btnNew').click();
+  const zoom=page.locator('.edition-zoom-controls');
+  await expect(zoom.getByRole('button',{name:'Aumentar zoom'})).toHaveText('+');
+  await expect(zoom.getByRole('button',{name:'Reducir zoom'})).toHaveText('−');
+  await expect(zoom.locator('input')).toHaveValue('85');
+  await zoom.getByRole('button',{name:'Aumentar zoom'}).click();
+  await expect(zoom.locator('input')).toHaveValue('90');
 });
 
 test('móvil: conserva la disposición apilada sin superposición',async({page})=>{

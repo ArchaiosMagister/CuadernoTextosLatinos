@@ -456,7 +456,30 @@ function render():void{
   }
   document.title=currentTitle()+' · Cuaderno de textos latinos';
 }
+function wireThemeButton():void{
+  const key='cuaderno-ui-theme-v1';
+  let saved:'light'|'dark'='light';
+  try{if(localStorage.getItem(key)==='dark')saved='dark';}catch{/* navegación privada */}
+  const toggle=button('Modo oscuro',()=>{
+    const current=document.documentElement.dataset.cuadernoTheme==='dark'?'dark':'light';
+    const next=current==='dark'?'light':'dark';
+    setTheme(next);
+    try{localStorage.setItem(key,next);}catch{/* se conserva la sesión */}
+  },'hbtn');
+  toggle.id='btnCuadernoTheme';
+  function setTheme(theme:'light'|'dark'):void{
+    document.documentElement.dataset.cuadernoTheme=theme;
+    toggle.textContent=theme==='dark'?'Modo claro':'Modo oscuro';
+    toggle.title=theme==='dark'?'Activar modo claro':'Activar modo oscuro';
+    toggle.setAttribute('aria-pressed',String(theme==='dark'));
+  }
+  const spacer=document.querySelector('header > .spacer');
+  if(spacer)spacer.before(toggle);
+  else document.querySelector('body > header')?.append(toggle);
+  setTheme(saved);
+}
 function wireButtons():void{
+  wireThemeButton();
   const byId=(id:string):HTMLButtonElement=>{
     const node=document.getElementById(id);
     if(!(node instanceof HTMLButtonElement))throw new Error('Falta '+id);
