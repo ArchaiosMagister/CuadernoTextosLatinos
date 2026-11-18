@@ -1135,7 +1135,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     const unreviewed=items.filter(isUnreviewedAutoVocabulary);
     if(unreviewed.length){
       const cleanup=action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
-        if(!window.confirm('¿Retirar únicamente las propuestas automáticas sin significado ni edición manual? Los nombres, glosas y entradas revisadas se conservan.'))return;
+        if(!window.confirm('¿Retirar únicamente las propuestas automáticas sin glosa ni edición manual? Se conservan las entradas manuales, las glosas y las entradas revisadas.'))return;
         apply((e,at)=>validateEdition({...e,updatedAt:at,
           placements:e.placements.map(x=>x.id!==p.id?x:{
             ...x,vocabulary:x.vocabulary.filter(v=>!isUnreviewedAutoVocabulary(v)),
