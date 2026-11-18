@@ -83,7 +83,7 @@ for case in ['breve','largo','varios']:
                     raise RuntimeError(
                         f'{case} {engine}: {key} en {value}, referencia {expected} pt')
             for first,second,lower,upper in [
-                ('latin','vocabulary',45,200),
+                ('latin','vocabulary',25,90),
                 ('vocabulary','first_question',35,150),
                 ('first_question','choice',25,150),
             ]:
