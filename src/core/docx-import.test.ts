@@ -40,9 +40,10 @@ test('Eutropio: título/cita, cuatro subrayados, vocabulario real y A-D no son p
     p(['Texto de repaso   Latín II']),p(['Nombre y apellidos: Fecha:']),
     p(['Los romanos envían legados a Ptolomeo prometiéndole ayuda']),
     p(['Eutropio, ',{text:'Breviarium',italic:true},' III 1']),
-    p([{text:'Finito ',underline:true},'igitur Punico bello, quod per XXIII annos ',
+    p(['Finito igitur Punico bello, quod per XXIII annos ',
       {text:'tractum est',underline:true},', Romani, iam ',{text:'clarissima',underline:true},
-      ' gloria ',{text:'noti',underline:true},', legatos ad Ptolomæum miserunt.']),
+      ' gloria ',{text:'noti',underline:true},', legatos ad Ptolomæum miserunt auxilia ',
+      {text:'ei',underline:true},'.']),
     p(['Vocabulario']),
     p(['Ægyptus, −ī: ‘Egipto’']),p(['grātĭās ăgĕre: “dar las gracias”']),
     p(['Traducción del texto. (4p.)']),
@@ -55,7 +56,7 @@ test('Eutropio: título/cita, cuatro subrayados, vocabulario real y A-D no son p
   const doc=parseTeacherDocumentXml(xml,parse);
   assert.equal(doc.title,'Los romanos envían legados a Ptolomeo prometiéndole ayuda');
   assert.deepEqual([doc.author,doc.work,doc.reference],['Eutropio','Breviarium','III 1']);
-  assert.deepEqual(doc.underlines.map(x=>x.exact),['Finito','tractum est','clarissima','noti']);
+  assert.deepEqual(doc.underlines.map(x=>x.exact),['tractum est','clarissima','noti','ei']);
   assert.equal(doc.vocabulary.length,2);
   assert.deepEqual(doc.lexical.phonetics,[]);
   assert.deepEqual(doc.lexical.prefix,[]);

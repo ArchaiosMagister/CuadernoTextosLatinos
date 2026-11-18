@@ -72,5 +72,8 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   await expect(page.locator('.edition-vocabulary-line')).toHaveCount(2);
   const edition=page.locator('.edition-paper').first();
   await expect(edition).toContainText('Latinismos');
+  await expect(edition.locator('.edition-choice-options > li')).toHaveCount(4);
+  // No basta con crear el encabezado: latinismos ha de recibir términos del banco.
+  await expect(edition.locator('.edition-choice-options > li').nth(3).locator('em')).toHaveCount(4);
   await expect(edition).not.toContainText('A, B, C y D');
 });
