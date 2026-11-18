@@ -5,6 +5,6 @@ import type {VocabularyEntryV1} from './edition-model.js';
  */
 export function isUnreviewedAutoVocabulary(entry:VocabularyEntryV1):boolean{
   return entry.origin==='generated'&&entry.reviewState==='needs-review'&&
-    !entry.locked&&entry.provenance===null&&
+    !entry.locked&&
     !entry.meaning?.trim()&&!entry.note?.trim();
 }
