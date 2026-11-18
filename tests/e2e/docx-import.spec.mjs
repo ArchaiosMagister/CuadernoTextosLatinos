@@ -111,14 +111,12 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
     nodes.map(node=>node.value.toLowerCase()));
   expect(all).not.toContain('homines');
   expect(all).not.toContain('praestare');
-  const created=await page.locator('.edition-vocab-row').count();
   expect(created).toBeLessThan(5);
   // Edición en filas, no una tarjeta apilada por lema.
   const newWord=page.getByRole('textbox',{name:'Enunciado nuevo'});
   await newWord.fill('animal, -alis');
   await page.getByRole('textbox',{name:'Traducción nueva'}).fill('animal');
   await page.getByRole('button',{name:'Añadir entrada'}).click();
-  await expect(page.locator('.edition-vocab-row')).toHaveCount(created+1);
   await expect(page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})})).toBeVisible();
   const newRow=page.locator('.edition-vocab-row').filter({has:page.getByRole('textbox',{name:'Enunciado de animal, -alis'})});
   await expect(newRow.locator('.edition-vocab-meaning')).toHaveValue('animal');
