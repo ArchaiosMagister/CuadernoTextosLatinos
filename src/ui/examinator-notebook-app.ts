@@ -9,6 +9,7 @@ import {WorkspaceRepository,type EditionSnapshotV1} from '../storage/workspace-r
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
+import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import type {LibraryEntry,LibraryWork} from '../core/library.js';
@@ -346,6 +347,63 @@ function pasteText():void{
   form.addEventListener('submit',event=>{event.preventDefault();save.click();});
   const modal=M.modal('Pegar texto latino',form,[{label:'Cancelar'}]);close=modal.close;
 }
+
+function reviewWordImport(documentData:ParsedTeacherDocx):void{
+  const panel=el('div','original-paste');
+  const inputs=new Map<string,HTMLInputElement|HTMLTextAreaElement>();
+  for(const [key,label] of [
+    ['title','Título del texto'],['author','Autor'],['work','Obra'],
+    ['reference','Libro, capítulo o referencia'],['latin','Texto latino'],
+  ] as const){
+    const line=el('label','field'),heading=el('span','',label);
+    const input=key==='latin'?el('textarea'):el('input');
+    if(key==='latin')(input as HTMLTextAreaElement).rows=5;
+    input.value=(documentData[key]??'');
+    input.setAttribute('aria-label',label);
+    line.append(heading,input);panel.append(line);inputs.set(key,input);
+  }
+  const diagnostic=el('div','original-docx-report');
+  diagnostic.append(el('p','',
+    documentData.underlines.length+' subrayados · '+
+    documentData.vocabulary.length+' entradas reales de vocabulario.'));
+  const list=el('ul');
+  for(const issue of documentData.warnings)list.append(el('li','',issue));
+  diagnostic.append(list);
+  diagnostic.append(el('p','small',
+    'Preguntas originales: evolución '+documentData.lexical.phonetics.length+
+    ', prefijos '+documentData.lexical.prefix.length+
+    ', latinismos '+documentData.lexical.latinism.length+
+    '. Los demás términos se generan desde los bancos; todos los enunciados son los de la app.'));
+  panel.append(diagnostic);
+  let close=()=>{};
+  panel.append(button('Incorporar al cuaderno',async()=>{
+    const value=(key:string)=>inputs.get(key)?.value.trim()??'';
+    const imported={...documentData,title:value('title'),author:value('author')||null,
+      work:value('work')||null,reference:value('reference')||null,latin:value('latin')};
+    if(imported.latin!==documentData.latin){
+      M.toast('No cambies el latín antes de importar: los subrayados corresponden al original. Podrás editarlo después.',7500);
+      return;
+    }
+    if(!imported.title)throw Error('Es necesario introducir un título.');
+    if(!await composer.importTeacherDocument(imported))
+      throw Error('No se ha podido guardar el Word importado.');
+    close();await reload();render();M.toast('Word añadido y guardado en el cuaderno.');
+  },'hbtn primary'));
+  const modal=M.modal('Revisar importación Word',panel,[{label:'Cancelar'}]);
+  close=modal.close;
+}
+function importWord():void{
+  if(!active()){M.toast('Abre o crea un cuaderno antes de importar.');return;}
+  const picker=el('input');picker.type='file';
+  picker.accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  picker.style.display='none';document.body.append(picker);
+  picker.addEventListener('change',()=>{
+    const file=picker.files?.[0];picker.remove();if(!file)return;
+    void readTeacherDocx(file).then(reviewWordImport).catch(error=>
+      M.toast('No se puede leer este Word: '+String(error instanceof Error?error.message:error),8500));
+  },{once:true});
+  picker.click();
+}
 function selectFormat():void{
   if(!active()){M.toast('Abre un cuaderno para configurar el formato.');return;}
   const controls=Array.from(composer.element.querySelectorAll<HTMLButtonElement>('.edition-menu-nav button'));
@@ -376,7 +434,8 @@ function render():void{
     const actions=el('div','row');
     actions.append(button('+ Texto',openLibrary,'hbtn primary'),
       button('Textos propios',openOwnTexts,'tbtn'),
-      button('Pegar',pasteText,'tbtn'));
+      button('Pegar',pasteText,'tbtn'),
+      button('Importar Word',importWord,'hbtn'));
     summary.append(actions);
     const index=el('div','original-text-index');
     for(const [i,p] of edition.placements.entries()){

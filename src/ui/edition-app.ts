@@ -4,7 +4,9 @@
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
 import type { NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
-import { createEdition, placementFromCorpus } from '../core/edition-factory.js';
+import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
+import type {ParsedTeacherDocx} from '../core/docx-import.js';
+import {applyParsedTeacherDocx} from '../core/docx-import-apply.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
   editSlotManual, editVocabulary, insertManualVocabulary, movePlacement, moveSession,
   scorePlacement, setQuestionPoints, toggleOption, toggleQuestion,
@@ -177,6 +179,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
   removeWorkingSource:(textId:string)=>Promise<boolean>;
   createNotebookNamed:(title:string)=>Promise<string|null>;
   addSourceToNotebook:(textId:string,titleOverride?:string)=>Promise<boolean>;
+  importTeacherDocument:(doc:ParsedTeacherDocx)=>Promise<boolean>;
   selectPlacement:(placementId:string)=>Promise<boolean>;
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
@@ -383,6 +386,48 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
       return true;
     }catch(e){
       setMessage('No se pudo añadir: '+(e instanceof Error?e.message:String(e)),true);return false;
+    }
+  }
+
+  /** Un Word es una aparición manual aislada del Corpus original. */
+  async function importTeacherDocument(doc:ParsedTeacherDocx):Promise<boolean>{
+    if(!draft||!session||!current||!await flush())return false;
+    if(!doc.title.trim()||!doc.latin.trim())return false;
+    const at=now(),editionId=current.edition.id;
+    const place=createPlacement({
+      id:freshId('place'),
+      source:{kind:'manual',sourceId:null,urn:null,importedAt:at},
+      title:doc.title,latin:doc.latin,author:doc.author,work:doc.work,
+      reference:doc.reference,
+    },()=>freshId('item'));
+    try{
+      const saved=await workspace.commitEdition(editionId,current.revision,
+        {command:'ui.import-docx',targetId:place.id,timestamp:at},old=>{
+          if(!old)throw Error('No existe el cuaderno.');
+          return validateEdition({...old,updatedAt:at,placements:[...old.placements,place]});
+        });
+      current=saved;draft=structuredClone(saved.edition);
+      editions=editions.map(x=>x.edition.id===editionId?saved:x);
+      session={...session,activePlacementId:place.id,mode:'text'};
+      academics.clear();vocabPreview=null;exportReview=null;
+      // Generación con los bancos antes de insertar las decisiones docentes;
+      // así quedan las palabras documentadas como reserva de huecos.
+      if(autoApply)await academics.generateInitial(place.id);
+      apply((e,time)=>validateEdition({...e,updatedAt:time,
+        placements:e.placements.map(p=>p.id===place.id
+          ?applyParsedTeacherDocx(p,doc,()=>freshId('item')):p)}));
+      if(!await flush())return false;
+      if(!doc.vocabulary.length){
+        const selected=selection();
+        if(selected)try{applyVocabularyAutomatically(selected,true);await flush();}
+          catch(error){setMessage('Documento incorporado; vocabulario pendiente: '+String(error),true);}
+      }
+      menu='questions';mobile='config';paint();
+      setMessage('Word incorporado: subrayados y palabras docentes conservados; huecos completados cuando hay candidatos.');
+      return true;
+    }catch(error){
+      setMessage('Importación fallida: '+(error instanceof Error?error.message:String(error)),true);
+      return false;
     }
   }
   async function selectPlacement(placementId:string):Promise<boolean>{
@@ -1317,7 +1362,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
   }
   return {element,open:()=>refresh(),flush,importLegacyNotebook,
     openSourceText,prepareFromIds,openEdition,syncSourceTags,removeWorkingSource,
-    createNotebookNamed,addSourceToNotebook,selectPlacement,
+    createNotebookNamed,addSourceToNotebook,importTeacherDocument,selectPlacement,
     addCollatinusVocabulary,
     activePlacement:()=>selection()?structuredClone(selection()!):null,
     activeEdition:()=>draft?structuredClone(draft):null,
