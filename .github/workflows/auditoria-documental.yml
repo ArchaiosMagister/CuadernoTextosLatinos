@@ -37,6 +37,12 @@ jobs:
           # Solo se necesitan paquetes de Ubuntu; los repositorios externos
           # del runner pueden responder 429 o bloquear apt-get update.
           test -f /etc/apt/sources.list.d/ubuntu.sources
+          # El mirror EC2 preconfigurado llegó a descargar <20 MB en ocho minutos.
+          # Usar el archivo oficial para evitar el cuello de botella de esa región.
+          grep -q 'mirror+file:/etc/apt/apt-mirrors.txt' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's@mirror+file:/etc/apt/apt-mirrors.txt@https://archive.ubuntu.com/ubuntu@g' \
+            /etc/apt/sources.list.d/ubuntu.sources
+          grep '^URIs:' /etc/apt/sources.list.d/ubuntu.sources
           sudo mkdir -p /tmp/cuaderno-apt-sources-externas
           for source in /etc/apt/sources.list.d/*; do
             case "$source" in
