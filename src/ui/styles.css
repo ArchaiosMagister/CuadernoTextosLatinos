@@ -421,10 +421,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-paper { box-sizing:border-box; position:relative; width:210mm; min-height:297mm; max-width:none;
   display:flex; flex-direction:column; padding:54pt; background:#fff; color:#151515;
   box-shadow:0 2px 12px #0002; overflow-wrap:break-word; }
-.edition-paper-head { text-align:center; border-top: .5pt solid #777; border-bottom:.5pt solid #777; padding:.55em 0 .65em; margin-bottom:.85em; }
+.edition-paper-head { text-align:center; border-top: .5pt solid #777; border-bottom:.5pt solid #777; padding:.45em 0 .3em; margin-bottom:.18em; }
 .edition-paper-head h2 { font-family:inherit; font-size:1.06em; font-weight:700; line-height:1.32; margin:0 0 .24em; }
 .edition-paper-source { font-size:1em; margin:0; line-height:1.4; }
-.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.6em 0 6em; line-height:inherit; }
+.edition-latin { font-style:italic; white-space:pre-wrap; text-align:justify; margin:.18em 0 6em; line-height:inherit; }
 .edition-underlined { text-decoration:underline; text-decoration-thickness: .6pt; text-underline-offset:1pt; }
 .edition-roman { font-style:normal; }
 .edition-review { text-decoration-color:#b33333; text-decoration-style:wavy; }
@@ -438,7 +438,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-choice-options { margin:.7em 0 0; padding-left:1.7em; list-style-type:lower-alpha; display:grid; gap:.3em; }
 .edition-choice-options li { padding-left:.5em; }
 .edition-choice-options li::marker { content:counter(list-item,lower-alpha) ".  "; }
-.edition-paper-footer { margin-top:auto; padding-top:2em; text-align:center; font-size:.84em; color:#333; }
+.edition-paper-footer { position:absolute;left:0;right:0;bottom:12.5mm; margin:0; padding:0; text-align:center; font-size:.84em; color:#333; }
 .edition-preview-note { color:var(--subtle); font-size:.82rem; margin:.7rem .2rem 0; }
 .edition-mobile-switch { display:none; }
 .edition-empty { max-width:45rem; padding:2rem; border:1px solid var(--edge); border-radius:.85rem; background:var(--surface); }
@@ -911,7 +911,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
      aparición de texto de la vista previa no se imprime nunca. */
   @page {
     size:A4;
-    margin:0 0 13mm 0;
+    /* La caja inferior de 25 mm centra el número a 12,5 mm del borde. */
+    margin:0 0 25mm 0;
     @bottom-center {
       content: counter(page) " | " counter(pages);
       font-family:Palatino, "Book Antiqua", Georgia, serif;
@@ -930,6 +931,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     width:210mm!important;min-height:0!important;height:auto!important;
     margin:0!important;border:0!important;box-shadow:none!important;
     overflow:visible!important;
+    /* Compensar los 12 mm adicionales de la caja de numeración sin
+       reducir el área útil del texto ni introducir hojas vacías. */
+    padding-bottom:max(0pt,calc(var(--edition-bottom-padding,70.87pt) - 12mm))!important;
     break-before:auto;page-break-before:auto;
     break-after:auto;page-break-after:auto;
     color:#111!important;background:white!important;
