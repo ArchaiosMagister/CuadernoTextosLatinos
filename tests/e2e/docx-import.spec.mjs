@@ -107,7 +107,6 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   await expect(page.getByRole('button',{name:/Buscar otras formas/})).toBeVisible();
   // Ni el importador ni la búsqueda conservadora pueden insertar formas
   // comunes sin glosa como si fueran un vocabulario docente completo.
-  await expect(page.locator('.edition-vocab-headword')).not.toHaveValue('homines');
   const all=await page.locator('.edition-vocab-headword').evaluateAll(nodes=>
     nodes.map(node=>node.value.toLowerCase()));
   expect(all).not.toContain('homines');
