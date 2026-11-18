@@ -165,7 +165,7 @@ export function parseTeacherDocumentXml(xml:string,parse:(xml:string)=>Document 
   if(xml.length>MAX_XML)throw Error('El XML del documento supera el tamaño permitido.');
   const ps=paragraphs(xml,parse);
   const vocabIdx=ps.findIndex(p=>/^vocabulario$/iu.test(p.text.trim()));
-  const questionIdx=ps.findIndex(p=>/^traducci[oó]n del texto/u.test(p.text.trim()));
+  const questionIdx=ps.findIndex(p=>/^traducci[oó]n del texto/iu.test(p.text.trim()));
   if(vocabIdx<3||questionIdx<=vocabIdx)throw Error('El DOCX no sigue la estructura de texto latino, vocabulario y preguntas.');
   // La referencia precede al latín; puede haber más de un párrafo latino.
   const sourceIdx=ps.findIndex((p,i)=>i>=2&&i<vocabIdx-1&&
