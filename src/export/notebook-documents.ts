@@ -161,7 +161,7 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
   const heading=paragraph(p.text.title,
     paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),
     {bold:true,sizePt:Math.max(8,f.fontSizePt-1)});
-  const source='<w:p>'+paraProps({align:'center',after:16,keepNext:true,bottomBorder:true})+
+  const source='<w:p>'+paraProps({align:'center',after:4,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
   return heading+source+latin(p,f)+vocabulary(p,f)+questions(p,f);
 }
@@ -180,7 +180,8 @@ function wordDocument(edition:NotebookEditionV1):string{
     '<w:pgMar'+attrs({
       'w:top':twips(margin.top),'w:right':twips(margin.right),
       'w:bottom':twips(margin.bottom),'w:left':twips(margin.left),
-      'w:header':360,'w:footer':360,'w:gutter':0,
+      // 1,25 cm desde el borde inferior hasta el pie de página (709 twips).
+      'w:header':360,'w:footer':709,'w:gutter':0,
     })+'/>'+
     '<w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>';
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
