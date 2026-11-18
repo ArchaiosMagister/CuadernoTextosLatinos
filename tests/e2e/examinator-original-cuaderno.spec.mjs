@@ -184,11 +184,13 @@ test('Decisión 1A: títulos por cuaderno, edición propia y sin duplicar tras b
     await page.locator('#lib .lf').fill('Eutropio');
     await page.locator('#lib .lrow.have').filter({hasText:'Eutropio'}).first().click();
     await page.locator('#lib .rtext .rl').nth(line).click();
+    // El toast se emite tras completar addText(), su generación académica y
+    // la renderización. Collatinus puede sobrescribir enseguida el estado del
+    // editor; por eso esperar al mensaje de estado provocaba falsas alarmas.
+    const completed=page.locator('.toast').filter({hasText:'Fragmento incorporado al cuaderno.'});
+    await expect(completed).toHaveCount(0);
     await page.locator('#lib [data-act=use]').click();
-    // La vista A4 aparece antes de terminar la generación académica.
-    // Esperar a la finalización evita que su repintado posterior cierre Cuaderno.
-    await expect(page.locator('#editor .edition-save-state')).toContainText(
-      'Texto incorporado con preguntas generadas',{timeout:60000});
+    await expect(completed).toBeVisible({timeout:30000});
   };
   await choose(0);
   await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 1');
