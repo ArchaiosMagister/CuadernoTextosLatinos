@@ -194,7 +194,7 @@ function styles(f:PageFormatV1):string{
     '<w:rFonts'+attrs({'w:ascii':f.fontFamily,'w:hAnsi':f.fontFamily,'w:eastAsia':f.fontFamily})+'/>'+
     '<w:sz w:val="'+Math.round(f.fontSizePt*2)+'"/>'+
     '</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>'+
-    '<w:spacing w:line="'+twips(f.lineSpacingPt)+'" w:lineRule="exact"/>'+
+    '<w:spacing w:line="'+twips(f.fontSizePt*1.3)+'" w:lineRule="exact"/>'+
     '</w:pPr></w:pPrDefault></w:docDefaults>'+
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'+
     '</w:styles>';
