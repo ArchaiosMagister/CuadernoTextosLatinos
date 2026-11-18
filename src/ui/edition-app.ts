@@ -1054,55 +1054,100 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
     panel.append(section);
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
-    panel.append(action(options.autoVocabulary===false?'Analizar otras palabras (opcional)'
+    const scan=action(options.autoVocabulary===false
+      ?'Buscar otras formas (opcional, sin añadir automáticamente)'
       :autoApply?'Lematizar y actualizar vocabulario':'Proponer vocabulario del texto',
-      ()=>prepareVocabulary(p),'btn btn-primary'));
+      ()=>prepareVocabulary(p),'btn btn-outline');
+    panel.append(scan);
     renderVocabularySuggestions(panel,p);
-    const items=[...p.vocabulary].sort((a,b)=>a.order-b.order);
-    const documented=items.filter(v=>v.provenance!==null).length;
-    const provisional=items.filter(v=>v.origin==='generated'&&v.provenance===null).length;
-    const manual=items.filter(v=>v.origin==='manual').length;
+
+    // Tabla compacta editable basada en la disposición original de Examinator2:
+    // inclusión | enunciado | traducción | aclaración | quitar.
+    const items=[...p.vocabulary].sort((a,b)=>
+      a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
+    const chosen=items.filter(v=>v.included).length;
+    panel.append(node('p','hint',items.length
+      ?chosen+' de '+items.length+' entradas seleccionadas. Solo se imprimen las marcadas; las glosas son editables.'
+      :'Sin vocabulario todavía. Por defecto Collatinus consulta solo nombres propios y gentilicios. Puedes añadir las demás palabras manualmente.'));
     if(items.length){
-      panel.append(node('p','hint','Lematización parcial del texto: '+documented+
-        ' lemas documentados · '+provisional+' formas provisionales · '+manual+
-        ' entradas o decisiones manuales. Los significados no se deducen automáticamente.'));
-    }
-    for(const v of items){
-      const group=node('div','edition-vocabulary-control');
-      const evidenceLabel=v.provenance!==null
-        ?(v.meaning?'Lema documentado; significado introducido por docente':
-          'Lema documentado; significado pendiente de revisión docente')
-        :v.origin==='generated'
-          ?'Propuesta automática sin verificación individual; revisar lema y glosa'
-          :'Entrada editada manualmente; no presentada como lema verificado';
-      group.append(node('p','hint',evidenceLabel));
-      const check=node('input');check.type='checkbox';check.checked=v.included;
-      check.setAttribute('aria-label','Incluir '+v.headword);
-      check.addEventListener('change',()=>{apply((e,at)=>editVocabulary(e,p.id,v.id,'included',check.checked,at));paint();});
-      group.append(check);
-      for(const [key,label] of [['headword','Enunciado'],['meaning','Significado'],['note','Nota']] as const){
-        group.append(textField(label,key==='headword'?v.headword:key==='meaning'?v.meaning??'':v.note??'',value=>{
-          apply((e,at)=>editVocabulary(e,p.id,v.id,key,value.trim()||(key==='headword'?'':null),at));
-        }));
+      const headers=node('div','edition-vocab-column-heads');
+      for(const label of ['','Enunciado','Traducción','Aclaración',''])headers.append(node('span','',label));
+      panel.append(headers);
+      const list=node('div','edition-vocab-list');
+      list.setAttribute('aria-label','Entradas de vocabulario editables');
+      for(const v of items){
+        const row=node('div','edition-vocab-row'+(v.included?'':' off'));
+        const check=node('input');
+        check.type='checkbox';check.className='edition-vocab-include';
+        check.checked=v.included;check.setAttribute('aria-label','Incluir '+v.headword);
+        check.title='Incluir en el cuaderno';
+        check.addEventListener('change',()=>{
+          apply((e,at)=>editVocabulary(e,p.id,v.id,'included',check.checked,at));
+          row.classList.toggle('off',!check.checked);
+        });
+        row.append(check);
+        for(const [key,label,css] of [
+          ['headword','Enunciado','edition-vocab-headword'],
+          ['meaning','Traducción','edition-vocab-meaning'],
+          ['note','Aclaración','edition-vocab-note'],
+        ] as const){
+          const input=node('input','field-control '+css);
+          input.type='text';input.value=key==='headword'?v.headword:
+            key==='meaning'?v.meaning??'':v.note??'';
+          input.placeholder=label;
+          input.setAttribute('aria-label',label+' de '+v.headword);
+          input.addEventListener('input',()=>{
+            if(key==='headword'&&!input.value.trim())return;
+            apply((e,at)=>editVocabulary(e,p.id,v.id,key,
+              input.value.trim()||(key==='headword'?'':null),at));
+          });
+          input.addEventListener('blur',()=>{
+            if(key==='headword'&&!input.value.trim()){
+              input.value=draft?.placements.find(x=>x.id===p.id)?.vocabulary
+                .find(x=>x.id===v.id)?.headword??v.headword;
+            }
+          });
+          row.append(input);
+        }
+        const remove=action('×',()=>{
+          if(!window.confirm('¿Quitar esta entrada de vocabulario? No se modificará el texto latino.'))return;
+          apply((e,at)=>validateEdition({...e,updatedAt:at,
+            placements:e.placements.map(x=>x.id!==p.id?x:{
+              ...x,vocabulary:x.vocabulary.filter(w=>w.id!==v.id),
+            })}));
+          paint();
+        },'btn btn-outline edition-vocab-remove');
+        remove.setAttribute('aria-label','Quitar '+v.headword);
+        row.append(remove);list.append(row);
       }
-      group.append(action('Quitar',()=>{
-        apply((e,at)=>validateEdition({...e,updatedAt:at,
-          placements:e.placements.map(x=>x.id!==p.id?x:{...x,vocabulary:x.vocabulary.filter(w=>w.id!==v.id)})}));
-        paint();
-      }));
-      panel.append(group);
+      panel.append(list);
     }
-    if(!items.length)panel.append(node('p','hint',
-      'Sin entradas todavía. Collatinus propone nombres propios y gentilicios; puedes añadir y editar los demás sin inventar significados.'));
+
+    // La versión anterior podía importar todas las formas de un Word sin
+    // glosario. Solo retirar esos residuos al solicitarlo expresamente.
+    const unreviewed=items.filter(isUnreviewedAutoVocabulary);
+    if(unreviewed.length){
+      const cleanup=action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
+        if(!window.confirm('¿Retirar únicamente las propuestas automáticas sin significado ni edición manual? Los nombres, glosas y entradas revisadas se conservan.'))return;
+        apply((e,at)=>validateEdition({...e,updatedAt:at,
+          placements:e.placements.map(x=>x.id!==p.id?x:{
+            ...x,vocabulary:x.vocabulary.filter(v=>!isUnreviewedAutoVocabulary(v)),
+          })}));
+        paint();
+      },'btn btn-outline edition-vocab-cleanup');
+      panel.append(cleanup);
+    }
+
     const headword=node('input','field-control');headword.placeholder='Enunciado o lema';
-    const meaning=node('input','field-control');meaning.placeholder='Significado';
+    headword.setAttribute('aria-label','Enunciado nuevo');
+    const meaning=node('input','field-control');meaning.placeholder='Traducción';
+    meaning.setAttribute('aria-label','Traducción nueva');
     const add=action('Añadir entrada',()=>{
       const lemma=headword.value.trim();
       if(!lemma)return;
       const manualMeaning=meaning.value.trim()||null;
-      // Collatinus puede completar propuestas entre la apertura del menú y el
-      // clic. Calcular el orden desde la edición VIVA evita colisiones de orden
-      // y pérdida de entradas manuales por una referencia p desactualizada.
+      // El orden se calcula sobre el borrador vigente para no sobrescribir
+      // propuestas Collatinus que lleguen durante la edición.
       apply((e,at)=>{
         const latest=e.placements.find(item=>item.id===p.id);
         if(!latest)throw new Error('El texto ya no existe en el cuaderno.');
