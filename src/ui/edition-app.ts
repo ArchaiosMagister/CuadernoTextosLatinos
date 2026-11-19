@@ -1187,7 +1187,7 @@ export function createEditionPane(options:{
     qtyLabel.append(qty);toolbar.append(qtyLabel);
     panel.append(toolbar);
     const scan=action(options.onAnalyzeVocabulary
-      ?'Actualizar vocabulario con Collatinus'
+      ?'Buscar otras formas con Collatinus (actualizar)'
       :options.autoVocabulary===false?'Buscar otras formas (opcional)'
         :'Proponer vocabulario del texto',
       ()=>refreshCollatinusVocabulary(p),'btn btn-outline');
@@ -1364,7 +1364,7 @@ export function createEditionPane(options:{
     }
     const headword=node('input','field-control');headword.placeholder='Enunciado o lema';
     headword.setAttribute('aria-label','Enunciado nuevo');
-    const meaning=node('input','field-control');meaning.placeholder='Traducción';
+    const meaning=node('input','field-control');meaning.placeholder='Significado';
     meaning.setAttribute('aria-label','Traducción nueva');
     const add=action('Añadir entrada',()=>{
       const lemma=headword.value.trim();if(!lemma)return;
