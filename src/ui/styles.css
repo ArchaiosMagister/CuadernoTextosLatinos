@@ -461,11 +461,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-vocab-row .edition-vocab-save{width:84px;min-width:84px;max-width:84px;
   min-height:28px;padding:3px 2px;font-size:11px;white-space:nowrap;box-sizing:border-box;}
 .edition-vocab-row .edition-vocab-save.is-saved{background:var(--accent-soft,#dcecf8);}
-.edition-vocab-row .edition-vocab-split,
-.edition-vocab-row .edition-vocab-reset{grid-column:2 / -1;}
-.edition-vocab-row .edition-vocab-split{display:flex;align-items:center;gap:6px;font-size:11px;}
+.edition-vocab-row .edition-vocab-split{grid-column:2 / -1;display:flex;align-items:center;gap:6px;font-size:11px;}
 .edition-vocab-row .edition-vocab-split input{width:15px;height:15px;flex:none;}
-.edition-vocab-row .edition-vocab-reset{justify-self:start;font-size:11px;min-height:24px;padding:2px 5px;}
+.edition-vocab-row .edition-vocab-reset{grid-column:6;grid-row:1;min-width:28px;width:28px;
+  min-height:28px;padding:0;font-size:19px;}
 .edition-vocab-add{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
 .edition-vocab-add>input{flex:1 1 110px;min-width:0;}
 .edition-vocab-add>.btn{flex:0 0 auto;}
@@ -475,8 +474,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .edition-vocab-row .edition-vocab-save{grid-column:3;grid-row:1;}
   .edition-vocab-row .edition-vocab-meaning{grid-column:2 / 4;grid-row:2;}
   .edition-vocab-row .edition-vocab-note{grid-column:2 / 4;grid-row:3;}
-  .edition-vocab-row .edition-vocab-split,
-  .edition-vocab-row .edition-vocab-reset{grid-column:2 / -1;}
+  .edition-vocab-row .edition-vocab-split{grid-column:2 / -1;}
+  .edition-vocab-row .edition-vocab-reset{grid-column:4;grid-row:1;}
   .edition-vocab-toolbar{align-items:flex-start;}
   .edition-vocab-quantity{width:100%;}
   .edition-vocab-quantity .field-control{max-width:none;flex:1;}
