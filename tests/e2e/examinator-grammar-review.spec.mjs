@@ -87,8 +87,8 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     await expect(restoredModal.getByText(/Loquitur · .* · Descartada/)).toBeVisible();
     await restoredModal.getByRole('button',{name:'Cerrar'}).click();
 
-    await restoredSelector.selectOption('');
-    await expect(restoredSelector.locator('option:checked')).toHaveText('Elige un cuaderno');
+    await restored.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+    await expect(restored.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
     restored.once('dialog',dialog=>dialog.accept('Cuaderno nuevo'));
     await restored.locator('#btnNew').click();
     await restored.getByRole('button',{name:'Banco propio'}).click();
