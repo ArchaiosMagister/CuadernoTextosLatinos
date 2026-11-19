@@ -50,7 +50,7 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
 test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({page})=>{
   await page.goto('/examinator-cuadernos/');
   const bank=page.locator('.cuaderno-home-bank');
-  await bank.getByRole('button',{name:'Pegar texto'}).click();
+  await bank.getByRole('button',{name:'Pegar en el banco'}).click();
   const modal=page.locator('.modal').last();
   await modal.getByRole('textbox',{name:'Título'}).fill('Texto sin cuaderno');
   await modal.getByRole('textbox',{name:'Autor'}).fill('César');
