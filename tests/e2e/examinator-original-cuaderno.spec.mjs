@@ -73,7 +73,7 @@ test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea pr
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
 });
 
-test('título, obra y cita separados; tipografía global, menú de vocabulario y añadir sobre A4',async({page})=>{
+test('título, obra y cita separados; tipografía global, menú de vocabulario y añadir desde el editor',async({page})=>{
   await page.setViewportSize({width:820,height:1180});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
@@ -106,7 +106,7 @@ test('título, obra y cita separados; tipografía global, menú de vocabulario y
   await expect(paper).toHaveCSS('font-family',/Georgia/);
   await expect(paper.locator('.edition-paper-title')).toHaveCSS('font-family',/Georgia/);
   await expect(paper.locator('.edition-paper-source')).toHaveCSS('font-family',/Georgia/);
-  const add=page.locator('.edition-preview-bar').getByRole('button',{name:'+ Añadir al cuaderno'});
+  const add=page.locator('#editor .card').getByRole('button',{name:'Biblioteca'});
   await expect(add).toBeVisible();
   await add.click();
   await expect(page.locator('#lib .lhead')).toBeVisible();
@@ -302,4 +302,22 @@ test('Safari iPad: no añade selección antigua tras abrir otra obra',async({pag
   await page.locator('#lib [data-act=use]').click();
   await expect(page.locator('.edition-counter')).toHaveText('Sin textos');
   await expect(page.locator('#lib .lhead')).toBeVisible();
+});
+
+
+test('selector visible y recuperación del último cuaderno en iPhone simulado',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/examinator-cuadernos/');
+  const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
+  await expect(selector).toBeVisible();
+  for(const title of ['Cuaderno primero','Cuaderno segundo']){
+    page.once('dialog',dialog=>dialog.accept(title));
+    await page.locator('#btnNew').click();
+    await expect(selector.locator('option:checked')).toContainText(title);
+  }
+  const first=await selector.locator('option').filter({hasText:'Cuaderno primero'}).getAttribute('value');
+  await selector.selectOption(first);
+  await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
+  await page.reload();
+  await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
 });

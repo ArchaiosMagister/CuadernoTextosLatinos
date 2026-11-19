@@ -1,3 +1,5 @@
+import { validateEdition } from '../core/edition-validation.js';
+import type { NotebookEditionV1 } from '../core/edition-model.js';
 import { validateWorkspaceSnapshot, WorkspaceConflictError, WorkspaceRepository,
   type WorkspaceSnapshotV1 } from './workspace-repository.js';
 
@@ -140,4 +142,35 @@ export async function restoreWorkspaceBackup(workspace:WorkspaceRepository,json:
     throw new WorkspaceBackupError('La restauración se escribió pero no coincide tras la verificación. Conserva la copia previa.');
   }
   return restored;
+}
+
+
+const NOTEBOOK_BACKUP_FORMAT = 'cuaderno-textos-latinos-notebook';
+
+export async function createNotebookBackup(edition: NotebookEditionV1): Promise<string> {
+  const payload = validateEdition(edition);
+  const json = JSON.stringify({
+    format: NOTEBOOK_BACKUP_FORMAT, backupVersion: 1, sha256: await hash(JSON.stringify(payload)), payload,
+  });
+  if (new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
+    throw new WorkspaceBackupError('La copia del cuaderno supera 64 MiB.');
+  }
+  return json;
+}
+
+export async function readNotebookBackup(json: string): Promise<{edition: NotebookEditionV1; fingerprint: string} | null> {
+  if (new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
+    throw new WorkspaceBackupError('La copia supera 64 MiB.');
+  }
+  const envelope = JSON.parse(json);
+  if (envelope?.format !== NOTEBOOK_BACKUP_FORMAT) return null;
+  if (envelope.backupVersion !== 1) {
+    throw new WorkspaceBackupError('Versión de la copia del cuaderno incompatible.');
+  }
+  const edition = validateEdition(envelope.payload);
+  const fingerprint = await hash(JSON.stringify(edition));
+  if (fingerprint !== envelope.sha256) {
+    throw new WorkspaceBackupError('Versión o huella de la copia del cuaderno inválida.');
+  }
+  return {edition, fingerprint};
 }

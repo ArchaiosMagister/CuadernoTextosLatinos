@@ -59,8 +59,6 @@ body[data-has-editor='true'] #editor{min-width:0;}
 #editor .edition-mobile-switch{display:none!important;}
 #editor .edition-mobile-hidden{display:block!important;}
 body[data-has-editor='true'] #preview .sheet{display:none;}
-#editor .original-text-index{display:grid;gap:4px;max-height:170px;overflow:auto;margin-top:8px;}
-#editor .original-text-index button{text-align:left;white-space:normal;}
 #editor .original-open-row{justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--rule-2);}
 .original-own-list{display:grid;gap:5px;max-height:360px;overflow:auto;margin:8px 0;}
 .original-own-list .tbtn{text-align:left;white-space:normal;}
@@ -286,4 +284,20 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
 @media print{
   .edition-print-root .edition-paper-head{display:block!important;}
   .edition-print-root .edition-paper-head h2{font-family:inherit!important;}
+}
+
+@media screen {
+  #editor .card select[aria-label='Elegir cuaderno'] {
+    width:100%;max-width:100%;min-height:36px;
+  }
+  #editor .card details {margin:8px 0;}
+  #editor .card details summary {cursor:pointer;padding-block:6px;}
+  #editor .card .row {flex-wrap:wrap;}
+}
+
+@media screen {
+  #editor .card input[type='file'][hidden] {display:none;}
+  html[data-cuaderno-theme='dark'] .toast {
+    background:var(--paper-2);color:var(--ink);border:1px solid var(--rule);
+  }
 }
