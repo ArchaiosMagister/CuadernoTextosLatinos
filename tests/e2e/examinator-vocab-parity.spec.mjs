@@ -35,7 +35,7 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
     {timeout:110000}).toContain('pœna');
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await page.getByRole('button',{name:'Desmarcar todas'}).click();
-  expect(await page.locator('.edition-vocab-include:checked').count()).toBe(0);
+  await expect(page.locator('.edition-vocab-include:checked')).toHaveCount(0);
   await page.getByRole('button',{name:'Marcar todas',exact:true}).click();
   await expect(page.locator('.edition-vocab-include:checked')).not.toHaveCount(0);
   const idx=(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).findIndex(x=>x.startsWith('pœna'));
@@ -48,10 +48,10 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
     'cuaderno-examinator.vocabulario.v1')||'[]').some(x=>
     x.headword.startsWith('pœna')&&x.meaning==='pena | castigo'))).toBe(true);
   await page.locator('#btnSave').click();
+  await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
   await page.reload();
-  await expect(page.locator('#editor .card')).toBeVisible();
-  await page.locator('#btnOpen').click();
-  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})
+    .locator('option:checked')).toContainText('Cuaderno ligaduras');
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),

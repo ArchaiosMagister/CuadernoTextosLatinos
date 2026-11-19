@@ -13,6 +13,11 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
     await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
     await expect(page.locator('.edition-counter')).toContainText(title==='Pasaje uno'?'Texto 1 de 1':'Texto 2 de 2');
   }
+  await expect.poll(()=>page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const [state]=await new WorkspaceRepository().listEditions();
+    return state.edition.placements.filter(p=>p.vocabulary.some(v=>v.collatinusSource)).length;
+  })).toBe(2);
   const fixture=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const repository=new WorkspaceRepository();
@@ -32,6 +37,7 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
     return {first:first.id,second:second.id,word:first.value};
   });
   await page.reload();
+  await expect(page.locator('.edition-repetition-notice')).toContainText('Repeticiones:');
   const audit=page.getByText('Revisar cuaderno',{exact:true});
   await audit.click();
   await expect(page.locator('.edition-audit')).toContainText('Pasaje uno (protegida)');

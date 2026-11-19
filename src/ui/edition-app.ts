@@ -1661,6 +1661,8 @@ export function createEditionPane(options:{
       navMenus.append(tab);
     }
     editor.append(navMenus);
+    const repetitions=academics.repetitionNotice();
+    if(repetitions)editor.append(repetitions);
     const panel=node('div','edition-menu-content edition-menu-'+menu);
     const placement=selection();
     if(menu==='notebook')menuNotebook(panel);

@@ -702,41 +702,57 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       }
     });
   }
+  function inspectRepetitions(state:EditionSnapshotV1){
+    const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
+      target:AcademicSlotTargetV1;protected:boolean}[]>();
+    const baseCounts=new Map<string,string[]>();
+    for(const placement of state.edition.placements)for(const question of placement.questions){
+      if(!question.enabled||question.kind!=='choice')continue;
+      for(const option of question.options){
+        if(!option.enabled)continue;
+        if(option.kind==='preverb'){
+          for(const base of preverbKeys(option)){
+            const uses=baseCounts.get(base)??[];
+            uses.push(placement.text.title);baseCounts.set(base,uses);
+          }
+          continue;
+        }
+        for(const slot of option.slots){
+          const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
+          const uses=groups.get(key)??[];
+          uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
+            protected:slot.locked||slot.origin==='manual',
+            target:{placementId:placement.id,questionId:question.id,optionId:option.id,
+              slotId:slot.id,expectedRevision:state.revision,
+              ...(rulesFor(question)!==undefined?{phoneticRules:rulesFor(question)!}:{})}});
+          groups.set(key,uses);
+        }
+      }
+    }
+    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),baseCounts};
+  }
+  function repetitionNotice():HTMLElement|null{
+    const state=bind.snapshot();
+    if(!state)return null;
+    const {duplicates,baseCounts}=inspectRepetitions(state);
+    const repeatedBases=[...baseCounts.values()].filter(uses=>uses.length>1).length;
+    if(!duplicates.length&&!repeatedBases)return null;
+    const notice=el('p','hint edition-repetition-notice',
+      'Repeticiones: '+duplicates.length+(duplicates.length===1?' palabra':' palabras')+
+      ' y '+repeatedBases+(repeatedBases===1?' base preverbial':' bases preverbiales')+
+      '. Cuaderno → Revisar cuaderno.');
+    notice.setAttribute('role','status');
+    return notice;
+  }
   function renderNotebookAudit():HTMLElement{
     const details=el('details','edition-audit');
     details.append(el('summary','','Revisar cuaderno'));
     const result=el('div');details.append(result);
     async function inspect():Promise<void>{
       await withSaved(state=>{
-        const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
-          target:AcademicSlotTargetV1;protected:boolean}[]>();
-        const baseCounts=new Map<string,string[]>();
-        for(const placement of state.edition.placements)for(const question of placement.questions){
-          if(!question.enabled||question.kind!=='choice')continue;
-          for(const option of question.options){
-            if(!option.enabled)continue;
-            if(option.kind==='preverb'){
-              for(const base of preverbKeys(option)){
-                const uses=baseCounts.get(base)??[];
-                uses.push(placement.text.title);baseCounts.set(base,uses);
-              }
-              continue;
-            }
-            for(const slot of option.slots){
-              const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
-              const uses=groups.get(key)??[];
-              uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
-                protected:slot.locked||slot.origin==='manual',
-                target:{placementId:placement.id,questionId:question.id,optionId:option.id,
-                  slotId:slot.id,expectedRevision:state.revision,
-                  ...(rulesFor(question)!==undefined?{phoneticRules:rulesFor(question)!}:{})}});
-              groups.set(key,uses);
-            }
-          }
-        }
+        const {duplicates,baseCounts}=inspectRepetitions(state);
         result.replaceChildren(el('p','',state.edition.placements.length+' textos revisados · '+
           baseCounts.size+' bases preverbiales distintas'));
-        const duplicates=[...groups.values()].filter(uses=>uses.length>1);
         for(const kind of ['phonetics','prefix','latinism'] as const){
           const rows=duplicates.filter(uses=>uses[0]?.kind===kind);
           result.append(el('h4','',optionName(kind)+' · '+rows.length+' palabras repetidas'));
@@ -775,7 +791,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     return details;
   }
   return {
-    clear,generateInitial,review,renderNotebookAudit,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
+    clear,generateInitial,review,repetitionNotice,renderNotebookAudit,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
     renderPaperSelect,savePaperSelection,
   };
 }
