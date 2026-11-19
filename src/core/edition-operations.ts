@@ -1,5 +1,5 @@
 import {
-  type EditorSessionV1, type EditableTextV1,
+  type EditorSessionV1, type EditableTextV1, type GrammarSpanV1,
   type MorphWordV1, type NotebookEditionV1, type QuestionV1,
   type QuestionWordSlotV1, type TextPlacementV1, type VocabularyEntryV1,
 } from './edition-model.js';
@@ -67,6 +67,24 @@ export function movePlacement(e:NotebookEditionV1,id:string,toIndex:number,at:st
   return validateEdition({...e,updatedAt:at,placements:next});
 }
 
+function reanchorGrammarSpan(span:GrammarSpanV1,previous:string,latin:string):GrammarSpanV1{
+  if(span.reviewRequired)return span;
+  if(latin.slice(span.startUtf16,span.endUtf16)===span.exact
+    &&fingerprintForMark(latin,span.startUtf16,span.endUtf16)===span.textFingerprint)return span;
+  const start=latin.indexOf(span.exact);
+  if(start<0||previous.indexOf(span.exact)!==span.startUtf16
+    ||previous.indexOf(span.exact,span.startUtf16+1)!==-1||latin.indexOf(span.exact,start+1)!==-1)
+    return {...span,reviewRequired:true};
+  const end=start+span.exact.length;
+  const wordChar=/[\p{L}\p{M}]/u;
+  const joinsWord=(text:string,position:number)=>wordChar.test(text[position-1]??'')
+    &&wordChar.test(text[position]??'');
+  if(joinsWord(latin,start)!==joinsWord(previous,span.startUtf16)
+    ||joinsWord(latin,end)!==joinsWord(previous,span.endUtf16))
+    return {...span,reviewRequired:true};
+  return {...span,startUtf16:start,endUtf16:end,textFingerprint:fingerprintForMark(latin,start,end)};
+}
+
 /** El título, autor, cita y latín de esta aparición son independientes del Corpus original. */
 export function editPlacementText(e:NotebookEditionV1, placementId:string,
   key:'title'|'author'|'work'|'reference'|'latin',value:string|null,at:string):NotebookEditionV1 {
@@ -82,14 +100,7 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
       if(p.text.markup.some(mark=>mark.endUtf16>newLatin.length)){
         fail('La edición recorta un subrayado fuera del texto. Revisa o retira primero las marcas afectadas.');
       }
-      if((p.grammaticalSpans??[]).some(span=>span.endUtf16>newLatin.length)){
-        fail('La edición recorta un fragmento gramatical. Retira antes su etiqueta de fragmento.');
-      }
-      const spans=(p.grammaticalSpans??[]).map(span=>({...span,
-        reviewRequired:span.reviewRequired
-          ||newLatin.slice(span.startUtf16,span.endUtf16)!==span.exact
-          ||fingerprintForMark(newLatin,span.startUtf16,span.endUtf16)!==span.textFingerprint,
-      }));
+      const spans=(p.grammaticalSpans??[]).map(span=>reanchorGrammarSpan(span,p.text.latin,newLatin));
       editedText.markup=p.text.markup.map(m=>({...m,
         reviewRequired:m.reviewRequired
           || newLatin.slice(m.startUtf16,m.endUtf16)!==m.exact

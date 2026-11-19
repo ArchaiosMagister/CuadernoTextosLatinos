@@ -484,12 +484,16 @@ export function createEditionPane(options:{
       ||start<0||end>latin.length||end<=start||!latin.slice(start,end).trim()){
       setMessage('Selecciona un fragmento latino no vacío.',true);return false;
     }
-    const span={id:freshId('span'),startUtf16:start,endUtf16:end,
+    const spans=placement.grammaticalSpans??[];
+    const existing=spans.find(span=>!span.reviewRequired&&span.startUtf16===start&&span.endUtf16===end);
+    if(existing?.tagIds.includes(tagId))return true;
+    const span={id:existing?.id??freshId('span'),startUtf16:start,endUtf16:end,
       exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
-      tagIds:[tagId],reviewRequired:false};
+      tagIds:[...(existing?.tagIds??[]),tagId],reviewRequired:false};
     apply((edition,at)=>validateEdition({...edition,updatedAt:at,
       placements:edition.placements.map(p=>p.id===placement.id
-        ?{...p,grammaticalSpans:[...(p.grammaticalSpans??[]),span]}:p)}));
+        ?{...p,grammaticalSpans:existing?spans.map(previous=>previous.id===existing.id?span:previous)
+          :[...spans,span]}:p)}));
     const saved=await flush();paint();return saved;
   }
   async function removeGrammarSpan(id:string):Promise<boolean>{

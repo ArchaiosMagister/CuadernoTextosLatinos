@@ -1,6 +1,6 @@
 import type {CorpusV1,GrammarTag} from './model.js';
 import type {NotebookEditionV1} from './edition-model.js';
-import {allGrammarTags,matchesGrammarTag} from './grammar-tags.js';
+import {allGrammarTags,matchesGrammarTag,placementGrammarTags} from './grammar-tags.js';
 
 export interface NotebookGrammarCount {
   id:string;label:string;kind:GrammarTag['kind'];parentId:string|null;count:number;
@@ -17,9 +17,7 @@ export function summarizeNotebook(edition:NotebookEditionV1,corpus:CorpusV1):Not
     const key=p.source.kind==='corpus'&&p.source.sourceId
       ? 'corpus:'+p.source.sourceId : 'placement:'+p.id;
     const tagIds=distinct.get(key)??new Set<string>();
-    for(const id of p.grammaticalTagIds)tagIds.add(id);
-    for(const span of p.grammaticalSpans??[])
-      for(const id of span.tagIds)tagIds.add(id);
+    for(const id of placementGrammarTags(p))tagIds.add(id);
     distinct.set(key,tagIds);
   }
   const tags=allGrammarTags(corpus);

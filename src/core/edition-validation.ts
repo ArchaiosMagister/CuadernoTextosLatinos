@@ -203,13 +203,14 @@ function reviewFlag(input:unknown,path:string):ReviewFlagV1 {
 }
 function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
   const d=object(input,path,['id','startUtf16','endUtf16','exact','textFingerprint','tagIds','reviewRequired']);
-  const start=integer(d.startUtf16,`${path}.startUtf16`,0,latin.length);
-  const end=integer(d.endUtf16,`${path}.endUtf16`,1,latin.length);
+  const reviewRequired=flag(d.reviewRequired,`${path}.reviewRequired`);
+  const limit=reviewRequired?200_000:latin.length;
+  const start=integer(d.startUtf16,`${path}.startUtf16`,0,limit);
+  const end=integer(d.endUtf16,`${path}.endUtf16`,1,limit);
   if(start>=end)fail(path,'fragmento vacío o invertido');
   const exact=str(d.exact,`${path}.exact`,200_000);
   const fp=str(d.textFingerprint,`${path}.textFingerprint`,32);
   if(!hashPattern.test(fp))fail(path,'huella del fragmento inválida');
-  const reviewRequired=flag(d.reviewRequired,`${path}.reviewRequired`);
   if(!reviewRequired&&(latin.slice(start,end)!==exact||fingerprintForMark(latin,start,end)!==fp))
     fail(path,'fragmento desanclado sin marca de revisión');
   const tagIds=array(d.tagIds,`${path}.tagIds`,200).map((v,i)=>id(v,`${path}.tagIds[${i}]`));

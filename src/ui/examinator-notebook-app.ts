@@ -1,3 +1,5 @@
+import {renderGrammarEditor} from './grammar-editor.js';
+import {validateCorpus} from '../core/validation.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
  * biblioteca originales de Examinator2. No recrea sus plantillas ni su CSS.
@@ -14,7 +16,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,catalogDepth,matchesGrammarFilters} from '../core/grammar-tags.js';
+import {allGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
 import type {CorpusSnapshot} from '../ports/corpus-repository.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
@@ -431,22 +433,25 @@ function openOwnTexts():void{
   const input=el('input');input.type='search';input.placeholder='Buscar textos propios…';
   input.setAttribute('aria-label','Buscar textos guardados');
   const tagFilter=el('select');tagFilter.setAttribute('aria-label','Filtrar por etiqueta gramatical');
-  tagFilter.append(el('option','','Todas las etiquetas'));
-  tagFilter.options[0]!.value='';
+  tagFilter.multiple=true;tagFilter.size=4;
   const tags=allGrammarTags(corpus.corpus);
   for(const tag of tags){
     const option=el('option','','· '.repeat(catalogDepth(tag,tags))+tag.label);
     option.value=tag.id;tagFilter.append(option);
   }
-  panel.append(input,tagFilter,list);
+  const filtersPanel=el('details');
+  filtersPanel.append(el('summary','','Filtrar por etiquetas'),tagFilter);
+  panel.append(input,filtersPanel,list);
   let close=()=>{};
   const populate=()=>{
     list.replaceChildren();
     const needle=foldLatin(input.value);
-    const filters=tagFilter.value?[tagFilter.value]:[];
+    const filters=Array.from(tagFilter.selectedOptions,option=>option.value);
     const matching=corpus.corpus.texts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle)
-      && matchesGrammarFilters(t.tagIds,filters,tags));
+      && (matchesGrammarFilters(t.tagIds,filters,tags) || notebooks.some(notebook=>
+        notebook.edition.placements.some(placement=>placement.source.sourceId===t.id
+          && matchesGrammarFilters(placementGrammarTags(placement),filters,tags)))));
     for(const t of matching)list.append(button(t.title,async()=>{
       close();
       if(!await writeSource(()=>composer.addSourceToNotebook(t.id)))throw Error('No se ha añadido el texto.');
@@ -568,6 +573,43 @@ function exportDoc(type:'word'|'pdf'):void{
   if(!action){M.toast('No se ha encontrado la exportación del cuaderno.',4500);return;}
   action.click();
 }
+async function openGrammarEditor():Promise<void>{
+  if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
+  const placement=composer.activePlacement();
+  if(!placement)return;
+  const panel=el('div');
+  const notice=(message:string)=>M.toast(message,5000);
+  async function update():Promise<void>{
+    await reload();
+    const latest=composer.activePlacement();
+    if(!latest||latest.id!==placement!.id)return;
+    panel.replaceChildren(renderGrammarEditor(latest,corpus.corpus,{
+      open:true,toggle:()=>{},notice,
+      addSpan:composer.addGrammarSpan,removeSpan:composer.removeGrammarSpan,
+      updated:update,
+      saveTags:async ids=>{
+        if(!await composer.setActiveTags(ids)){notice('No se han guardado las etiquetas.');return;}
+        await update();
+      },
+      addCustomTag:async label=>{
+        try{
+          if(!isCustomTagLabelValid(label)){notice('Revisa el nombre de la etiqueta.');return;}
+          const previous=await repo.load();
+          let tag=findTagByLabel(label,allGrammarTags(previous.corpus));
+          if(!tag){
+            tag={id:'custom.'+crypto.randomUUID(),label:label.trim(),kind:'custom',parentId:null};
+            await repo.save(validateCorpus({...previous.corpus,tags:[...previous.corpus.tags,tag]}),previous.revision);
+          }
+          if(!await composer.setActiveTags([...latest.grammaticalTagIds,tag.id]))
+            throw Error('No se ha podido asignar la etiqueta.');
+          await update();
+        }catch(error){notice(String(error));}
+      },
+    }));
+  }
+  await update();
+  M.modal('Etiquetas del texto',panel,[{label:'Cerrar'}]);
+}
 function render():void{
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
@@ -626,6 +668,7 @@ function render():void{
       button('Pegar texto',pasteText,'hbtn'),
       button('Importar Word',importWord,'hbtn'));
     summary.append(actions);
+    if(composer.activeEdition()!.placements.length)summary.append(button('Etiquetas gramaticales',openGrammarEditor,'hbtn'));
     left.append(summary,composer.element);
     page.textContent='';
   }else{
