@@ -206,3 +206,38 @@ test('selecciona varios Word y conserva el orden de los textos en un solo cuader
     'Entrada primera','Entrada segunda',
   ]);
 });
+
+
+test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabulario al reutilizar',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  const chooser=page.waitForEvent('filechooser');
+  await bank.getByRole('button',{name:'Importar Word'}).click();
+  await (await chooser).setFiles([
+    {name:'primero.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer:sampleDocx(documentXml())},
+    {name:'segundo.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer:sampleDocx(documentXml().replace('Finito igitur','Postremo igitur'))},
+  ]);
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(2);
+  await modal.getByRole('button',{name:'Guardar 2 textos en el banco'}).click();
+  await expect(bank).toContainText('2 textos distintos');
+  const data=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const x=(await new IndexedDbCorpusRepository().load()).corpus.texts;
+    return x.map(t=>({title:t.title,underlines:t.teacherDocx?.underlines.length,
+      vocabulary:t.teacherDocx?.vocabulary.length,lexical:t.teacherDocx?.lexical.phonetics.length}));
+  });
+  expect(data).toHaveLength(2);
+  expect(data.every(x=>x.underlines===4 && x.vocabulary===4)).toBe(true);
+  page.once('dialog',d=>d.accept('Cuaderno que reutiliza Word'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  const listing=page.locator('.modal').last();
+  await listing.getByRole('button',{name:/Añadir «Los romanos envían legados/}).first().click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await expect(page.locator('.edition-underlined')).toHaveCount(4);
+  await expect(page.locator('.edition-vocabulary-line')).toContainText('Egipto');
+});
