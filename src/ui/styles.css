@@ -444,23 +444,45 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .edition-paper .edition-choice-options,
 .edition-paper .edition-choice-options li{font-size:1em;line-height:inherit;}
 /* Tabla compacta como la pestaña de vocabulario de Examinator2. */
- .edition-vocab-column-heads{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;gap:4px;font-size:11px;color:var(--subtle);padding:0 5px;}
-.edition-vocab-list{display:grid;gap:0;border:1px solid var(--edge);border-radius:7px;overflow:hidden;}
-.edition-vocab-row{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,.9fr) 28px;
+ .edition-vocab-column-heads{display:grid;grid-template-columns:22px minmax(0,1.25fr) minmax(0,1.05fr) minmax(0,.8fr) 84px 28px;gap:4px;font-size:11px;color:var(--subtle);padding:0 5px;}
+.edition-vocab-list{display:grid;gap:0;border:1px solid var(--edge);border-radius:7px;overflow-y:auto;max-height:340px;}
+.edition-vocab-row{display:grid;grid-template-columns:22px minmax(0,1.25fr) minmax(0,1.05fr) minmax(0,.8fr) 84px 28px;
   align-items:center;gap:4px;padding:4px 5px;border-bottom:1px solid var(--edge);min-width:0;}
 .edition-vocab-row:last-child{border-bottom:0;}
 .edition-vocab-row.off{opacity:.62;}
 .edition-vocab-row .field-control{width:100%;min-width:0;min-height:30px;margin:0;padding:4px 5px;font-size:12px;}
 .edition-vocab-row .edition-vocab-headword{font-style:italic;}
 .edition-vocab-row .edition-vocab-remove{min-width:28px;width:28px;min-height:28px;padding:0;font-size:19px;}
+.edition-vocab-toolbar,.edition-vocab-modes,.edition-vocab-bulk{display:flex;align-items:center;flex-wrap:wrap;gap:6px;}
+.edition-vocab-toolbar{justify-content:space-between;}
+.edition-vocab-modes .btn{min-height:30px;font-size:12px;padding:4px 8px;}
+.edition-vocab-quantity{display:flex;align-items:center;gap:6px;font-size:12px;}
+.edition-vocab-quantity .field-control{min-height:30px;max-width:210px;padding:3px 5px;font-size:12px;}
+.edition-vocab-row .edition-vocab-save{width:84px;min-width:84px;max-width:84px;
+  min-height:28px;padding:3px 2px;font-size:11px;white-space:nowrap;box-sizing:border-box;}
+.edition-vocab-row .edition-vocab-save.is-saved{background:var(--accent-soft,#dcecf8);}
+.edition-vocab-row .edition-vocab-split,
+.edition-vocab-row .edition-vocab-reset{grid-column:2 / -1;}
+.edition-vocab-row .edition-vocab-split{display:flex;align-items:center;gap:6px;font-size:11px;}
+.edition-vocab-row .edition-vocab-split input{width:15px;height:15px;flex:none;}
+.edition-vocab-row .edition-vocab-reset{justify-self:start;font-size:11px;min-height:24px;padding:2px 5px;}
 .edition-vocab-add{display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
 .edition-vocab-add>input{flex:1 1 110px;min-width:0;}
 .edition-vocab-add>.btn{flex:0 0 auto;}
 @media(max-width:540px){.edition-vocab-column-heads{display:none;}
-  .edition-vocab-row{grid-template-columns:22px minmax(0,1fr) 28px;}
-  .edition-vocab-row .edition-vocab-meaning{grid-column:2;}
-  .edition-vocab-row .edition-vocab-note{grid-column:2;}
-  .edition-vocab-row .edition-vocab-remove{grid-column:3;grid-row:1;}}
+  .edition-vocab-row{grid-template-columns:24px minmax(0,1fr) 84px 28px;}
+  .edition-vocab-row .edition-vocab-headword{grid-column:2;grid-row:1;}
+  .edition-vocab-row .edition-vocab-save{grid-column:3;grid-row:1;}
+  .edition-vocab-row .edition-vocab-meaning{grid-column:2 / 4;grid-row:2;}
+  .edition-vocab-row .edition-vocab-note{grid-column:2 / 4;grid-row:3;}
+  .edition-vocab-row .edition-vocab-split,
+  .edition-vocab-row .edition-vocab-reset{grid-column:2 / -1;}
+  .edition-vocab-toolbar{align-items:flex-start;}
+  .edition-vocab-quantity{width:100%;}
+  .edition-vocab-quantity .field-control{max-width:none;flex:1;}
+  /* Las columnas de significado y aclaración ya se fijan arriba. */
+  /* Controles distribuidos en tres líneas para iPhone. */
+  .edition-vocab-row .edition-vocab-remove{grid-column:4;grid-row:1;}}
 
 .edition-paper-footer { position:absolute;left:0;right:0;bottom:12.5mm; margin:0; padding:0; text-align:center; font-size:.84em; color:#333; }
 .edition-preview-note { color:var(--subtle); font-size:.82rem; margin:.7rem .2rem 0; }
