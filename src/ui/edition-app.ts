@@ -1,9 +1,10 @@
+import type { LatinText } from '../core/model.js';
 /**
  * Primera interfaz de composición editorial.
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
-import type { NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
+import type { GrammarReviewDecisionV1, NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
 import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
 import type {ParsedTeacherDocx} from '../core/docx-import.js';
 import {applyParsedTeacherDocx} from '../core/docx-import-apply.js';
@@ -190,6 +191,7 @@ type GrammarAssignment={
 };
 export function createEditionPane(options:{
   autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void;
+  findCorpusSource?:(id:string)=>Promise<LatinText|undefined>;
   onAnalyzeVocabulary?:(latin:string,quantity:VocabularyQuantityMode)=>
     Promise<CollatinusVocabularyCandidate[]>;
 }={}):{
@@ -213,7 +215,8 @@ export function createEditionPane(options:{
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
   addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
   addGrammarSpans:(assignments:readonly GrammarAssignment[])=>Promise<boolean>;
-  removeGrammarSpan:(id:string)=>Promise<boolean>;
+  removeGrammarSpan:(id:string,tagId?:string)=>Promise<boolean>;
+  setGrammarReview:(placementId:string,latin:string, decisions:GrammarReviewDecisionV1[])=>Promise<boolean>;
   renameActiveNotebook:(title:string)=>Promise<boolean>;
   closeEdition:()=>void;
 } {
@@ -373,7 +376,8 @@ export function createEditionPane(options:{
   async function addSourceToNotebook(textId:string,titleOverride?:string):Promise<boolean>{
     if(!await flush()||!current||!draft||!session)return false;
     try{
-      const text=(await legacy.load()).corpus.texts.find(t=>t.id===textId);
+      const text=options.findCorpusSource?await options.findCorpusSource(textId):
+        (await legacy.load()).corpus.texts.find(t=>t.id===textId);
       if(!text)throw new Error('El texto ya no existe en la biblioteca.');
       const existing=draft.placements.find(p=>p.source.kind==='corpus'&&p.source.sourceId===textId);
       if(existing){
@@ -509,13 +513,28 @@ export function createEditionPane(options:{
     draft=next;markDirty();
     const saved=await flush();paint();return saved;
   }
-  async function removeGrammarSpan(id:string):Promise<boolean>{
+  async function removeGrammarSpan(id:string,tagId?:string):Promise<boolean>{
     const placement=selection();
-    if(!placement||!draft||!(placement.grammaticalSpans??[]).some(x=>x.id===id))return false;
+    const span=placement?.grammaticalSpans?.find(item=>item.id===id);
+    if(!placement||!draft||!span||(tagId&&!span.tagIds.includes(tagId)))return false;
+    const remaining=tagId?span.tagIds.filter(tag=>tag!==tagId):[];
+    const spans=(placement.grammaticalSpans??[]).flatMap(item=>{
+      if(item.id!==id)return [item];
+      if(!remaining.length)return [];
+      const evidence=item.evidence?.filter(entry=>entry.tagId!==tagId);
+      return [{...item,tagIds:remaining,...(evidence?{evidence}:{})}];
+    });
     apply((edition,at)=>validateEdition({...edition,updatedAt:at,
-      placements:edition.placements.map(p=>p.id===placement.id
-        ?{...p,grammaticalSpans:(p.grammaticalSpans??[]).filter(x=>x.id!==id)}:p)}));
+      placements:edition.placements.map(p=>p.id===placement.id?{...p,grammaticalSpans:spans}:p)}));
     const saved=await flush();paint();return saved;
+  }
+  async function setGrammarReview(placementId:string,latin:string,decisions:GrammarReviewDecisionV1[]):Promise<boolean>{
+    const placement=selection();
+    if(!draft||placement?.id!==placementId||placement.text.latin!==latin)return false;
+    draft=validateEdition({...draft,updatedAt:now(),placements:draft.placements.map(p=>
+      p.id===placementId?{...p,grammarReview:decisions}:p)});
+    markDirty();
+    return flush();
   }
   async function renameActiveNotebook(title:string):Promise<boolean>{
     if(!draft||!title.trim()||title.trim().length>250)return false;
@@ -1661,6 +1680,8 @@ export function createEditionPane(options:{
       navMenus.append(tab);
     }
     editor.append(navMenus);
+    const repetitions=academics.repetitionNotice();
+    if(repetitions)editor.append(repetitions);
     const panel=node('div','edition-menu-content edition-menu-'+menu);
     const placement=selection();
     if(menu==='notebook')menuNotebook(panel);
@@ -1718,5 +1739,6 @@ export function createEditionPane(options:{
     addCollatinusVocabulary,
     activePlacement:()=>selection()?structuredClone(selection()!):null,
     activeEdition:()=>draft?structuredClone(draft):null,
+    setGrammarReview,
     setActiveTags,addGrammarSpan,addGrammarSpans,removeGrammarSpan,renameActiveNotebook,closeEdition};
 }

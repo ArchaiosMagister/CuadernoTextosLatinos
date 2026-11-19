@@ -1,6 +1,6 @@
 # Etiquetado con Collatinus en el cuaderno experimental
 
-Desde «Etiquetas gramaticales» del cuaderno abierto, «Analizar etiquetas con Collatinus» muestra candidaturas por posición del fragmento. Cada candidatura presenta el lema y el análisis que la motivan, otras lecturas devueltas por el motor y, cuando corresponde, una advertencia de revisión sintáctica. Se puede confirmar una etiqueta, cambiarla antes de aceptar, seleccionar varias o descartar una propuesta. Las confirmaciones se guardan como etiquetas de fragmento con procedencia. Los descartes y las correcciones de lectura están ligados al pasaje exacto y al navegador. Se guardan en almacenamiento local y quedan fuera de las copias JSON. El cambio de texto requiere reanálisis. Las etiquetas confirmadas siguen el mecanismo editorial de revisión de anclajes.
+Desde «Etiquetas gramaticales» del cuaderno abierto, «Analizar etiquetas con Collatinus» muestra candidaturas por posición del fragmento. Cada candidatura presenta el lema y el análisis que la motivan, otras lecturas devueltas por el motor y, cuando corresponde, una advertencia de revisión sintáctica. Se puede confirmar una etiqueta, cambiarla antes de aceptar, seleccionar varias o descartar una propuesta. Las confirmaciones se guardan como etiquetas de fragmento con procedencia. Los descartes y las correcciones de lectura se guardan con el cuaderno y viajan en las copias JSON. Si cambia el texto, se conservan las decisiones cuyo fragmento mantiene un anclaje inequívoco. Las decisiones con un anclaje dudoso quedan en revisión y dejan de aplicarse al reanálisis.
 
 ## Fuentes y reglas
 
@@ -14,7 +14,7 @@ Se usa la copia ya empaquetada de `motor.js`, `shim.js` y los datos fijados en `
 
 Las oraciones de relativo e infinitivo, ablativo absoluto, participio concertado, complemento agente y los once valores complejos del Grupo C se mantienen manuales. La clasificación del relativo de enlace exige evidencia discursiva. Las lecturas de cum, ut y ne necesitan desambiguación sintáctica. Los casos nominales necesitan concordancia y pruebas de función para sostener una propuesta. Gerundio, gerundivo e interrogativa indirecta son exclusivamente manuales por decisión docente.
 
-La carga se difiere hasta el primer uso de Collatinus o del vocabulario. El adaptador actual cede al navegador antes de calcular y usa el hilo principal. Quedan pendientes la medición de rendimiento en textos extensos, las pruebas WebKit en la PWA y la verificación de la disponibilidad offline en ese entorno.
+La carga se difiere hasta el primer uso de Collatinus o del vocabulario. El adaptador actual cede al navegador antes de calcular y usa el hilo principal. En WebKit para macOS, un pasaje de 4.046 caracteres produjo 110 candidaturas en unos 0,34 segundos con el motor cargado. La prueba de recarga con el servidor desconectado comprueba que el cuaderno y Collatinus arrancan desde la caché experimental. Queda por verificar la instalación como app y el funcionamiento sin conexión en Safari en dispositivos físicos.
 
 ## Reproducción local
 

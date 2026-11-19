@@ -13,12 +13,18 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
     await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
     await expect(page.locator('.edition-counter')).toContainText(title==='Pasaje uno'?'Texto 1 de 1':'Texto 2 de 2');
   }
+  await expect.poll(()=>page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const [state]=await new WorkspaceRepository().listEditions();
+    return state.edition.placements.filter(p=>p.vocabulary.some(v=>v.collatinusSource)).length;
+  })).toBe(2);
   const fixture=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const repository=new WorkspaceRepository();
     const [state]=await repository.listEditions();
     const now=new Date().toISOString();
-    const prefixOf=p=>p.questions.find(q=>q.kind==='choice').options.find(o=>o.kind==='prefix');
+    const optionOf=(p,kind)=>p.questions.find(q=>q.kind==='choice').options.find(o=>o.kind===kind);
+    const prefixOf=p=>optionOf(p,'prefix');
     const first=prefixOf(state.edition.placements[0]).slots[0];
     const second=prefixOf(state.edition.placements[1]).slots[0];
     await repository.commitEdition(state.edition.id,state.revision,
@@ -27,11 +33,17 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
         Object.assign(a,{origin:'manual',locked:true,provenance:null});
         const b=prefixOf(edition.placements[1]).slots[0];
         Object.assign(b,{value:first.value,proposedLemmaId:first.proposedLemmaId,provenance:first.provenance});
+        const firstBase=optionOf(edition.placements[0],'preverb');
+        firstBase.preverbBasesProtected=true;
+        Object.assign(optionOf(edition.placements[1],'preverb'),{
+          preverbBaseIds:firstBase.preverbBaseIds,statement:firstBase.statement,
+        });
         return {...edition,updatedAt:now};
       });
     return {first:first.id,second:second.id,word:first.value};
   });
   await page.reload();
+  await expect(page.locator('.edition-repetition-notice')).toContainText('Repeticiones:');
   const audit=page.getByText('Revisar cuaderno',{exact:true});
   await audit.click();
   await expect(page.locator('.edition-audit')).toContainText('Pasaje uno (protegida)');
@@ -50,4 +62,18 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
   expect(result.first.value).toBe(fixture.word);
   expect(result.first.locked).toBe(true);
   expect(result.second.value).not.toBe(fixture.word);
+  await audit.click();
+  await expect(page.locator('.edition-audit')).toContainText('Base preverbial repetida');
+  await expect(page.locator('.edition-audit')).toContainText('Pasaje uno · Bases protegidas');
+  await page.getByRole('button',{name:/Pasaje dos · Sustituir bases por/}).click();
+  await expect(page.locator('.edition-repetition-notice')).toHaveCount(0);
+  const pair=await page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const [state]=await new WorkspaceRepository().listEditions();
+    return state.edition.placements.map(p=>p.questions.find(q=>q.kind==='choice')
+      .options.find(o=>o.kind==='preverb'));
+  });
+  expect(new Set(pair.flatMap(o=>o.preverbBaseIds)).size).toBe(4);
+  expect(pair[0].preverbBasesProtected).toBe(true);
+  expect(pair[1].statement.value).toMatch(/\(3\).*\(2\)/);
 });

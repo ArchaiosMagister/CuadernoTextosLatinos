@@ -132,6 +132,15 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function preverbBasesFor(o:ChoiceOptionV1,p:TextPlacementV1):PreverbSelection{
     const used=usedPreverbKeys(o.id),signature=used.join('\0');
     let selected=selectedBases.get(o.id);
+    if(!manuallySelectedBases.has(o.id)&&o.preverbBasesProtected&&o.preverbBaseIds){
+      const [first,second]=o.preverbBaseIds;
+      const forms=o.statement.value.match(/\*([^*]+)\* \(3\) y de \*([^*]+)\* \(2\)/u);
+      if(forms?.[1]&&forms[2]){
+        selected={sourceKeys:[first,first,first,second,second],forms:[forms[1],forms[2]],source:'bank'};
+        sourceForms.set(o.id,[...selected.sourceKeys]);
+        return selected;
+      }
+    }
     if(!selected||(!manuallySelectedBases.has(o.id)&&baseUsageSignatures.get(o.id)!==signature)){
       selected=choosePreverbBases(academicTeacherSnapshotV1,p.text.latin,Math.random,used);
       selectedBases.set(o.id,selected);
@@ -217,13 +226,12 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     });
   }
   async function commitPlanDirect(plan:AcademicPlanV1,label:string,
-    preverb?:{placementId:string;questionId:string;optionId:string;forms:readonly [string,string]}):Promise<void>{
+    preverb?:{placementId:string;questionId:string;optionId:string;selection:PreverbSelection}):Promise<void>{
     let saved=await service().engine.commit(repository,plan,new Date().toISOString());
     if(preverb){
       const at=new Date().toISOString();
-      const text=preverbStatement(preverb.forms);
-      const first=preverbBaseKeyForForm(academicTeacherSnapshotV1,preverb.forms[0]);
-      const second=preverbBaseKeyForForm(academicTeacherSnapshotV1,preverb.forms[1]);
+      const text=preverbStatement(preverb.selection.forms);
+      const [first,,,second]=preverb.selection.sourceKeys;
       const preverbBaseIds:[string,string]|undefined=first&&second&&first!==second?[first,second]:undefined;
       // Enunciados editados manualmente no se reescriben al regenerar.
       const placement=saved.edition.placements.find(p=>p.id===preverb.placementId);
@@ -246,6 +254,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
                     ...(o.statement.locked&&o.statement.origin==='manual'?{}:{
                       statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
                       ...(preverbBaseIds?{preverbBaseIds}:{}),
+                      ...(preverbBaseIds&&manuallySelectedBases.has(o.id)?{preverbBasesProtected:true}:{}),
                     }),
                     slots:o.slots.filter(slot=>slot.origin==='manual'),
                   }),
@@ -332,7 +341,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       if(autoApply){
         const picked=o.kind==='preverb'?preverbBasesFor(o,p):null;
         await commitPlanDirect(plan,optionName(o.kind),
-          picked?{placementId:p.id,questionId:q.id,optionId:o.id,forms:picked.forms}:undefined);
+          picked?{placementId:p.id,questionId:q.id,optionId:o.id,selection:picked}:undefined);
       }else{
         pending={type:'plan',label:'Regenerar solo '+optionName(o.kind),plan,details};
         bind.repaint();
@@ -363,7 +372,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const preverb=q.options.find(o=>o.kind==='preverb'&&o.enabled);
         const picked=preverb?preverbBasesFor(preverb,p):null;
         await commitPlanDirect(plan,'Pregunta 4',
-          preverb&&picked?{placementId:p.id,questionId:q.id,optionId:preverb.id,forms:picked.forms}:undefined);
+          preverb&&picked?{placementId:p.id,questionId:q.id,optionId:preverb.id,selection:picked}:undefined);
       }else{
         pending={type:'plan',label:'Regenerar solo la pregunta 4',plan,details};
         bind.repaint();
@@ -658,7 +667,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const picked=preverb?preverbBasesFor(preverb,p):null;
         await commitPlanDirect(plan,'Preguntas iniciales',
           preverb&&picked?{placementId:p.id,questionId:question.id,
-            optionId:preverb.id,forms:picked.forms}:undefined);
+            optionId:preverb.id,selection:picked}:undefined);
       }
     });
     // Seleccionar automáticamente hasta dos formas con análisis individual
@@ -702,41 +711,107 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       }
     });
   }
+  function inspectRepetitions(state:EditionSnapshotV1){
+    const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
+      target:AcademicSlotTargetV1;protected:boolean}[]>();
+    const baseCounts=new Map<string,string[]>();
+    for(const placement of state.edition.placements)for(const question of placement.questions){
+      if(!question.enabled||question.kind!=='choice')continue;
+      for(const option of question.options){
+        if(!option.enabled)continue;
+        if(option.kind==='preverb'){
+          for(const base of preverbKeys(option)){
+            const uses=baseCounts.get(base)??[];
+            uses.push(placement.text.title);baseCounts.set(base,uses);
+          }
+          continue;
+        }
+        for(const slot of option.slots){
+          const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
+          const uses=groups.get(key)??[];
+          uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
+            protected:slot.locked||slot.origin==='manual',
+            target:{placementId:placement.id,questionId:question.id,optionId:option.id,
+              slotId:slot.id,expectedRevision:state.revision,
+              ...(rulesFor(question)!==undefined?{phoneticRules:rulesFor(question)!}:{})}});
+          groups.set(key,uses);
+        }
+      }
+    }
+    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),baseCounts};
+  }
+  function repetitionNotice():HTMLElement|null{
+    const state=bind.snapshot();
+    if(!state)return null;
+    const {duplicates,baseCounts}=inspectRepetitions(state);
+    const repeatedBases=[...baseCounts.values()].filter(uses=>uses.length>1).length;
+    if(!duplicates.length&&!repeatedBases)return null;
+    const notice=el('p','hint edition-repetition-notice',
+      'Repeticiones: '+duplicates.length+(duplicates.length===1?' palabra':' palabras')+
+      ' y '+repeatedBases+(repeatedBases===1?' base preverbial':' bases preverbiales')+
+      '. Cuaderno → Revisar cuaderno.');
+    notice.setAttribute('role','status');
+    return notice;
+  }
+  function reviewPreverbBases(result:HTMLElement,state:EditionSnapshotV1,counts:Map<string,string[]>):void{
+    const repeated=new Set([...counts].filter(([,uses])=>uses.length>1).map(([base])=>base));
+    for(const base of repeated)
+      result.append(el('p','','Base preverbial repetida · '+base+' · '+counts.get(base)!.join(', ')));
+    if(!repeated.size)return;
+    for(const placement of state.edition.placements)for(const question of placement.questions){
+      if(!question.enabled||question.kind!=='choice')continue;
+      const option=question.options.find(item=>item.enabled&&item.kind==='preverb');
+      if(!option||!preverbKeys(option).some(key=>repeated.has(key)))continue;
+      if(option.statement.origin!=='generated'||option.statement.locked||option.slots.length
+        ||option.preverbBasesProtected||manuallySelectedBases.has(option.id)){
+        result.append(el('p','',placement.text.title+' · Bases protegidas'));
+        continue;
+      }
+      const used=[...counts.keys()];
+      const replacement=choosePreverbBases(academicTeacherSnapshotV1,placement.text.latin,()=>0,used);
+      const [first,,,second]=replacement.sourceKeys;
+      const canApply=(current:EditionSnapshotV1)=>service().engine.prepareSubquestion(current.edition,{
+        placementId:placement.id,questionId:question.id,optionId:option.id,expectedRevision:current.revision,
+        desiredCount:5,sourceForms:replacement.sourceKeys,
+        newSlotIds:Array.from({length:5},()=> 'slot.'+crypto.randomUUID()),
+        allowManualReplacement:false,seed:0,
+      }).assignments.some(group=>group.items.length===5&&group.items.every(item=>item.candidateId));
+      if(!first||!second||used.includes(first)||used.includes(second)||!canApply(state)){
+        result.append(el('p','',placement.text.title+' · Sin pareja de bases verificadas libres'));
+        continue;
+      }
+      result.append(button(placement.text.title+' · Sustituir bases por '+replacement.forms.join(' y '),async()=>{
+        await withSaved(async latest=>{
+          if(latest.edition.id!==state.edition.id||latest.revision!==state.revision||!canApply(latest))
+            throw new Error('La revisión ha caducado. Vuelve a revisar el cuaderno.');
+          const at=new Date().toISOString();
+          const saved=await repository.commitEdition(latest.edition.id,latest.revision,
+            {command:'ui.replace-repeated-preverb',targetId:option.id,timestamp:at},previous=>{
+              if(!previous)throw new Error('Se ha perdido el cuaderno editorial.');
+              return {...previous,updatedAt:at,placements:previous.placements.map(p=>p.id!==placement.id?p:{
+                ...p,questions:p.questions.map(q=>q.id!==question.id||q.kind!=='choice'?q:{
+                  ...q,options:q.options.map(o=>o.id!==option.id?o:{
+                    ...o,preverbBaseIds:[first,second],
+                    statement:{...o.statement,value:preverbStatement(replacement.forms)},
+                  }),
+                }),
+              })};
+            });
+          bind.saved(saved);
+          bind.status('Bases preverbiales sustituidas. Se mantienen tres y dos derivados.');
+        });
+      }));
+    }
+  }
   function renderNotebookAudit():HTMLElement{
     const details=el('details','edition-audit');
     details.append(el('summary','','Revisar cuaderno'));
     const result=el('div');details.append(result);
     async function inspect():Promise<void>{
       await withSaved(state=>{
-        const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
-          target:AcademicSlotTargetV1;protected:boolean}[]>();
-        const baseCounts=new Map<string,string[]>();
-        for(const placement of state.edition.placements)for(const question of placement.questions){
-          if(!question.enabled||question.kind!=='choice')continue;
-          for(const option of question.options){
-            if(!option.enabled)continue;
-            if(option.kind==='preverb'){
-              for(const base of preverbKeys(option)){
-                const uses=baseCounts.get(base)??[];
-                uses.push(placement.text.title);baseCounts.set(base,uses);
-              }
-              continue;
-            }
-            for(const slot of option.slots){
-              const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
-              const uses=groups.get(key)??[];
-              uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
-                protected:slot.locked||slot.origin==='manual',
-                target:{placementId:placement.id,questionId:question.id,optionId:option.id,
-                  slotId:slot.id,expectedRevision:state.revision,
-                  ...(rulesFor(question)!==undefined?{phoneticRules:rulesFor(question)!}:{})}});
-              groups.set(key,uses);
-            }
-          }
-        }
+        const {duplicates,baseCounts}=inspectRepetitions(state);
         result.replaceChildren(el('p','',state.edition.placements.length+' textos revisados · '+
           baseCounts.size+' bases preverbiales distintas'));
-        const duplicates=[...groups.values()].filter(uses=>uses.length>1);
         for(const kind of ['phonetics','prefix','latinism'] as const){
           const rows=duplicates.filter(uses=>uses[0]?.kind===kind);
           result.append(el('h4','',optionName(kind)+' · '+rows.length+' palabras repetidas'));
@@ -767,15 +842,14 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
             }
           }
         }
-        for(const [base,uses] of baseCounts)if(uses.length>1)
-          result.append(el('p','','Base preverbial repetida · '+base+' · '+uses.join(', ')));
+        reviewPreverbBases(result,state,baseCounts);
       });
     }
     details.addEventListener('toggle',()=>{if(details.open)void inspect();});
     return details;
   }
   return {
-    clear,generateInitial,review,renderNotebookAudit,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
+    clear,generateInitial,review,repetitionNotice,renderNotebookAudit,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
     renderPaperSelect,savePaperSelection,
   };
 }

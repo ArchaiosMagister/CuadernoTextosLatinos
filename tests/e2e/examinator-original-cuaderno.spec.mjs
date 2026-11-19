@@ -1,3 +1,4 @@
+import {createServer,request} from 'node:http';
 import {test,expect} from '@playwright/test';
 
 test('Examinator original como base: cabecera, biblioteca original y cuaderno persistente',async({page})=>{
@@ -320,4 +321,45 @@ test('selector visible y recuperación del último cuaderno en iPhone simulado',
   await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
   await page.reload();
   await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
+});
+
+test('WebKit: el cuaderno experimental recarga y analiza Collatinus sin red',async({page,baseURL})=>{
+  // Simular una caída del servidor. setOffline corta WebKit antes del service worker.
+  let disconnected=false;
+  const proxy=createServer((incoming,outgoing)=>{
+    if(disconnected){incoming.socket.destroy();return;}
+    const forward=request(new URL(incoming.url,baseURL),response=>{
+      outgoing.writeHead(response.statusCode,response.headers);
+      response.pipe(outgoing);
+    });
+    forward.on('error',()=>outgoing.destroy());
+    forward.end();
+  });
+  await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve));
+  try{
+    const url='http://127.0.0.1:'+proxy.address().port+'/CuadernoTextosLatinos/examinator-cuadernos/';
+    await page.goto(url);
+    const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
+    await expect(selector).toBeVisible();
+    await page.waitForFunction(()=>navigator.serviceWorker.controller?.scriptURL
+      .endsWith('/examinator-cuadernos/service-worker.js'));
+    page.once('dialog',dialog=>dialog.accept('Cuaderno offline'));
+    await page.locator('#btnNew').click();
+    await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
+    await page.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est.');
+    await page.getByRole('button',{name:'Añadir al cuaderno'}).click();
+    await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+    await page.locator('#btnSave').click();
+    await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
+
+    disconnected=true;
+    await page.reload();
+    await expect(selector.locator('option:checked')).toContainText('Cuaderno offline');
+    await page.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
+    await page.getByRole('button',{name:'Analizar etiquetas con Collatinus'}).click();
+    await expect(page.getByText('Amatus est · Voz pasiva · Pendiente',{exact:true})).toBeVisible();
+  }finally{
+    proxy.closeAllConnections();
+    await new Promise(resolve=>proxy.close(resolve));
+  }
 });

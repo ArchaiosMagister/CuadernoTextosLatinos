@@ -1,5 +1,8 @@
+import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
+import {fingerprintForMark} from '../core/edition-validation.js';
 import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
+import type {CorpusV1} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
@@ -9,7 +12,7 @@ import {validateCorpus} from '../core/validation.js';
 import {createEditionPane,WORKING_EDITION_ID} from './edition-app.js';
 import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.js';
 import {WorkspaceRepository,WorkspaceConflictError,type EditionSnapshotV1} from '../storage/workspace-repository.js';
-import {createNotebookBackup,createWorkspaceBackup,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
+import {combineNotebookCorpora,createNotebookBackup,createWorkspaceBackup,importNotebookDependencies,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
@@ -18,7 +21,6 @@ import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
 import {allGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
-import type {CorpusSnapshot} from '../ports/corpus-repository.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -51,11 +53,12 @@ const downloads=new DownloadedWorksRepository('cuaderno-original-examinator2-obr
 const composer=createEditionPane({
   autoApply:true,
   autoVocabulary:false,
+  findCorpusSource:async id=>(await loadCombinedCorpus()).texts.find(text=>text.id===id),
   onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
 });
 const works=new Map<string,LibraryWork>();
 const ownCache=new Set<string>();
-let corpus:CorpusSnapshot;
+let corpus:CorpusV1;
 let notebooks:EditionSnapshotV1[]=[];
 let currentId:string|null=null;
 const lastNotebookKey='cuaderno-examinator-ultimo-v1';
@@ -78,7 +81,7 @@ async function restoreNotebooks(file:File):Promise<void>{
   const json=await file.text();
   const backup=await readNotebookBackup(json);
   if(backup){
-    const {edition,fingerprint}=backup;
+    const {edition,fingerprint,dependencies}=backup;
     const id='edition.import.'+fingerprint;
     if(await workspace.loadEdition(id)){
       await openNotebook(id);M.toast('Esta copia ya se había importado.');
@@ -87,8 +90,10 @@ async function restoreNotebooks(file:File):Promise<void>{
     if(!window.confirm('¿Importar «'+edition.title+'» como cuaderno independiente?'))return;
     const timestamp=new Date().toISOString();
     try{
+      const imported={...edition,id,legacyNotebookId:null,updatedAt:timestamp};
+      const historical=(await repo.load()).corpus;
       await workspace.commitEdition(id,0,{command:'ui.restore-notebook',targetId:id,timestamp},
-        ()=>({...edition,id,legacyNotebookId:null,updatedAt:timestamp}));
+        ()=>imported,dependencies?local=>importNotebookDependencies(imported,dependencies,local,historical):undefined);
     }catch(error){
       if(!(error instanceof WorkspaceConflictError)||!await workspace.loadEdition(id))throw error;
     }
@@ -125,8 +130,12 @@ function button(text:string,onClick:()=>void|Promise<void>,cls='tbtn'):HTMLButto
   return b;
 }
 function active():boolean{return Boolean(currentId&&composer.activeEdition()?.id===currentId);}
+async function loadCombinedCorpus():Promise<CorpusV1>{
+  const [historical,editorial]=await Promise.all([repo.load(),workspace.loadCorpus()]);
+  return combineNotebookCorpora(editorial.corpus,historical.corpus);
+}
 async function reload():Promise<void>{
-  [corpus,notebooks]=await Promise.all([repo.load(),workspace.listEditions()]);
+  [corpus,notebooks]=await Promise.all([loadCombinedCorpus(),workspace.listEditions()]);
 }
 function item(urn:string):Entry{
   const found=allEntries.find(e=>e.urn===urn);
@@ -435,7 +444,7 @@ function openOwnTexts():void{
   input.setAttribute('aria-label','Buscar textos guardados');
   const tagFilter=el('select');tagFilter.setAttribute('aria-label','Filtrar por etiqueta gramatical');
   tagFilter.multiple=true;tagFilter.size=4;
-  const tags=allGrammarTags(corpus.corpus);
+  const tags=allGrammarTags(corpus);
   for(const tag of tags){
     const option=el('option','','· '.repeat(catalogDepth(tag,tags))+tag.label);
     option.value=tag.id;tagFilter.append(option);
@@ -448,7 +457,7 @@ function openOwnTexts():void{
     list.replaceChildren();
     const needle=foldLatin(input.value);
     const filters=Array.from(tagFilter.selectedOptions,option=>option.value);
-    const matching=corpus.corpus.texts.filter(t=>
+    const matching=corpus.texts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle)
       && (matchesGrammarFilters(t.tagIds,filters,tags) || notebooks.some(notebook=>
         notebook.edition.placements.some(placement=>placement.source.sourceId===t.id
@@ -594,23 +603,50 @@ async function openGrammarEditor():Promise<void>{
       suggestions.replaceChildren(el('p','','Analizando el pasaje…'));
       const engine=await collatinus();
       const tokens=await engine.call('analyze',{text:latin}) as CollatinusGrammarToken[];
-      const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(latin)));
-      const identity=Array.from(digest,n=>n.toString(16).padStart(2,'0')).join('');
-      const key='cuaderno-collatinus-revision-v1:'+currentId+':'+latest.id+':'+identity;
       const rejected=new Set<string>();
       const corrections=new Map<number,{lid:number;morpho:string}>();
-      try{
-        const state=JSON.parse(localStorage.getItem(key)??'null') as {
-          rejected:string[];corrections:[number,{lid:number;morpho:string}][];
-        }|null;
-        for(const id of state?.rejected??[])rejected.add(id);
-        for(const [position,reading] of state?.corrections??[])corrections.set(position,reading);
-      }catch{/* el análisis continúa sin estas preferencias */}
-      function remember():void{
-        try{localStorage.setItem(key,JSON.stringify({rejected:[...rejected],corrections:[...corrections]}));}
-        catch{notice('La decisión queda disponible durante esta revisión.');}
+      const retired=(latest.grammarReview??[]).filter(item=>item.reviewRequired);
+      for(const item of latest.grammarReview??[]){
+        if(item.reviewRequired)continue;
+        if(item.kind==='rejected')rejected.add([item.startUtf16,item.endUtf16,item.tagId].join(':'));
+        else corrections.set(item.startUtf16,{lid:item.lid,morpho:item.morpho});
       }
-      const tags=allGrammarTags(corpus.corpus);
+      if(!latest.grammarReview){
+        const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(latin)));
+        const identity=Array.from(digest,n=>n.toString(16).padStart(2,'0')).join('');
+        const key='cuaderno-collatinus-revision-v1:'+currentId+':'+latest.id+':'+identity;
+        try{
+          const state=JSON.parse(localStorage.getItem(key)??'null') as {
+            rejected:string[];corrections:[number,{lid:number;morpho:string}][];
+          }|null;
+          for(const id of state?.rejected??[])if(typeof id==='string')rejected.add(id);
+          for(const [position,reading] of state?.corrections??[])corrections.set(position,reading);
+        }catch{/* el análisis continúa sin estas preferencias */ }
+        if(rejected.size||corrections.size)await remember();
+      }
+      async function remember():Promise<void>{
+        const decisions:GrammarReviewDecisionV1[]=[...retired];
+        function anchor(start:number,end:number){
+          return {startUtf16:start,endUtf16:end,exact:latin.slice(start,end),
+            textFingerprint:fingerprintForMark(latin,start,end),reviewRequired:false};
+        }
+        for(const id of rejected){
+          const match=/^(\d+):(\d+):([a-zA-Z0-9._-]+)$/u.exec(id);
+          if(!match)continue;
+          const start=Number(match[1]),end=Number(match[2]);
+          if(start<end&&end<=latin.length&&latin.slice(start,end).trim())
+            decisions.push({...anchor(start,end),kind:'rejected',tagId:match[3]!});
+        }
+        for(const token of tokens){
+          const reading=corrections.get(token.s);
+          if(reading&&token.w===latin.slice(token.s,token.e)
+            &&token.cands?.some(c=>c.lid===reading.lid&&c.morphos.includes(reading.morpho)))
+            decisions.push({...anchor(token.s,token.e),kind:'reading',...reading});
+        }
+        if(!await composer.setGrammarReview(latest!.id,latin,decisions))
+          throw Error('No se ha podido guardar la decisión de revisión.');
+      }
+      const tags=allGrammarTags(corpus);
       const label=(id:string)=>tags.find(tag=>tag.id===id)?.label??id;
       function verifyText():boolean{
         const current=composer.activePlacement();
@@ -646,11 +682,11 @@ async function openGrammarEditor():Promise<void>{
             const correction=corrections.get(token.s);
             const index=readings.findIndex(reading=>reading.lid===correction?.lid&&reading.morpho===correction?.morpho);
             choose.value=index===-1?'':String(index);
-            choose.addEventListener('change',()=>{
+            choose.addEventListener('change',async()=>{
               const reading=readings[Number(choose.value)];
               if(choose.value&&reading)corrections.set(token.s,{lid:reading.lid,morpho:reading.morpho});
               else corrections.delete(token.s);
-              remember();show();
+              try{await remember();show();}catch(error){notice(String(error));}
             });
             row.append(choose);ambiguity.append(row);
           }
@@ -698,8 +734,8 @@ async function openGrammarEditor():Promise<void>{
             }
             check.addEventListener('change',selectProposal);choose.addEventListener('change',selectProposal);
             row.append(choose,selectionLabel,button('Aceptar',
-              ()=>accept(new Map([[proposal,choose.value]])),'hbtn'),button('Descartar',()=>{
-              rejected.add(id);remember();show();
+              ()=>accept(new Map([[proposal,choose.value]])),'hbtn'),button('Descartar',async()=>{
+              rejected.add(id);await remember();show();
             },'hbtn'));
           }
           suggestions.append(row);
@@ -715,7 +751,7 @@ async function openGrammarEditor():Promise<void>{
     await reload();
     const latest=composer.activePlacement();
     if(!latest||latest.id!==placement!.id)return;
-    manual.replaceChildren(renderGrammarEditor(latest,corpus.corpus,{
+    manual.replaceChildren(renderGrammarEditor(latest,corpus,{
       open:true,toggle:()=>{},notice,
       addSpan:composer.addGrammarSpan,removeSpan:composer.removeGrammarSpan,
       updated:update,
@@ -727,7 +763,7 @@ async function openGrammarEditor():Promise<void>{
         try{
           if(!isCustomTagLabelValid(label)){notice('Revisa el nombre de la etiqueta.');return;}
           const previous=await repo.load();
-          let tag=findTagByLabel(label,allGrammarTags(previous.corpus));
+          let tag=findTagByLabel(label,allGrammarTags(await loadCombinedCorpus()));
           if(!tag){
             tag={id:'custom.'+crypto.randomUUID(),label:label.trim(),kind:'custom',parentId:null};
             await repo.save(validateCorpus({...previous.corpus,tags:[...previous.corpus.tags,tag]}),previous.revision);
@@ -751,7 +787,8 @@ function render():void{
   const summary=el('section','card');
   const choose=el('select');
   choose.setAttribute('aria-label','Elegir cuaderno');
-  const placeholder=el('option','','Elige un cuaderno');placeholder.value='';placeholder.disabled=true;
+  const placeholder=el('option','',active()?'Cerrar cuaderno':'Elige un cuaderno');
+  placeholder.value='';placeholder.disabled=!active();
   choose.append(placeholder);
   for(const entry of notebooks.filter(n=>n.edition.id!==WORKING_EDITION_ID)
     .sort((a,b)=>b.edition.updatedAt.localeCompare(a.edition.updatedAt))){
@@ -763,7 +800,14 @@ function render():void{
   choose.value=currentId??'';
   choose.addEventListener('change',async()=>{
     choose.disabled=true;
-    try{await openNotebook(choose.value);}
+    try{
+      if(choose.value)await openNotebook(choose.value);
+      else{
+        if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
+        composer.closeEdition();currentId=null;rememberNotebook();
+        await reload();render();
+      }
+    }
     catch(error){choose.value=currentId??'';M.toast(String(error),5500);}
     finally{choose.disabled=false;}
   });
@@ -774,11 +818,11 @@ function render():void{
   if(active())controls.append(button('Copia del cuaderno',async()=>{
     if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
     const edition=composer.activeEdition();
-    if(edition)downloadBackup(await createNotebookBackup(edition),'copia-cuaderno');
+    if(edition)downloadBackup(await createNotebookBackup(edition,await loadCombinedCorpus()),'copia-cuaderno');
   },'hbtn'));
   controls.append(button('Copia integral',async()=>{
     if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
-    downloadBackup(await createWorkspaceBackup(workspace),'copia-editorial');
+    downloadBackup(await createWorkspaceBackup(workspace,new Date(),(await repo.load()).corpus),'copia-editorial');
   },'hbtn'));
   const restore=el('input');restore.type='file';restore.accept='.json,application/json';restore.hidden=true;
   restore.addEventListener('change',async()=>{
@@ -839,7 +883,14 @@ function wireButtons():void{
     if(!(node instanceof HTMLButtonElement))throw new Error('Falta '+id);
     return node;
   };
-  byId('btnNew').onclick=()=>{void createNotebook().catch(e=>M.toast(String(e),5000));};
+  byId('btnNew').onclick=async()=>{
+    const controls=['btnNew','btnOpen','btnSave','btnLib','btnLists','btnSettings','btnDocx','btnPdf']
+      .map(id=>byId(id)).filter(control=>!control.disabled);
+    controls.forEach(control=>{control.disabled=true;});
+    try{await createNotebook();}
+    catch(error){M.toast(String(error),5000);}
+    finally{controls.forEach(control=>{control.disabled=false;});}
+  };
   byId('btnOpen').onclick=openNotebooks;
   byId('btnSave').onclick=()=>{void saveNotebook().catch(e=>M.toast(String(e),5000));};
   byId('btnLib').onclick=openLibrary;
@@ -893,6 +944,12 @@ void (async()=>{
     await reload();
     wireButtons();
     await script(new URL('./js/library.js',document.baseURI).href);
+    if('serviceWorker' in navigator&&window.isSecureContext){
+      const worker=new URL('../examinator-cuadernos/service-worker.js',import.meta.url);
+      void navigator.serviceWorker.register(worker).catch(error=>{
+        console.warn('No se pudo preparar el cuaderno experimental para usarlo sin conexión:',error);
+      });
+    }
     let last:string|null=null;
     try{last=localStorage.getItem(lastNotebookKey);}catch{/* almacenamiento opcional */}
     if(last&&notebooks.some(n=>n.edition.id===last&&last!==WORKING_EDITION_ID)){

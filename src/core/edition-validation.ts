@@ -5,7 +5,7 @@ import {
   type PageFormatV1, type QuestionKindV1, type QuestionStyleV1,
   type QuestionV1, type QuestionWordSlotV1, type ReviewFlagV1,
   type SourceLinkV1, type TextMarkV1, type TextPlacementV1,
-  type VocabularyEntryV1, type GrammarSpanV1,
+  type VocabularyEntryV1, type GrammarSpanV1, type GrammarAnchorV1, type GrammarReviewDecisionV1,
 } from './edition-model.js';
 
 export class InvalidEditionError extends Error {
@@ -149,7 +149,7 @@ function slot(input: unknown,path: string):QuestionWordSlotV1 {
     locked:flag(d.locked,`${path}.locked`),provenance};
 }
 function option(input: unknown,path: string):ChoiceOptionV1 {
-  const d=object(input,path,['id','kind','enabled','statement','slots'],['preverbBaseIds']);
+  const d=object(input,path,['id','kind','enabled','statement','slots'],['preverbBaseIds','preverbBasesProtected']);
   const kind=choice(d.kind,`${path}.kind`,['preverb','phonetics','prefix','latinism']);
   const result:ChoiceOptionV1={id:id(d.id,`${path}.id`),kind,
     enabled:flag(d.enabled,`${path}.enabled`),statement:editable(d.statement,`${path}.statement`),
@@ -159,6 +159,10 @@ function option(input: unknown,path: string):ChoiceOptionV1 {
     if(kind!=='preverb'||bases.length!==2||bases[0]===bases[1])fail(path,'bases preverbiales inválidas');
     result.preverbBaseIds=[str(bases[0],path+'.preverbBaseIds[0]',200),
       str(bases[1],path+'.preverbBaseIds[1]',200)];
+  }
+  if(d.preverbBasesProtected!==undefined){
+    if(!result.preverbBaseIds)fail(path,'protección de bases sin identificadores');
+    result.preverbBasesProtected=flag(d.preverbBasesProtected,path+'.preverbBasesProtected');
   }
   return result;
 }
@@ -209,8 +213,8 @@ function reviewFlag(input:unknown,path:string):ReviewFlagV1 {
   const d=object(input,path,['id','scopeId','reason']);
   return {id:id(d.id,`${path}.id`),scopeId:id(d.scopeId,`${path}.scopeId`),reason:str(d.reason,`${path}.reason`,1000)};
 }
-function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
-  const d=object(input,path,['id','startUtf16','endUtf16','exact','textFingerprint','tagIds','reviewRequired'],['evidence']);
+const grammarAnchorFields=['startUtf16','endUtf16','exact','textFingerprint','reviewRequired'] as const;
+function grammarAnchor(d:Record<string,unknown>,path:string,latin:string):GrammarAnchorV1{
   const reviewRequired=flag(d.reviewRequired,`${path}.reviewRequired`);
   const limit=reviewRequired?200_000:latin.length;
   const start=integer(d.startUtf16,`${path}.startUtf16`,0,limit);
@@ -221,11 +225,27 @@ function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
   if(!hashPattern.test(fp))fail(path,'huella del fragmento inválida');
   if(!reviewRequired&&(latin.slice(start,end)!==exact||fingerprintForMark(latin,start,end)!==fp))
     fail(path,'fragmento desanclado sin marca de revisión');
+  return {startUtf16:start,endUtf16:end,exact,textFingerprint:fp,reviewRequired};
+}
+function grammarReviewDecision(input:unknown,path:string,latin:string):GrammarReviewDecisionV1{
+  const d=object(input,path,['kind',...grammarAnchorFields],['tagId','lid','morpho']);
+  const anchor=grammarAnchor(d,path,latin);
+  const kind=choice(d.kind,path+'.kind',['rejected','reading']);
+  if(kind==='rejected'&&!Object.hasOwn(d,'lid')&&!Object.hasOwn(d,'morpho'))
+    return {...anchor,kind,tagId:id(d.tagId,path+'.tagId')};
+  if(kind==='reading'&&!Object.hasOwn(d,'tagId'))
+    return {...anchor,kind,lid:integer(d.lid,path+'.lid',0,Number.MAX_SAFE_INTEGER),
+      morpho:str(d.morpho,path+'.morpho',2000,true)};
+  return fail(path,'decisión de revisión inválida');
+}
+function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
+  const d=object(input,path,['id',...grammarAnchorFields,'tagIds'],['evidence']);
+  const anchor=grammarAnchor(d,path,latin);
   const tagIds=array(d.tagIds,`${path}.tagIds`,200).map((v,i)=>id(v,`${path}.tagIds[${i}]`));
   if(!tagIds.length||new Set(tagIds).size!==tagIds.length)
     fail(path,'el fragmento necesita etiquetas sin repetir');
-  const result:GrammarSpanV1={id:id(d.id,`${path}.id`),startUtf16:start,endUtf16:end,exact,
-    textFingerprint:fp,tagIds,reviewRequired};
+  const result:GrammarSpanV1={id:id(d.id,`${path}.id`),startUtf16:anchor.startUtf16,endUtf16:anchor.endUtf16,
+    exact:anchor.exact,textFingerprint:anchor.textFingerprint,tagIds,reviewRequired:anchor.reviewRequired};
   if(d.evidence!==undefined){
     result.evidence=array(d.evidence,path+'.evidence',200).map((value,i)=>{
       const where=`${path}.evidence[${i}]`;
@@ -242,7 +262,7 @@ function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
 }
 function placement(input:unknown,path:string):TextPlacementV1 {
   const d=object(input,path,['id','source','text','questions','vocabulary','grammaticalTagIds','reviewFlags'],
-    ['grammaticalSpans','vocabularySelectionMode','vocabularyQuantityMode']);
+    ['grammaticalSpans','grammarReview','vocabularySelectionMode','vocabularyQuantityMode']);
   const sourceText=text(d.text,`${path}.text`);
   return {id:id(d.id,`${path}.id`),source:source(d.source,`${path}.source`),text:sourceText,
     questions:array(d.questions,`${path}.questions`,20).map((v,i)=>question(v,`${path}.questions[${i}]`)),
@@ -254,6 +274,8 @@ function placement(input:unknown,path:string):TextPlacementV1 {
     grammaticalTagIds:array(d.grammaticalTagIds,`${path}.grammaticalTagIds`,2000).map((v,i)=>id(v,`${path}.grammaticalTagIds[${i}]`)),
     ...(Object.hasOwn(d,'grammaticalSpans')?{grammaticalSpans:array(d.grammaticalSpans,
       `${path}.grammaticalSpans`,1000).map((v,i)=>grammarSpan(v,`${path}.grammaticalSpans[${i}]`,sourceText.latin))}:{}),
+    ...(Object.hasOwn(d,'grammarReview')?{grammarReview:array(d.grammarReview,path+'.grammarReview',4000)
+      .map((decision,i)=>grammarReviewDecision(decision,`${path}.grammarReview[${i}]`,sourceText.latin))}:{}),
     reviewFlags:array(d.reviewFlags,`${path}.reviewFlags`,4000).map((v,i)=>reviewFlag(v,`${path}.reviewFlags[${i}]`))};
 }
 /** Rechaza campos extraños y referencias rotas; devuelve una copia normalizada independiente. */
