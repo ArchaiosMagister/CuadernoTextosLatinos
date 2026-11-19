@@ -424,3 +424,53 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   body[data-cuaderno-home='true'] #editor{min-width:0;max-width:100%;overflow-x:hidden;}
   body[data-cuaderno-home='true'] .cuaderno-home{min-width:0;max-width:100%;}
 }
+
+
+/* Fase 3: etiquetas de fuentes, evidencia técnica bajo demanda. */
+@media screen {
+  .bank-grammar-editor{display:grid;gap:14px;min-width:0;max-width:100%;}
+  .bank-grammar-editor h3,.bank-grammar-editor h4{margin:0 0 6px;}
+  .bank-grammar-manual,.bank-grammar-review{
+    display:grid;gap:9px;min-width:0;padding:12px;
+    border:1px solid var(--rule);border-radius:9px;background:var(--panel);
+  }
+  .bank-grammar-manual .grammar-chips{display:flex;gap:6px;flex-wrap:wrap;min-width:0;}
+  .bank-grammar-manual .grammar-chip{display:inline-block;padding:4px 8px;border-radius:12px;
+    background:var(--accent-soft);color:var(--ink);font-size:12px;border:1px solid var(--rule);}
+  .bank-grammar-manual .grammar-chip[data-group='gram.formas']{border-inline-start:3px solid #397cab;}
+  .bank-grammar-manual .grammar-chip[data-group='gram.oracion']{border-inline-start:3px solid #54976e;}
+  .bank-grammar-manual .grammar-chip[data-group='gram.pronombres']{border-inline-start:3px solid #9664a8;}
+  .bank-grammar-manual .grammar-chip[data-group='gram.funciones']{border-inline-start:3px solid #b18146;}
+  .bank-grammar-search,.bank-grammar-own input,.bank-grammar-candidate select{
+    min-width:0;width:100%;min-height:34px;box-sizing:border-box;
+    border-radius:6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);
+    padding:6px 9px;
+  }
+  .bank-grammar-groups{display:grid;gap:4px;}
+  .bank-grammar-group{padding:5px 9px;border:1px solid var(--rule-2);border-radius:6px;}
+  .bank-grammar-group>summary{font-weight:600;padding:5px 0;cursor:pointer;}
+  .bank-grammar-option{display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer;}
+  .bank-grammar-option[hidden],.bank-grammar-group[hidden]{display:none;}
+  .bank-grammar-own{display:flex;gap:8px;flex-wrap:wrap;}
+  .bank-grammar-own input{flex:1 1 185px;width:auto;}
+  .bank-grammar-candidate{
+    display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+    border:1px solid var(--rule);border-radius:8px;padding:9px;
+    background:var(--paper-2);
+  }
+  .bank-grammar-candidate>strong{flex:1 1 190px;}
+  .bank-grammar-state{border-radius:12px;border:1px solid var(--rule);font-size:11px;padding:3px 7px;}
+  .bank-grammar-candidate[data-state='accepted'] .bank-grammar-state{border-color:#54976e;}
+  .bank-grammar-candidate[data-state='rejected'] .bank-grammar-state{border-color:#a97c7c;}
+  .bank-grammar-evidence{flex-basis:100%;font-size:12px;}
+  .bank-grammar-evidence summary{cursor:pointer;color:var(--ink-2);}
+  .bank-grammar-evidence p{margin:5px 0;overflow-wrap:anywhere;}
+  .bank-grammar-candidate-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;width:100%;}
+  .bank-grammar-candidate-actions select{flex:1 1 200px;width:auto;}
+  .bank-grammar-select{display:flex;align-items:center;gap:5px;cursor:pointer;}
+  .cuaderno-home-text>.hbtn{margin:5px 0;}
+}
+@media screen and (max-width:760px){
+  .bank-grammar-search,.bank-grammar-own input,.bank-grammar-candidate select{font-size:16px;min-height:42px;}
+  .bank-grammar-candidate-actions button,.bank-grammar-own button{min-height:40px;}
+}
