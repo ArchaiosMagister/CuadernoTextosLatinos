@@ -25,6 +25,8 @@ export function upsertText(corpus: CorpusV1, draft: TextDraft, id: string, now: 
     tagIds: previous?.tagIds ?? [],
     createdAt: previous?.createdAt ?? now,
     updatedAt: previous && now < previous.createdAt ? previous.createdAt : now,
+    ...(previous?.teacherDocx && previous.latin===draft.latin.trim()
+      ? {teacherDocx:previous.teacherDocx} : {}),
   };
   const next = { ...corpus, texts: previous
     ? corpus.texts.map((item) => item.id === previous.id ? entry : item)
