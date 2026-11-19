@@ -232,6 +232,16 @@ test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabul
   });
   expect(data).toHaveLength(2);
   expect(data.every(x=>x.underlines===4 && x.vocabulary===4)).toBe(true);
+  // Las etiquetas confirmadas en el banco deben pasar a la aparición,
+  // incluso cuando el Word lleva subrayados y vocabulario.
+  await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const {attachGrammarTags}=await import('/core/grammar-tags.js');
+    const repository=new IndexedDbCorpusRepository();
+    const saved=await repository.load();
+    const next=attachGrammarTags(saved.corpus,saved.corpus.texts[0].id,['gram.voz.pasiva']);
+    await repository.save(next,saved.revision);
+  });
   page.once('dialog',d=>d.accept('Cuaderno que reutiliza Word'));
   await page.locator('#btnNew').click();
   await page.getByRole('button',{name:'Banco propio'}).click();
@@ -240,4 +250,10 @@ test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabul
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await expect(page.locator('.edition-underlined')).toHaveCount(4);
   await expect(page.locator('.edition-vocabulary-line').filter({hasText:'Egipto'})).toHaveCount(1);
+  expect(await page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const saved=(await new WorkspaceRepository().listEditions())
+      .find(n=>n.edition.title==='Cuaderno que reutiliza Word');
+    return saved?.edition.placements[0]?.grammaticalTagIds.includes('gram.voz.pasiva');
+  })).toBe(true);
 });
