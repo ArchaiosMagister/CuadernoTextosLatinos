@@ -895,7 +895,12 @@ function renderHome():HTMLElement{
   const heading=el('div','cuaderno-home-heading');
   heading.append(el('h4','','Mis cuadernos'));
   const actions=el('div','cuaderno-home-actions');
-  actions.append(button('Nuevo cuaderno',createNotebook,'hbtn primary'));
+  // El mismo control Nuevo se comparte entre portada y cabecera.
+  const newButton=document.getElementById('btnNew');
+  if(newButton instanceof HTMLButtonElement){
+    newButton.textContent='Nuevo cuaderno';newButton.className='hbtn primary';
+    actions.append(newButton);
+  }else actions.append(button('Nuevo cuaderno',createNotebook,'hbtn primary'));
   const restore=el('input');restore.type='file';restore.accept='.json,application/json';restore.hidden=true;
   restore.setAttribute('aria-label','Seleccionar copia de cuaderno');
   restore.addEventListener('change',async()=>{
@@ -1004,6 +1009,13 @@ function renderHome():HTMLElement{
   return home;
 }
 function render():void{
+  const originalNew=document.getElementById('btnNew');
+  if(originalNew instanceof HTMLButtonElement){
+    const header=document.querySelector('body > header');
+    const brand=header?.querySelector('.brand');
+    if(brand&&originalNew.parentElement!==header)brand.after(originalNew);
+    originalNew.textContent='Nuevo';originalNew.className='hbtn';
+  }
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
   if(!left||!page)throw new Error('Falta el documento original de Examinator2.');
