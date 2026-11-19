@@ -25,8 +25,8 @@ html[data-cuaderno-theme='dark'] .edition-paper{
   color-scheme:light;background:#fff;color:#151515;
 }
 
-/* Vista editorial: menús 47 % y hoja 53 %; sin modificar Examinator2 original. */
-body[data-has-editor='true']{--cuaderno-menu-width:47%;}
+/* Vista editorial: menús 40 % y hoja 60 %; sin modificar Examinator2 original. */
+body[data-has-editor='true']{--cuaderno-menu-width:40%;}
 body[data-has-editor='true'] main#main{grid-template-columns:var(--cuaderno-menu-width) minmax(0,1fr);}
 body[data-has-editor='true'] #editor{min-width:0;}
 #editor .edition-toolbar{display:none!important;}
@@ -41,7 +41,7 @@ body[data-has-editor='true'] #editor{min-width:0;}
 #editor .edition-menu-content{padding:8px;background:var(--panel);border:1px solid var(--rule);border-radius:9px;max-height:none;}
 #editor .edition-menu-content .btn{min-height:30px;font-size:12px;}
 #editor .edition-preview-stack{
-  position:fixed;z-index:2;left:var(--cuaderno-menu-width,47%);top:48px;bottom:0;right:0;
+  position:fixed;z-index:2;left:var(--cuaderno-menu-width,40%);top:48px;bottom:0;right:0;
   min-width:0;min-height:0;max-height:none;display:block!important;
   overflow:auto;background:#d9d6cf;padding:12px;
 }

@@ -38,9 +38,11 @@ function documentXml(){
         {text:'tractum est',under:true},', Romani iam ',
         {text:'clarissima',under:true},' gloria ',
         {text:'noti',under:true},', legatos miserunt auxilia promittentes ',
-        {text:'ei',under:true},'.']),
+        {text:'ei',under:true},' in Aegyptum et Syriam.']),
       p(['Vocabulario']),
       p(['Ægyptus, −ī: ‘Egipto’']),
+      p(['Aegyptus, −ī: ‘Egipto’']),
+      p(['Syria, −ae: ‘Siria’']),
       p(['grātĭās ăgĕre: “dar las gracias”']),
       p(['Traducción del texto. (4p.)']),
       p(['Análisis sintáctico del texto. (1p.)']),
@@ -63,13 +65,17 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(documentXml())});
   await expect(page.getByRole('button',{name:'Incorporar al cuaderno'})).toBeVisible();
-  await expect(page.getByText('4 subrayados · 2 entradas reales de vocabulario.')).toBeVisible();
+  await expect(page.getByText('4 subrayados · 4 entradas reales de vocabulario.')).toBeVisible();
   await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
   await expect(page.locator('.edition-paper-title')).toHaveText(
     'Los romanos envían legados a Ptolomeo prometiéndole ayuda',{timeout:30000});
   await expect(page.locator('.edition-paper-source')).toContainText('Eutropio');
   await expect(page.locator('.edition-underlined')).toHaveCount(4);
-  await expect(page.locator('.edition-vocabulary-line')).toHaveCount(2);
+  await page.getByRole('button',{name:'Vocabulario',exact:true}).click();
+  await expect.poll(()=>page.locator('.edition-vocab-row').count(),{timeout:110000}).toBeGreaterThan(3);
+  const vocabularyLines=page.locator('.edition-vocabulary-line');
+  await expect(vocabularyLines.filter({hasText:/Egipto/i})).toHaveCount(1);
+  await expect(vocabularyLines.filter({hasText:/Siria/i})).toHaveCount(1);
   const edition=page.locator('.edition-paper').first();
   await expect(edition).toContainText('Latinismos');
   await expect(edition.locator('.edition-choice-options > li')).toHaveCount(4);
@@ -78,7 +84,7 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   await expect(edition).not.toContainText('A, B, C y D');
 });
 
-test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantener formato Examinator2',async({page})=>{
+test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palabras comunes',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
@@ -105,13 +111,9 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('button',{name:/Buscar otras formas/})).toBeVisible();
-  // Ni el importador ni la búsqueda conservadora pueden insertar formas
-  // comunes sin glosa como si fueran un vocabulario docente completo.
-  const all=await page.locator('.edition-vocab-headword').evaluateAll(nodes=>
-    nodes.map(node=>node.value.toLowerCase()));
-  expect(all).not.toContain('homines');
-  expect(all).not.toContain('praestare');
-  expect(all.length).toBeLessThan(5);
+  await expect.poll(()=>page.locator('.edition-vocab-headword').count(),
+    {timeout:110000}).toBeGreaterThan(5);
+  await expect(page.locator('.edition-vocab-include:checked')).toHaveCount(0);
   // Edición en filas, no una tarjeta apilada por lema.
   const newWord=page.getByRole('textbox',{name:'Enunciado nuevo'});
   await newWord.fill('animal, -alis');
@@ -155,6 +157,12 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   )).toBe(true);
   await tabs.getByRole('button',{name:'Formato'}).click();
   await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
+  const spacing=page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'});
+  await spacing.fill('0.9');
+  const lineHeight=()=>page.locator('.edition-latin').evaluate(el=>parseFloat(getComputedStyle(el).lineHeight));
+  const compactHeight=await lineHeight();
+  await spacing.fill('5');
+  expect(await lineHeight()-compactHeight).toBeCloseTo((5-.9)*4/3,1);
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await page.locator('#btnSave').click();
   await page.reload();

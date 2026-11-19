@@ -18,12 +18,14 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
-  await page.getByRole('button',{name:'Todo el texto'}).click();
   const heads=page.locator('#editor .edition-vocab-headword');
   await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:110000}).toContain('cælum');
   await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:110000}).toContain('prœl');
+  await expect(page.locator('.edition-vocab-include:checked')).toHaveCount(0);
+  await page.getByRole('button',{name:'Todo el texto'}).click();
+  await expect(page.locator('.edition-vocab-include:checked')).not.toHaveCount(0);
   const names=await heads.evaluateAll(nodes=>nodes.map(node=>node.value));
   expect(names.some(x=>x.startsWith('pœna'))).toBe(true);
   expect(names.some(x=>x.startsWith('poeta')&&!x.startsWith('pœta'))).toBe(true);
