@@ -1238,7 +1238,7 @@ function renderHome():HTMLElement{
       (selectedForRemoval.size===1?' texto seleccionado':' textos seleccionados');
     removeSelected.disabled=selectedForRemoval.size===0;
     deselect.disabled=selectedForRemoval.size===0;
-    for(const input of bank.querySelectorAll<HTMLInputElement>('.cuaderno-bank-select')){
+    for(const input of Array.from(bank.querySelectorAll<HTMLInputElement>('.cuaderno-bank-select'))){
       input.checked=selectedForRemoval.has(input.value);
     }
   }
