@@ -79,3 +79,44 @@ test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({pag
   expect(stored).toContain('gram.relativo');
   await expect(page.locator('.cuaderno-home-card')).toHaveCount(0);
 });
+
+
+test('Banco: Collatinus propone etiquetas pero sólo persisten las confirmadas',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  await bank.getByRole('button',{name:'Pegar en el banco'}).click();
+  const paste=page.locator('.modal').last();
+  await paste.getByRole('textbox',{name:'Título'}).fill('Pasaje para etiquetado');
+  await paste.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est. Loquitur. Liber legendus.');
+  await paste.getByRole('button',{name:'Guardar en el banco'}).click();
+  await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
+  const source=bank.locator('.cuaderno-home-text').filter({hasText:'Pasaje para etiquetado'}).first();
+  await source.locator('summary').first().click();
+  await source.getByRole('button',{name:'Etiquetar'}).click();
+  const review=page.locator('.modal').last();
+  await expect(review.getByText('Sin etiquetas confirmadas')).toBeVisible();
+  await review.getByRole('button',{name:'Analizar con Collatinus'}).click();
+  const candidate=review.locator('.grammar-proposal-card')
+    .filter({has:review.getByText('Amatus est · Voz pasiva · Pendiente',{exact:true})}).first();
+  await expect(candidate).toBeVisible();
+  await candidate.locator('summary').first().click();
+  await expect(candidate).toContainText('Requiere revisión sintáctica.');
+  await candidate.getByText('Ver análisis y evidencia',{exact:true}).click();
+  await expect(candidate).toContainText('formas adyacentes');
+  // Analizar por sí solo no debe guardar etiquetas ni atribuir sintaxis automáticamente.
+  const before=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    return (await new IndexedDbCorpusRepository().load()).corpus.texts
+      .find(t=>t.title==='Pasaje para etiquetado')?.tagIds??[];
+  });
+  expect(before).toEqual([]);
+  await candidate.getByRole('button',{name:'Aceptar',exact:true}).click();
+  await expect(review.locator('.cuaderno-bank-current')).toContainText('Voz pasiva');
+  await review.getByRole('button',{name:'Guardar etiquetas'}).click();
+  const after=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    return (await new IndexedDbCorpusRepository().load()).corpus.texts
+      .find(t=>t.title==='Pasaje para etiquetado')?.tagIds??[];
+  });
+  expect(after).toEqual(['gram.voz.pasiva']);
+});
