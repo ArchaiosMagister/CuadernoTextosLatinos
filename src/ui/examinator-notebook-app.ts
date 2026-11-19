@@ -1041,15 +1041,18 @@ function renderHome():HTMLElement{
   function appendTextRows(target:HTMLElement,texts:typeof corpus.texts):void{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
     for(const text of texts){
-      const row=el('details','cuaderno-home-text');
-      row.append(el('summary','',text.title));
-      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
-      if(origin)row.append(el('p','small muted',origin));
+      const row=el('article','cuaderno-home-text');
+      const head=el('div','cuaderno-home-text-head');
+      head.append(el('strong','',text.title));
       const tag=button('Etiquetar',()=>openBankGrammarEditor(text.id),'hbtn');
       tag.setAttribute('aria-label','Etiquetar «'+text.title+'»');
-      row.append(tag);
-      row.append(el('p','cuaderno-home-latin',text.latin));
-      target.append(row);
+      head.append(tag);row.append(head);
+      const preview=el('details','cuaderno-home-text-preview');
+      preview.append(el('summary','','Ver pasaje'));
+      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
+      if(origin)preview.append(el('p','small muted',origin));
+      preview.append(el('p','cuaderno-home-latin',text.latin));
+      row.append(preview);target.append(row);
     }
   }
   function populate():void{
