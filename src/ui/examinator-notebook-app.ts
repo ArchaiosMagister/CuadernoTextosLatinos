@@ -606,18 +606,42 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Pro
   await reload();render();
   M.toast(match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
 }
-async function removeBankText(text:LatinText):Promise<void>{
-  if(!window.confirm('¿Quitar «'+text.title+'» del banco? Los cuadernos conservarán sus textos.'))return;
+/** Los cuadernos editoriales conservan sus apariciones; los cuadernos
+ * históricos, que todavía dependen del banco, se protegen del borrado. */
+function protectedBankSourceIds():Set<string>{
+  return new Set(corpus.notebooks.flatMap(book=>book.textIds));
+}
+async function removeBankTexts(ids:readonly string[]):Promise<void>{
+  const unique=[...new Set(ids)].filter(id=>corpus.texts.some(t=>t.id===id));
+  if(!unique.length)return;
+  const protectedIds=protectedBankSourceIds();
+  if(unique.some(id=>protectedIds.has(id)))
+    throw Error('Hay textos vinculados a cuadernos antiguos. No se han borrado.');
+  const count=unique.length;
+  const warning=count===1?'¿Quitar este texto del banco?':
+    '¿Quitar '+count+' textos seleccionados del banco?';
+  if(!window.confirm(warning+' Los cuadernos editoriales conservarán sus textos y preguntas. '+
+    'Esta retirada del banco no se puede deshacer sin una copia de seguridad.'))return;
   await writeSource(async()=>{
-    for(const repository of [repo,workspace]){
-      const saved=await (repository===repo?repo.load():workspace.loadCorpus());
-      if(!saved.corpus.texts.some(item=>item.id===text.id))continue;
-      const next=deleteText(saved.corpus,text.id);
-      if(repository===repo)await repo.save(next,saved.revision);
-      else await workspace.saveCorpus(next,saved.revision);
+    // Verificar ambos repositorios antes de empezar a escribir. Como los datos
+    // viven en dos IndexedDB, se mantienen las validaciones de revisión CAS.
+    const editorial=await repo.load(),working=await workspace.loadCorpus();
+    for(const saved of [editorial,working]){
+      if(saved.corpus.notebooks.some(book=>book.textIds.some(id=>unique.includes(id))))
+        throw Error('Uno de los textos pertenece a un cuaderno antiguo. Operación cancelada.');
     }
+    let updated=editorial.corpus;
+    for(const id of unique)if(updated.texts.some(text=>text.id===id))updated=deleteText(updated,id);
+    if(updated!==editorial.corpus)await repo.save(updated,editorial.revision);
+    updated=working.corpus;
+    for(const id of unique)if(updated.texts.some(text=>text.id===id))updated=deleteText(updated,id);
+    if(updated!==working.corpus)await workspace.saveCorpus(updated,working.revision);
   });
-  await reload();render();M.toast('Texto retirado del banco.');
+  await reload();render();
+  M.toast(count===1?'Texto retirado del banco.':count+' textos retirados del banco.');
+}
+async function removeBankText(text:LatinText):Promise<void>{
+  return removeBankTexts([text.id]);
 }
 function tagBankText(text:LatinText):void{
   const panel=el('div','cuaderno-bank-tag-editor');
