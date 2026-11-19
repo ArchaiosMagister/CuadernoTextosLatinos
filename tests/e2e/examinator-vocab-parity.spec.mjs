@@ -50,8 +50,8 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await page.locator('#btnSave').click();
   await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})
-    .locator('option:checked')).toContainText('Cuaderno ligaduras');
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno ligaduras'})
+    .getByRole('button',{name:'Abrir'}).click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
