@@ -206,3 +206,60 @@ test('selecciona varios Word y conserva el orden de los textos en un solo cuader
     'Entrada primera','Entrada segunda',
   ]);
 });
+
+test('banco independiente: importa dos Word y recupera marcas y vocabulario al incorporarlos',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Importar Word al banco'}).click();
+  const word=name=>({name,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(documentXml())});
+  await (await chooser).setFiles([word('primero.docx'),word('segundo.docx')]);
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(2);
+  for(const [index,title] of ['Documento primero','Documento segundo'].entries()){
+    const card=modal.locator('.word-review-item').nth(index);
+    await card.locator('summary').first().click();
+    await card.getByRole('textbox',{name:'Título del texto'}).fill(title);
+  }
+  await modal.getByRole('button',{name:'Guardar 2 textos en el banco'}).click();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('2 textos distintos');
+  await page.reload();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('2 textos distintos');
+  page.once('dialog',dialog=>dialog.accept('Cuaderno reutilización'));
+  await page.getByRole('button',{name:'Nuevo cuaderno'}).click();
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  await page.getByRole('button',{name:'Añadir «Documento primero» al cuaderno'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await expect(page.locator('.edition-underlined')).toHaveCount(4);
+  await expect(page.locator('.edition-vocabulary-line')).not.toHaveCount(0);
+  const source=await page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const ws=new WorkspaceRepository();
+    const corpus=await ws.loadCorpus();
+    const editions=await ws.listEditions();
+    return {
+      docs:corpus.corpus.texts.filter(x=>x.teacherDocument).length,
+      source:editions.find(x=>x.edition.title==='Cuaderno reutilización')
+        ?.edition.placements[0].source,
+    };
+  });
+  expect(source.docs).toBe(2);
+  expect(source.source.kind).toBe('corpus');
+});
+test('banco independiente: pegar sin cuaderno, conservarlo y buscarlo',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  await page.getByRole('button',{name:'Pegar texto al banco'}).click();
+  const modal=page.locator('.modal').last();
+  await modal.getByRole('textbox',{name:'Título'}).fill('Ejemplo de banco propio');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Gallia est omnis divisa.');
+  await modal.getByRole('button',{name:'Guardar en el banco'}).click();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 textos distintos');
+  await page.getByRole('searchbox',{name:'Buscar en banco de textos propios'}).fill('Ejemplo de banco');
+  await expect(page.locator('.cuaderno-home-bank-list')).toContainText('Ejemplo de banco propio');
+  await page.reload();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 textos distintos');
+  await expect(page.locator('#preview')).toBeHidden();
+});
