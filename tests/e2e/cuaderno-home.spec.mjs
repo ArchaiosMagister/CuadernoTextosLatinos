@@ -43,3 +43,33 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   await expect(page.getByRole('heading',{name:'Banco de textos propios'})).toBeVisible();
   await expect(page.locator('.cuaderno-home-bank')).toContainText('Pasaje para banco');
 });
+
+
+test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  await bank.getByRole('button',{name:'Pegar texto'}).click();
+  const modal=page.locator('.modal').last();
+  await modal.getByRole('textbox',{name:'Título'}).fill('Texto sin cuaderno');
+  await modal.getByRole('textbox',{name:'Autor'}).fill('César');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caesar exercitum ducit.');
+  await modal.getByRole('button',{name:'Guardar en el banco'}).click();
+  await expect(bank).toContainText('1 textos distintos');
+  await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
+  const source=bank.locator('.cuaderno-home-text').filter({hasText:'Texto sin cuaderno'}).first();
+  await source.locator('summary').first().click();
+  await source.getByRole('button',{name:'Etiquetar'}).click();
+  const tagModal=page.locator('.modal').last();
+  await tagModal.locator('.cuaderno-bank-tag-option').filter({hasText:'Oración de relativo'})
+    .getByRole('checkbox').check();
+  await tagModal.getByRole('button',{name:'Guardar etiquetas'}).click();
+  await expect(bank.locator('.cuaderno-home-category').filter({has:
+    page.locator('summary').filter({hasText:'Oraciones y construcciones (1)'})}).first()).toBeVisible();
+  const stored=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const corpus=(await new IndexedDbCorpusRepository().load()).corpus;
+    return corpus.texts.find(text=>text.title==='Texto sin cuaderno')?.tagIds??[];
+  });
+  expect(stored).toContain('gram.relativo');
+  await expect(page.locator('.cuaderno-home-card')).toHaveCount(0);
+});
