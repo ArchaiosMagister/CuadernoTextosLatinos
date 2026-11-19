@@ -75,9 +75,70 @@ function source(value: unknown, path: string): TextSource {
   };
 }
 
+
+/** Compatibilidad del banco DOCX con los respaldos existentes, sin aceptar
+ * offsets ajenos al pasaje ni campos inesperados en un JSON restaurado. */
+function importedWord(value: unknown, path: string, latin: string): LatinText['teacherDocument'] {
+  const d = record(value,path,[
+    'title','author','work','reference','latin','underlines','vocabulary',
+    'lexical','preverbBases','warnings',
+  ]);
+  const body = nonBlank(d.latin,path+'.latin',200_000);
+  if(body!==latin) invalid(path+'.latin','el Word guardado no coincide con la fuente');
+  if(!Array.isArray(d.underlines)||d.underlines.length>2000)
+    invalid(path+'.underlines','lista de subrayados inválida');
+  const underlines = d.underlines.map((value:unknown,i:number)=>{
+    const mark=record(value,path+'.underlines['+i+']',['startUtf16','endUtf16','exact']);
+    const start=mark.startUtf16,end=mark.endUtf16;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+      (start as number)<0||(end as number)<=(start as number)||(end as number)>body.length)
+      invalid(path+'.underlines['+i+']','posición fuera del texto');
+    const exact=nonBlank(mark.exact,path+'.underlines['+i+'].exact',body.length);
+    if(body.slice(start as number,end as number)!==exact)
+      invalid(path+'.underlines['+i+']','subrayado no coincide con el latín');
+    return {startUtf16:start as number,endUtf16:end as number,exact};
+  });
+  if(!Array.isArray(d.vocabulary)||d.vocabulary.length>2000)
+    invalid(path+'.vocabulary','vocabulario demasiado extenso');
+  const vocabulary=d.vocabulary.map((value:unknown,i:number)=>{
+    const row=record(value,path+'.vocabulary['+i+']',['headword','meaning']);
+    return {headword:nonBlank(row.headword,path+'.vocabulary['+i+'].headword',500),
+      meaning:row.meaning===null?null:nonBlank(row.meaning,path+'.vocabulary['+i+'].meaning',2000)};
+  });
+  const kinds=['preverb','phonetics','prefix','latinism'] as const;
+  const lex=record(d.lexical,path+'.lexical',kinds);
+  const lexical={} as Record<typeof kinds[number],string[]>;
+  for(const kind of kinds){
+    const words=lex[kind];
+    if(!Array.isArray(words)||words.length>500)invalid(path+'.lexical.'+kind,'términos inválidos');
+    lexical[kind]=words.map((word:unknown,i:number)=>nonBlank(word,path+'.lexical.'+kind+'['+i+']',500));
+  }
+  let preverbBases:[string,string]|null=null;
+  if(d.preverbBases!==null){
+    if(!Array.isArray(d.preverbBases)||d.preverbBases.length!==2)
+      invalid(path+'.preverbBases','se esperaban dos formas');
+    preverbBases=[
+      nonBlank(d.preverbBases[0],path+'.preverbBases[0]',500),
+      nonBlank(d.preverbBases[1],path+'.preverbBases[1]',500),
+    ];
+  }
+  if(!Array.isArray(d.warnings)||d.warnings.length>500)
+    invalid(path+'.warnings','avisos inválidos');
+  const warnings=d.warnings.map((v:unknown,i:number)=>
+    typeof v==='string'&&v.length<=1500?v:invalid(path+'.warnings['+i+']','aviso inválido'));
+  return {title:nonBlank(d.title,path+'.title',250),
+    author:nullableText(d.author,path+'.author'),
+    work:nullableText(d.work,path+'.work'),
+    reference:nullableText(d.reference,path+'.reference'),
+    latin:body,underlines,vocabulary,lexical,preverbBases,warnings};
+}
+
 function text(value: unknown, path: string): LatinText {
+  const hasWord=value!==null&&typeof value==='object'&&!Array.isArray(value)
+    &&Object.hasOwn(value,'teacherDocument');
   const data = record(value, path, [
     'id', 'title', 'latin', 'source', 'tagIds', 'createdAt', 'updatedAt',
+    ...(hasWord?['teacherDocument']:[]),
   ]);
   const createdAt = timestamp(data.createdAt, `${path}.createdAt`);
   const updatedAt = timestamp(data.updatedAt, `${path}.updatedAt`);
@@ -87,6 +148,8 @@ function text(value: unknown, path: string): LatinText {
     title: nonBlank(data.title, `${path}.title`, 250),
     latin: nonBlank(data.latin, `${path}.latin`, 200_000),
     source: source(data.source, `${path}.source`),
+    ...(hasWord?{teacherDocument:importedWord(data.teacherDocument,path+'.teacherDocument',
+      nonBlank(data.latin,path+'.latin',200_000))}:{}),
     tagIds: stringIds(data.tagIds, `${path}.tagIds`),
     createdAt,
     updatedAt,
