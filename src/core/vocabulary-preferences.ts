@@ -15,6 +15,14 @@ export function vocabularyKey(value:string):string {
     .replace(/[\u0300-\u036f]/gu,'').replaceAll('æ','ae').replaceAll('œ','oe')
     .replaceAll('j','i').replaceAll('v','u').replace(/\d+$/u,'').trim();
 }
+// El diccionario y los glosarios de Word pueden dar el topónimo en
+// nominativo, en una forma flexionada o con la grafía Siria.
+export function isSyriaVocabulary(value:string):boolean {
+  return /^(?:syria|siria)(?:e|m|s|rum)?$/u.test(vocabularyKey(value));
+}
+export function vocabularyIdentity(value:string):string {
+  return isSyriaVocabulary(value)?'syria':vocabularyKey(value);
+}
 export function vocabularySortKey(value:string):string {
   return String(value??'').toLocaleLowerCase('es')
     .replaceAll('æ','ae').replaceAll('œ','oe');
