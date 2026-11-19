@@ -122,3 +122,50 @@ test('Banco: Collatinus propone etiquetas pero sólo persisten las confirmadas',
   });
   expect(after).toEqual(['gram.voz.pasiva']);
 });
+
+
+test('Editor: el banco filtra por dos etiquetas AND y conserva una sola aparición',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const {upsertText}=await import('/core/editor-operations.js');
+    const {attachGrammarTags}=await import('/core/grammar-tags.js');
+    const repository=new IndexedDbCorpusRepository();
+    const before=await repository.load(),now=new Date().toISOString();
+    let corpus=before.corpus;
+    const items=[
+      ['doc.relpass','Texto relativo y pasivo','Qui venit, laudatus est.',
+        ['gram.relativo','gram.voz.pasiva']],
+      ['doc.rel','Texto solo relativo','Qui venit, laetus est.',['gram.relativo']],
+      ['doc.pass','Texto solo pasivo','Caesar laudatus est.',['gram.voz.pasiva']],
+    ];
+    for(const [id,title,latin,tags] of items){
+      corpus=upsertText(corpus,{title,latin,author:'',work:'',reference:''},id,now);
+      corpus=attachGrammarTags(corpus,id,tags);
+    }
+    await repository.save(corpus,before.revision);
+  });
+  await page.reload();
+  page.once('dialog',d=>d.accept('Cuaderno filtrado'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  const panel=page.locator('.modal').last();
+  await expect(panel.locator('.original-bank-result-count')).toHaveText('3 de 3 textos del banco');
+  await panel.locator('.original-bank-filters>summary').click();
+  await panel.locator('.original-bank-filter-group').filter({hasText:'Oraciones y construcciones'})
+    .locator('summary').first().click();
+  await panel.getByRole('checkbox',{name:'Oración de relativo',exact:true}).check();
+  await expect(panel.locator('.original-bank-result-count')).toHaveText('2 de 3 textos del banco');
+  await panel.locator('.original-bank-filter-group').filter({hasText:'Formas verbales y voz'})
+    .locator('summary').first().click();
+  await panel.getByRole('checkbox',{name:'Voz pasiva',exact:true}).check();
+  await expect(panel.locator('.original-bank-result-count')).toHaveText('1 de 3 textos del banco');
+  await expect(panel.locator('.original-own-row')).toHaveCount(1);
+  await expect(panel.locator('.original-own-row')).toContainText('Texto relativo y pasivo');
+  await panel.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  const reopened=page.locator('.modal').last();
+  await reopened.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+});
