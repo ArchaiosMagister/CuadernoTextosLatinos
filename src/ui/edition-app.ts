@@ -41,7 +41,7 @@ type Menu = 'text' | 'questions' | 'vocabulary' | 'format' | 'notebook';
 const labels: {key:Menu;label:string}[] = [
   {key:'text',label:'Texto'}, {key:'questions',label:'Preguntas'},
   {key:'vocabulary',label:'Vocabulario'}, {key:'format',label:'Formato'},
-  {key:'notebook',label:'Organizar'},
+  {key:'notebook',label:'Cuaderno'},
 ];
 function node<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',value=''):HTMLElementTagNameMap[K] {
   const e=document.createElement(tag);if(cls)e.className=cls;if(value)e.textContent=value;return e;
@@ -893,6 +893,7 @@ export function createEditionPane(options:{
   }
   let vocabularyAnalysisTimer:number|undefined;
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
+    if(options.onEditGrammarTags){
     const tags=placementGrammarTags(p);
     const tagPanel=node('section','edition-tags-summary');
     tagPanel.setAttribute('aria-label','Etiquetas del texto en edición');
@@ -908,6 +909,7 @@ export function createEditionPane(options:{
     tagPanel.append(chips);
     if(options.onEditGrammarTags)tagPanel.append(action('Editar etiquetas',options.onEditGrammarTags,'btn btn-outline'));
     panel.append(tagPanel);
+    }
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
       apply((e,at)=>editPlacementText(e,p.id,key,key==='latin'||key==='title'?value:value.trim()||null,at));
       if(key==='latin'&&options.onAnalyzeVocabulary){
@@ -1527,14 +1529,16 @@ export function createEditionPane(options:{
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
-    const e=draft;
-    panel.append(node('h3','','Organizar el cuaderno'));
-    panel.append(node('p','hint','Aquí puedes cambiar el título, ordenar los textos con ↑ y ↓ '+
-      'o quitar una aparición. Quitar no elimina la fuente del banco ni modifica otros cuadernos.'));
+    const e=draft,experimental=Boolean(options.onAnalyzeVocabulary);
+    if(experimental){
+      panel.append(node('h3','','Organizar el cuaderno'));
+      panel.append(node('p','hint','Aquí puedes cambiar el título, ordenar los textos con ↑ y ↓ '+
+        'o quitar una aparición. Quitar no elimina la fuente del banco ni modifica otros cuadernos.'));
+    }else panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
     panel.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
-    panel.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
+    if(experimental)panel.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
     const list=node('ol','edition-notebook-list');
     e.placements.forEach((p,index)=>{
       const li=node('li','edition-notebook-row');
@@ -1545,8 +1549,10 @@ export function createEditionPane(options:{
       const next=action('↓',()=>{apply((ed,at)=>movePlacement(ed,p.id,index+1,at));paint();});
       next.setAttribute('aria-label','Bajar '+p.text.title);next.title='Bajar el texto una posición';
       next.disabled=index===e.placements.length-1;
-      const remove=action('Quitar del cuaderno',()=>{
-        if(!window.confirm('¿Quitar «'+p.text.title+'» de este cuaderno? El banco y los demás cuadernos conservarán sus textos.'))return;
+      const remove=action(experimental?'Quitar del cuaderno':'Quitar',()=>{
+        if(!window.confirm(experimental
+          ?'¿Quitar «'+p.text.title+'» de este cuaderno? El banco y los demás cuadernos conservarán sus textos.'
+          :'¿Quitar esta aparición del cuaderno? El texto original permanecerá en la biblioteca.'))return;
         apply((ed,at)=>validateEdition({...ed,updatedAt:at,placements:ed.placements.filter(x=>x.id!==p.id)}));
         if(session?.activePlacementId===p.id&&draft)session={...session,activePlacementId:draft.placements[0]?.id??null};
         paint();
@@ -1554,16 +1560,18 @@ export function createEditionPane(options:{
       li.append(prev,next,remove);list.append(li);
     });
     panel.append(list);
-    const review= node('details','edition-notebook-review');
-    review.append(node('summary','','Revisar repeticiones de palabras y preguntas'));
-    review.append(node('p','hint','Comprueba las repeticiones que el banco no haya podido evitar.'));
-    review.append(academics.renderNotebookAudit());
-    panel.append(review);
-    const advanced=node('details','edition-notebook-advanced');
-    advanced.append(node('summary','','Opciones avanzadas: importar desde cuadernos antiguos'));
-    advanced.append(node('p','hint','Las opciones siguientes corresponden a cuadernos de una versión anterior. '+
-      'Para añadir textos del banco actual, utiliza «Banco propio» encima del editor.'));
-    advanced.append(legacyNotebookPicker());
+    const advanced=experimental?node('details','edition-notebook-advanced'):null;
+    if(advanced){
+      const review=node('details','edition-notebook-review');
+      review.append(node('summary','','Revisar repeticiones de palabras y preguntas'));
+      review.append(node('p','hint','Comprueba las repeticiones que el banco no haya podido evitar.'));
+      review.append(academics.renderNotebookAudit());
+      panel.append(review);
+      advanced.append(node('summary','','Opciones avanzadas: importar desde cuadernos antiguos'));
+      advanced.append(node('p','hint','Las opciones siguientes corresponden a cuadernos de una versión anterior. '+
+        'Para añadir textos del banco actual, utiliza «Banco propio» encima del editor.'));
+      advanced.append(legacyNotebookPicker());
+    }
     const picker=node('select','field-control');picker.setAttribute('aria-label','Texto guardado para añadir');
     const add=action('Añadir desde Mis textos',async()=>{
       if(!picker.value||!await flush()||!current||!draft)return;
@@ -1577,7 +1585,7 @@ export function createEditionPane(options:{
         paint();
       }catch(err){setMessage('No se ha añadido: '+(err instanceof Error?err.message:String(err)),true);}
     },'btn btn-primary');
-    const row=node('div','edition-inline-edit');row.append(picker,add);advanced.append(row);
+    const row=node('div','edition-inline-edit');row.append(picker,add);(advanced??panel).append(row);
     void legacy.load().then(s=>{
       if(!picker.isConnected)return;
       picker.replaceChildren();
@@ -1585,9 +1593,11 @@ export function createEditionPane(options:{
       add.disabled=!s.corpus.texts.length;
       if(!s.corpus.texts.length)picker.append(node('option','','Guarda primero textos en «Mis textos»'));
     }).catch(e=>setMessage('No se pudo leer Mis textos: '+String(e),true));
-    advanced.append(node('p','hint','Esta importación es opcional: no regenera preguntas ni vocabulario. '+
-      'Si quitas un texto del cuaderno, permanece guardado en su banco de origen.'));
-    panel.append(advanced);
+    if(advanced){
+      advanced.append(node('p','hint','Esta importación es opcional: no regenera preguntas ni vocabulario. '+
+        'Si quitas un texto del cuaderno, permanece guardado en su banco de origen.'));
+      panel.append(advanced);
+    }else panel.append(node('p','hint','Una misma fuente puede tener varias apariciones independientes. Reordenar no regenera preguntas ni vocabulario.'));
   }
   function docFilename(edition:NotebookEditionV1,draftExport:boolean):string{
     const safe=edition.title.normalize('NFC').replace(/[\\/:*?"<>|]+/g,'-')
@@ -1732,7 +1742,8 @@ export function createEditionPane(options:{
     navMenus.setAttribute('role','navigation');
     navMenus.setAttribute('aria-label','Secciones del cuaderno');
     for(const m of labels){
-      const tab=action(m.label,()=>{menu=m.key;paint();},
+      const tabLabel=m.key==='notebook'&&options.onAnalyzeVocabulary?'Organizar':m.label;
+      const tab=action(tabLabel,()=>{menu=m.key;paint();},
         'btn '+(menu===m.key?'btn-primary':'btn-outline'));
       tab.setAttribute('aria-current',String(menu===m.key?'page':'false'));
       navMenus.append(tab);
