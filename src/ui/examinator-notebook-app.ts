@@ -613,7 +613,7 @@ function pasteText(destination:'notebook'|'bank'='notebook'):void{
   inputs.get('title')?.focus();
 }
 
-function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failures:string[],editionId:string):void{
+function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failures:string[],editionId:string|null):void{
   const panel=el('div','word-review');
   const pending=[...documents];
   let importing=false;
@@ -655,7 +655,10 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     }
     cards.set(data,card);panel.append(card);
   }
-  const importLabel=documents.length===1?'Incorporar al cuaderno':'Incorporar '+documents.length+' textos';
+  const toBank=editionId===null;
+  const importLabel=toBank
+    ?(documents.length===1?'Guardar en el banco':'Guardar '+documents.length+' textos en el banco')
+    :(documents.length===1?'Incorporar al cuaderno':'Incorporar '+documents.length+' textos');
   const confirm=async():Promise<void|false>=>{
     if(importing)return false;
     importing=true;
@@ -665,17 +668,24 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
       }
       while(pending.length){
         const {data,file}=pending[0]!;
-        const placement=await writeSource(async()=>{
-          if(currentId!==editionId)throw Error('Vuelve al cuaderno donde elegiste los archivos.');
-          if(!await composer.importTeacherDocument(data))throw Error('No se ha podido importar '+file+'.');
-          return composer.activePlacement();
-        });
+        if(toBank){
+          await writeSource(()=>saveBankText({title:data.title,latin:data.latin,
+            author:data.author??'',work:data.work??'',reference:data.reference??''},data));
+        }else{
+          const placement=await writeSource(async()=>{
+            if(currentId!==editionId)throw Error('Vuelve al cuaderno donde elegiste los archivos.');
+            if(!await composer.importTeacherDocument(data))throw Error('No se ha podido importar '+file+'.');
+            return composer.activePlacement();
+          });
+          if(placement&&editionId)void enrichVocabulary(data.latin,placement.id,editionId);
+        }
         pending.shift();
         if(pending.length)cards.get(data)?.remove();
-        if(placement)void enrichVocabulary(data.latin,placement.id,editionId);
       }
-      await reload();render();M.toast(documents.length===1?'Word añadido y guardado en el cuaderno.':
-        documents.length+' textos añadidos y guardados en el cuaderno.');
+      await reload();render();
+      M.toast(toBank?documents.length+' textos Word guardados en el banco.':
+        (documents.length===1?'Word añadido y guardado en el cuaderno.':
+        documents.length+' textos añadidos y guardados en el cuaderno.'));
     }catch(error){
       await reload();render();M.toast(String(error),8000);return false;
     }finally{importing=false;}
@@ -684,9 +694,11 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     ...(documents.length?[{label:importLabel,primary:true,onclick:confirm}]:[])],
     {width:'min(700px, 96vw)',noFocus:true});
 }
-function importWord():void{
-  if(!active()||!currentId){M.toast('Abre o crea un cuaderno antes de importar.');return;}
-  const editionId=currentId;
+function importWord(destination:'notebook'|'bank'='notebook'):void{
+  if(destination==='notebook'&&(!active()||!currentId)){
+    M.toast('Abre o crea un cuaderno antes de importar.');return;
+  }
+  const editionId=destination==='bank'?null:currentId;
   const picker=el('input');picker.type='file';picker.multiple=true;
   picker.accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   picker.style.display='none';document.body.append(picker);
@@ -978,6 +990,10 @@ function renderHome():HTMLElement{
   bankHeading.append(el('h4','','Banco de textos propios'),
     el('p','small muted',corpus.texts.length+' textos distintos'));
   bank.append(bankHeading);
+  const bankActions=el('div','cuaderno-home-actions');
+  bankActions.append(button('Pegar texto',()=>pasteText('bank'),'hbtn primary'),
+    button('Importar Word',()=>importWord('bank'),'hbtn'));
+  bank.append(bankActions);
   const search=el('input');search.type='search';
   search.placeholder='Buscar por texto, autor u obra';
   search.setAttribute('aria-label','Buscar en banco de textos propios');
@@ -1001,6 +1017,10 @@ function renderHome():HTMLElement{
       const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
       if(origin)row.append(el('p','small muted',origin));
       row.append(el('p','cuaderno-home-latin',text.latin));
+      const actions=el('div','cuaderno-home-text-actions');
+      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),
+        button('Quitar del banco',()=>removeBankText(text),'tbtn'));
+      row.append(actions);
       target.append(row);
     }
   }
