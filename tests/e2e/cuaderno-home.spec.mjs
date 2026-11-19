@@ -28,7 +28,7 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   await page.getByRole('button',{name:'Volver a mis cuadernos'}).click();
   const card=page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno en tarjetas'});
   await expect(card).toBeVisible();
-  await expect(card).toContainText('1 textos');
+  await expect(card).toContainText('1 texto');
   const backup=page.waitForEvent('download');
   await card.getByRole('button',{name:'Hacer copia'}).click();
   expect((await backup).suggestedFilename()).toMatch(/^copia-cuaderno-.*\.json$/);
@@ -56,7 +56,7 @@ test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({pag
   await modal.getByRole('textbox',{name:'Autor'}).fill('César');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caesar exercitum ducit.');
   await modal.getByRole('button',{name:'Guardar en el banco'}).click();
-  await expect(bank).toContainText('1 textos distintos');
+  await expect(bank).toContainText('1 texto distinto');
   await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
   const source=bank.locator('.cuaderno-home-text').filter({hasText:'Texto sin cuaderno'}).first();
   await source.locator('summary').first().click();
