@@ -20,7 +20,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag,placementGrammarTags} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -546,18 +546,44 @@ async function removeBankText(text:LatinText):Promise<void>{
 }
 function tagBankText(text:LatinText):void{
   const panel=el('div','cuaderno-bank-tag-editor');
-  panel.append(el('p','muted','Etiquetas de la fuente. Los cuadernos ya creados conservan sus decisiones.'));
+  panel.append(el('p','muted','Etiquetas de la fuente. Sólo se guardan tus decisiones; '+
+    'los cuadernos ya creados conservan sus propias etiquetas.'));
+  const all=allGrammarTags(corpus);
+  const nameOf=(id:string)=>all.find(t=>t.id===id)?.label??id;
+  const selected=new Set(text.tagIds);
+  const tagInputs=new Map<string,HTMLInputElement>();
+  const current=el('div','grammar-chips cuaderno-bank-current');
+  current.setAttribute('aria-label','Etiquetas confirmadas para el banco');
+  function paintCurrent():void{
+    current.replaceChildren();
+    if(!selected.size){
+      current.append(el('span','small muted','Sin etiquetas confirmadas'));
+      return;
+    }
+    for(const id of selected){
+      const chip=el('span','grammar-chip',nameOf(id));
+      chip.dataset.group=GRAMMAR_GROUP_IDS.find(group=>matchesGrammarTag(id,group,all))??'custom';
+      current.append(chip);
+    }
+  }
+  function setTag(id:string,checked:boolean):void{
+    if(checked)selected.add(id);else selected.delete(id);
+    const input=tagInputs.get(id);if(input)input.checked=checked;
+    paintCurrent();
+  }
+  paintCurrent();panel.append(current);
+  const manual=el('details','cuaderno-bank-manual');
+  manual.append(el('summary','','Añadir o quitar etiquetas manualmente'));
   const search=el('input');search.type='search';
   search.placeholder='Buscar etiqueta gramatical…';
   search.setAttribute('aria-label','Buscar etiqueta en el catálogo');
-  panel.append(search);
-  const all=allGrammarTags(corpus);
-  const selected=new Set(text.tagIds);
+  manual.append(search);
   const list=el('div','cuaderno-bank-tag-options');
   for(const tag of all){
     const label=el('label','cuaderno-bank-tag-option'),check=el('input');
     check.type='checkbox';check.checked=selected.has(tag.id);check.value=tag.id;
-    check.addEventListener('change',()=>check.checked?selected.add(tag.id):selected.delete(tag.id));
+    check.addEventListener('change',()=>setTag(tag.id,check.checked));
+    tagInputs.set(tag.id,check);
     label.append(check,el('span','',('· '.repeat(catalogDepth(tag,all)))+tag.label));
     list.append(label);
   }
@@ -566,7 +592,85 @@ function tagBankText(text:LatinText):void{
     for(const label of Array.from(list.children) as HTMLElement[])
       label.hidden=Boolean(key)&&!foldLatin(label.textContent??'').includes(key);
   });
-  panel.append(list);
+  manual.append(list);panel.append(manual);
+  const review=el('section','cuaderno-bank-collatinus');
+  review.append(el('h3','','Propuestas de Collatinus'));
+  review.append(el('p','small muted','Las propuestas requieren confirmación. '+
+    'Collatinus puede reconocer formas morfológicas, pero no determina con certeza '+
+    'el valor sintáctico de una construcción.'));
+  const result=el('div','cuaderno-bank-collatinus-results');
+  const status=el('p','small muted');
+  status.setAttribute('role','status');
+  const rejected=new Set<string>();
+  const selections=new Map<string,string>();
+  let pending:CollatinusGrammarProposal[]=[];
+  const proposalKey=(p:CollatinusGrammarProposal)=>[p.start,p.end,p.tagId].join(':');
+  function renderProposals():void{
+    result.replaceChildren();
+    if(!pending.length){result.append(el('p','muted','No hay propuestas para este pasaje.'));return;}
+    const toolbar=el('div','cuaderno-bank-proposal-toolbar');
+    toolbar.append(el('p','small muted',
+      pending.length+' candidaturas · '+rejected.size+' descartadas'));
+    const acceptMultiple=button('Aceptar seleccionadas',()=>{
+      for(const tagId of selections.values())setTag(tagId,true);
+      selections.clear();renderProposals();
+    },'hbtn');
+    acceptMultiple.disabled=!selections.size;
+    toolbar.append(acceptMultiple);result.append(toolbar);
+    for(const proposal of pending){
+      const key=proposalKey(proposal);
+      const discarded=rejected.has(key),accepted=selected.has(proposal.tagId);
+      const row=el('details','grammar-proposal-card');
+      row.dataset.state=discarded?'dismissed':accepted?'confirmed':'pending';
+      const phrase=text.latin.slice(proposal.start,proposal.end);
+      const label=discarded?'Descartada':accepted?'Confirmada':'Pendiente';
+      row.append(el('summary','',phrase+' · '+nameOf(proposal.tagId)+' · '+label));
+      if(proposal.syntaxReview)row.append(el('p','hint','Requiere revisión sintáctica.'));
+      const evidence=el('details','cuaderno-bank-evidence');
+      evidence.append(el('summary','','Ver análisis y evidencia'));
+      for(const item of proposal.evidence)evidence.append(el('p','small',item));
+      if(proposal.alternatives.length)evidence.append(el('p','small',
+        'Lecturas alternativas: '+proposal.alternatives.join(' / ')));
+      row.append(evidence);
+      if(!discarded){
+        const controls=el('div','cuaderno-bank-proposal-actions');
+        const choose=el('select');
+        choose.setAttribute('aria-label','Etiqueta que se confirmará para '+phrase);
+        for(const tag of all){
+          const opt=el('option','',tag.label);opt.value=tag.id;choose.append(opt);
+        }
+        choose.value=selections.get(key)??proposal.tagId;
+        const box=el('input');box.type='checkbox';box.checked=selections.has(key);
+        const selectedLabel=el('label','');
+        selectedLabel.append(box,el('span','','Seleccionar'));
+        function changeSelection():void{
+          if(box.checked)selections.set(key,choose.value);
+          else selections.delete(key);
+          acceptMultiple.disabled=!selections.size;
+        }
+        box.addEventListener('change',changeSelection);
+        choose.addEventListener('change',changeSelection);
+        controls.append(choose,selectedLabel,
+          button('Aceptar',()=>{setTag(choose.value,true);selections.delete(key);renderProposals();},'hbtn'),
+          button('Descartar',()=>{rejected.add(key);selections.delete(key);renderProposals();},'tbtn'));
+        row.append(controls);
+      }
+      result.append(row);
+    }
+  }
+  const analyze=button('Analizar con Collatinus',async()=>{
+    analyze.disabled=true;status.textContent='Analizando el pasaje…';
+    try{
+      const engine=await collatinus();
+      const tokens=await engine.call('analyze',{text:text.latin}) as CollatinusGrammarToken[];
+      pending=proposeCollatinusGrammar(text.latin,tokens);
+      status.textContent=pending.length+' propuestas obtenidas; ninguna se añade automáticamente.';
+      renderProposals();
+    }catch(error){
+      status.textContent='No se pudo analizar el texto: '+String(error);
+    }finally{analyze.disabled=false;}
+  },'hbtn');
+  review.append(analyze,status,result);panel.append(review);
   M.modal('Etiquetas de «'+text.title+'»',panel,[{label:'Cancelar'},
     {label:'Guardar etiquetas',primary:true,onclick:async()=>{
       await writeSource(async()=>{
