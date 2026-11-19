@@ -7,7 +7,7 @@ import { emptyCorpus } from '../core/model.js';
 import { createBackup } from '../core/backup.js';
 import { WorkspaceRepository, WorkspaceConflictError, validateWorkspaceSnapshot } from './workspace-repository.js';
 import {
-  WorkspaceBackupError, createWorkspaceBackup, prepareWorkspaceRestore,
+  WorkspaceBackupError, createNotebookBackup, readNotebookBackup, createWorkspaceBackup, prepareWorkspaceRestore,
   readWorkspaceBackup, restoreWorkspaceBackup,
 } from './workspace-backup.js';
 
@@ -175,4 +175,16 @@ test('rechaza un backup cuya revisión editorial sobrepasa la revisión global',
   const damaged=structuredClone(await ws.snapshot());
   damaged.workspaceRevision=1;
   assert.throws(()=>validateWorkspaceSnapshot(damaged),/revisión global/);
+});
+
+
+test('copia individual conserva toda la edición y rechaza un contenido modificado',async()=>{
+  const ws=repo();
+  const saved=await fill(ws);
+  const json=await createNotebookBackup(saved.edition);
+  assert.deepEqual((await readNotebookBackup(json))?.edition,saved.edition);
+  assert.equal(await readNotebookBackup(await createWorkspaceBackup(ws,date)),null);
+  const envelope=JSON.parse(json) as {payload:{placements:{text:{title:string}}[]}};
+  envelope.payload.placements[0]!.text.title='Alterado';
+  await assert.rejects(readNotebookBackup(JSON.stringify(envelope)),/huella/);
 });

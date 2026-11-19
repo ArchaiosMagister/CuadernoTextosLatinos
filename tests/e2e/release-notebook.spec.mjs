@@ -59,8 +59,8 @@ test('borrar un cuaderno nuevo exige respaldo y no afecta a otro',async({page})=
       .getByRole('button',{name:'Eliminar'}).click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/copia-antes-de-eliminar-cuaderno-.*\.json/);
-  expect(dialogs).toBe(2);
   await expect(page.locator('.notebook-card')).toHaveCount(1);
+  expect(dialogs).toBe(2);
   await expect(page.locator('.notebook-card')).toContainText('Conservar');
   const persistent=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
@@ -82,8 +82,8 @@ test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva 
   }
   await page.locator('#btnOpen').click();
   const remove=page.getByRole('button',{name:'Eliminar cuaderno Eliminar este',exact:true});
-  page.once('dialog',dialog=>dialog.dismiss());
-  await remove.click();
+  const dismissal=page.waitForEvent('dialog').then(dialog=>dialog.dismiss());
+  await Promise.all([dismissal,remove.click()]);
   await expect(remove).toBeVisible();
   let confirmations=0;
   const accept=async dialog=>{confirmations++;await dialog.accept();};
@@ -98,6 +98,7 @@ test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva 
   await survivor.getByRole('button',{name:'Abrir',exact:true}).click();
   await expect(page.locator('#editor .card')).toContainText('Conservar');
   await page.reload();
+  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
   await page.locator('#btnOpen').click();
   await expect(page.locator('.original-open-row')).toHaveCount(1);
   await expect(page.locator('.original-open-row')).toContainText('Conservar');
