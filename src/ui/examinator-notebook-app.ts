@@ -1139,7 +1139,11 @@ async function openGrammarEditor():Promise<void>{
     }
   }
   await update();
-  M.modal('Etiquetas del texto',panel,[{label:'Cerrar'}]);
+  M.modal('Etiquetas del texto',panel,[{label:'Cerrar',onclick:async()=>{
+    // El editor se actualiza internamente al confirmar etiquetas; la cabecera
+    // externa también debe reflejar las etiquetas nuevas al cerrar la revisión.
+    await reload();render();
+  }}]);
 }
 
 async function returnToHome():Promise<void>{
