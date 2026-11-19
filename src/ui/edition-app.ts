@@ -20,7 +20,7 @@ import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPla
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
 import { createAcademicControls } from './academic-controls.js';
 import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
-import { splitInlineItalics } from '../core/edition-inline-formatting.js';
+import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
@@ -83,15 +83,24 @@ function buildMarkedLatin(p:TextPlacementV1):HTMLElement {
   paragraph.dataset.placementId=p.id;
   const raw=p.text.latin, marks=[...p.text.markup].sort((a,b)=>a.startUtf16-b.startUtf16);
   let position=0;
+  const appendLatin=(text:string,markKind:'morph-underline'|'editorial-roman'|null=null,review=false):void=>{
+    for(const segment of splitLatinOmissions(text)){
+      if(!segment.roman&&!markKind){paragraph.append(document.createTextNode(segment.text));continue;}
+      const part=node('span',markKind==='morph-underline'?'edition-underlined':'edition-roman');
+      // Una omisión editorial […] es puntuación, no latín.
+      if(segment.roman)part.classList.add('edition-roman');
+      part.textContent=segment.text;
+      if(review){part.classList.add('edition-review');part.title='Revisión del anclaje necesaria';}
+      paragraph.append(part);
+    }
+  };
   for(const mark of marks){
     if(mark.startUtf16<position)continue;
-    paragraph.append(document.createTextNode(raw.slice(position,mark.startUtf16)));
-    const part=node('span',mark.kind==='morph-underline'?'edition-underlined':'edition-roman');
-    part.textContent=raw.slice(mark.startUtf16,mark.endUtf16);
-    if(mark.reviewRequired){part.classList.add('edition-review');part.title='Revisión del anclaje necesaria';}
-    paragraph.append(part);position=mark.endUtf16;
+    appendLatin(raw.slice(position,mark.startUtf16));
+    appendLatin(raw.slice(mark.startUtf16,mark.endUtf16),mark.kind,mark.reviewRequired);
+    position=mark.endUtf16;
   }
-  paragraph.append(document.createTextNode(raw.slice(position)));
+  appendLatin(raw.slice(position));
   return paragraph;
 }
 function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total:number):HTMLElement {
