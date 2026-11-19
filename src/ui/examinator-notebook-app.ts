@@ -486,7 +486,7 @@ function openBankGrammarEditor(textId:string):void{
     current,
     notice:(message:string)=>M.toast(message,5500),
     saveTags:async(ids:string[])=>{
-      await editBankText(textId,(source,stored)=>{
+      await editBankText(textId,(_source,stored)=>{
         // Las etiquetas personalizadas de otro repositorio local se conservan.
         const merged=attachGrammarTags(stored,textId,ids,corpus.tags);
         return validateCorpus({...merged,texts:merged.texts.map(t=>t.id!==textId?t:{
