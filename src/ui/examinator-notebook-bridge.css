@@ -474,3 +474,14 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   .bank-grammar-search,.bank-grammar-own input,.bank-grammar-candidate select{font-size:16px;min-height:42px;}
   .bank-grammar-candidate-actions button,.bank-grammar-own button{min-height:40px;}
 }
+
+
+@media screen {
+  #editor .cuaderno-home-text-head{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    gap:8px;padding:7px 0;
+  }
+  #editor .cuaderno-home-text-head strong{flex:1 1 170px;overflow-wrap:anywhere;}
+  #editor .cuaderno-home-text-preview>summary{cursor:pointer;color:var(--ink-2);padding:4px 0;font-size:12px;}
+  #editor .cuaderno-home-text-preview>p{padding:3px 0;}
+}
