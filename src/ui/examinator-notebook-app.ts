@@ -600,6 +600,7 @@ function tagBankText(text:LatinText):void{
     'el valor sintáctico de una construcción.'));
   const result=el('div','cuaderno-bank-collatinus-results');
   const status=el('p','small muted');
+  status.setAttribute('role','status');
   const rejected=new Set<string>();
   const selections=new Map<string,string>();
   let pending:CollatinusGrammarProposal[]=[];
