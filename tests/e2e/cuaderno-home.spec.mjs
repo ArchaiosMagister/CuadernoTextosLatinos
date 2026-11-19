@@ -283,11 +283,7 @@ test('Vista previa y Word: […] se muestra en redonda sin alterar el latín',as
   const latin=page.locator('.edition-latin').first();
   await expect(latin.locator('.edition-roman')).toHaveCount(3);
   await expect(latin.locator('.edition-roman').nth(0)).toHaveText('[…]');
-  const style=await latin.evaluate(el=>({
-    normal:getComputedStyle(el).fontStyle,
-    omission:getComputedStyle(el.querySelector('.edition-roman')).fontStyle,
-  }));
-  expect(style.normal).toBe('italic');
-  expect(style.omission).toBe('normal');
+  await expect(latin).toHaveCSS('font-style','italic');
+  await expect(latin.locator('.edition-roman').first()).toHaveCSS('font-style','normal');
   await expect(latin).toContainText('Caesar […] venit [...] et [ … ] dixit.');
 });
