@@ -1071,6 +1071,72 @@ export function createEditionPane(options:{
     controls.append(accept);section.append(controls);
     panel.append(section);
   }
+  /** Reanalizar el texto completo con Collatinus sin destruir correcciones,
+   * identificadores, orden ni selección individual del cuaderno.
+   */
+  async function refreshCollatinusVocabulary(p:TextPlacementV1):Promise<void>{
+    if(!options.onAnalyzeVocabulary){
+      prepareVocabulary(p);
+      return;
+    }
+    if(!draft||!await flush())return;
+    const source=draft.placements.find(x=>x.id===p.id);
+    if(!source)return;
+    const editionId=draft.id,latin=source.text.latin;
+    const qty=source.vocabularyQuantityMode??'modelo';
+    setMessage('Analizando vocabulario con Collatinus…');
+    try{
+      const entries=await options.onAnalyzeVocabulary(latin,qty);
+      if(!draft||draft.id!==editionId||
+        draft.placements.find(x=>x.id===p.id)?.text.latin!==latin){
+        setMessage('El texto ha cambiado durante el análisis. No se ha sobrescrito el vocabulario.',true);
+        return;
+      }
+      let added=0,refreshed=0;
+      apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+        placements:edition.placements.map(x=>{
+          if(x.id!==p.id)return x;
+          const old=[...x.vocabulary],seen=new Set<string>();
+          let order=old.reduce((max,v)=>Math.max(max,v.order),-1)+1;
+          const mode=x.vocabularySelectionMode??'elegir';
+          for(const candidate of entries){
+            const lemma=candidate.lemma.trim(),headword=candidate.headword.trim();
+            const key=vocabularyKey(lemma);
+            if(!key||!headword||seen.has(key))continue;
+            seen.add(key);
+            const i=old.findIndex(v=>vocabularyKey(v.lemma)===key||
+              vocabularyKey(v.headword)===key);
+            if(i>=0){
+              const previous=old[i]!;
+              if(previous.origin==='generated'&&!previous.locked){
+                old[i]={...previous,lemma,headword,meaning:candidate.meaning,
+                  note:candidate.note,glossesSeparated:candidate.glossesSeparated===true,
+                  collatinusSource:true,included:mode==='todo'?true:previous.included};
+                refreshed++;
+              }else if(mode==='todo')old[i]={...previous,included:true};
+              continue;
+            }
+            added++;
+            old.push({id:freshId('voc'),lemma,headword,
+              meaning:candidate.meaning,note:candidate.note,
+              included:mode==='todo'||Boolean(candidate.proper&&candidate.meaning),
+              order:order++,provenance:null,reviewState:'needs-review',
+              origin:'generated',locked:false,
+              glossesSeparated:candidate.glossesSeparated===true,collatinusSource:true});
+          }
+          return {...x,vocabulary:old};
+        }),
+      }));
+      const focus=document.activeElement;
+      if(focus instanceof HTMLElement&&focus.closest('.edition-vocab-add'))paintPreview();
+      else paint();
+      setMessage('Collatinus: '+added+' entradas nuevas, '+refreshed+
+        ' enunciados actualizados. Las correcciones manuales se conservan.');
+    }catch(err){
+      setMessage('No se pudo actualizar Collatinus: '+
+        (err instanceof Error?err.message:String(err)),true);
+    }
+  }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
     const scan=action(options.autoVocabulary===false
       ?'Buscar otras formas (opcional, sin añadir automáticamente)'
