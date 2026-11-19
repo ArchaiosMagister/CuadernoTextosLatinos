@@ -8,8 +8,7 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await expect(page.locator('#editor .card')).toBeVisible();
   page.once('dialog',d=>d.accept('Cuaderno ligaduras'));
   await page.locator('#btnNew').click();
-  await page.locator('#btnLists').click();
-  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal');
   await modal.getByRole('textbox',{name:'Título'}).fill('Diptongos comprobados');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill(
