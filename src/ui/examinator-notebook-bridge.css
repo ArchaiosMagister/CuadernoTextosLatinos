@@ -526,3 +526,16 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   .original-bank-filter-option{min-height:40px;}
   .original-bank-picker .original-own-row button{min-height:42px;}
 }
+
+
+/* En iPad la cabecera original conserva botones horizontales más anchos
+   que el visor. El scroll pertenece a la cabecera, no al documento. */
+@media screen and (min-width:701px) and (max-width:1100px){
+  body[data-has-editor='true']>header{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+    overflow-x:auto;overflow-y:hidden;white-space:nowrap;
+  }
+  body[data-has-editor='true'] main#main{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+  }
+}
