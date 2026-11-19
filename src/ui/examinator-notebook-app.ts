@@ -194,9 +194,6 @@ const GENTILICS=new Set([
   'hispanus','hispaniensis','atheniensis','sabinus','sequanus',
   'poenus','punicus','italus','lacedemonius','lacaedemonius',
 ]);
-const lexKey=(value:string)=>value.normalize('NFD')
-  .replace(/[\u0300-\u036f]/g,'').replace(/æ/g,'ae')
-  .replace(/œ/g,'oe').toLowerCase().trim();
 /** Lemas de Collatinus para cualquier palabra reconocida del texto.
  * Los significados se toman solo de Collatinus o del banco preferente del cuaderno.
  * Ninguna ficha se presenta como verificación docente individual.
