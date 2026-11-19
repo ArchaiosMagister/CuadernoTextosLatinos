@@ -1087,14 +1087,19 @@ export function createEditionPane(options:{
     setMessage('Analizando vocabulario con Collatinus…');
     try{
       const entries=await options.onAnalyzeVocabulary(latin,qty);
+      if(!Array.isArray(entries)||entries.length===0){
+        throw new Error('Collatinus no ha proporcionado lemas para el texto; comprueba el análisis.');
+      }
       if(!draft||draft.id!==editionId||
         draft.placements.find(x=>x.id===p.id)?.text.latin!==latin){
         setMessage('El texto ha cambiado durante el análisis. No se ha sobrescrito el vocabulario.',true);
         return;
       }
       let added=0,refreshed=0;
-      apply((edition,at)=>validateEdition({...edition,updatedAt:at,
-        placements:edition.placements.map(x=>{
+      // Validar antes de aplicar: una sola entrada inválida nunca debe
+      // cancelar silenciosamente todo el vocabulario.
+      const nextEdition=validateEdition({...draft,updatedAt:now(),
+        placements:draft.placements.map(x=>{
           if(x.id!==p.id)return x;
           const old=[...x.vocabulary],seen=new Set<string>();
           let order=old.reduce((max,v)=>Math.max(max,v.order),-1)+1;
@@ -1109,8 +1114,8 @@ export function createEditionPane(options:{
             if(i>=0){
               const previous=old[i]!;
               if(previous.origin==='generated'&&!previous.locked){
-                old[i]={...previous,lemma,headword,meaning:candidate.meaning,
-                  note:candidate.note,glossesSeparated:candidate.glossesSeparated===true,
+                old[i]={...previous,lemma,headword,meaning:candidate.meaning?.trim()||null,
+                  note:candidate.note?.trim()||null,glossesSeparated:candidate.glossesSeparated===true,
                   collatinusSource:true,included:mode==='todo'?true:previous.included};
                 refreshed++;
               }else if(mode==='todo')old[i]={...previous,included:true};
@@ -1118,7 +1123,7 @@ export function createEditionPane(options:{
             }
             added++;
             old.push({id:freshId('voc'),lemma,headword,
-              meaning:candidate.meaning,note:candidate.note,
+              meaning:candidate.meaning?.trim()||null,note:candidate.note?.trim()||null,
               included:mode==='todo'||Boolean(candidate.proper&&candidate.meaning),
               order:order++,provenance:null,reviewState:'needs-review',
               origin:'generated',locked:false,
@@ -1126,7 +1131,8 @@ export function createEditionPane(options:{
           }
           return {...x,vocabulary:old};
         }),
-      }));
+      });
+      apply((_edition,at)=>({...nextEdition,updatedAt:at}));
       const focus=document.activeElement;
       if(focus instanceof HTMLElement&&focus.closest('.edition-vocab-add'))paintPreview();
       else paint();
