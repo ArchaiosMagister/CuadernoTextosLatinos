@@ -20,7 +20,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag,placementGrammarTags} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -452,6 +452,18 @@ function openOwnTexts():void{
   const count=el('p','small muted original-bank-result-count');
   const list=el('div','original-own-list');
   const tags=allGrammarTags(corpus),selected=new Set<string>();
+  const placements=composer.activeEdition()?.placements??[];
+  const usedIds=new Set(placements.flatMap(p=>p.source.sourceId?[p.source.sourceId]:[]));
+  // También reconocer pasajes que se importaron directamente (sin ID del banco).
+  const alreadyUsed=(text:LatinText):boolean=>usedIds.has(text.id)||placements.some(p=>
+    p.text.latin===text.latin&&p.text.author===text.source.author&&
+    p.text.work===text.source.work&&p.text.reference===text.source.reference);
+  const availableTexts=corpus.texts.filter(t=>!alreadyUsed(t));
+  const alreadyCount=corpus.texts.length-availableTexts.length;
+  if(alreadyCount)panel.append(el('p','small muted original-bank-hidden-count',
+    alreadyCount+(alreadyCount===1?' texto ya incorporado se oculta.':
+      ' textos ya incorporados se ocultan.')+
+    ' Puedes seguir consultándolos en el banco general de Inicio.'));
   const filtersPanel=el('details','original-bank-filters');
   const filtersHeading=el('summary','','Filtrar por etiquetas');
   filtersPanel.append(filtersHeading);
@@ -461,7 +473,7 @@ function openOwnTexts():void{
   filtersPanel.append(filterSearch);
   const filterGroups=el('div','original-bank-filter-groups');
   const tagCheckboxes=new Map<string,HTMLInputElement>();
-  const tagCount=(tagId:string)=>corpus.texts.filter(t=>
+  const tagCount=(tagId:string)=>availableTexts.filter(t=>
     matchesGrammarFilters(t.tagIds,[tagId],tags)).length;
   for(const root of tags.filter(t=>t.parentId===null)){
     const children=tags.filter(t=>matchesGrammarTag(t.id,root.id,tags));
@@ -511,11 +523,12 @@ function openOwnTexts():void{
     list.replaceChildren();
     const needle=foldLatin(input.value);
     const filters=[...selected];
-    const matching=corpus.texts.filter(t=>
+    const matching=availableTexts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??'',t.source.reference??'']
         .join(' ')).includes(needle)&&matchesGrammarFilters(t.tagIds,filters,tags));
-    count.textContent=matching.length+' de '+corpus.texts.length+
-      (corpus.texts.length===1?' texto del banco':' textos del banco');
+    count.textContent=matching.length+' de '+availableTexts.length+
+      (availableTexts.length===1?' texto del banco':' textos del banco')+
+      (alreadyCount?' · '+alreadyCount+' ya incorporado'+(alreadyCount===1?' oculto':'s ocultos'):'');
     for(const t of matching.slice(0,visibleLimit)){
       const row=el('article','original-own-row');
       row.append(el('strong','',t.title));
@@ -1325,7 +1338,23 @@ function render():void{
       button('Pegar texto',pasteText,'hbtn'),
       button('Importar Word',importWord,'hbtn'));
     summary.append(actions);
-    if(composer.activeEdition()!.placements.length)summary.append(button('Etiquetas gramaticales',openGrammarEditor,'hbtn'));
+    const placement=composer.activePlacement();
+    if(placement){
+      const all=allGrammarTags(corpus),ids=placementGrammarTags(placement);
+      const tagged=el('div','cuaderno-current-tags');
+      tagged.setAttribute('aria-label','Etiquetas del texto en edición');
+      tagged.append(el('strong','','Etiquetas de este texto'));
+      const chips=el('div','grammar-chips');
+      if(!ids.length)chips.append(el('span','small muted','Sin etiquetas gramaticales'));
+      for(const id of ids){
+        const tag=all.find(t=>t.id===id);
+        const chip=el('span','grammar-chip',tag?.label??id);
+        chip.dataset.group=GRAMMAR_GROUP_IDS.find(group=>matchesGrammarTag(id,group,all))??'custom';
+        chips.append(chip);
+      }
+      tagged.append(chips,button('Etiquetas gramaticales',openGrammarEditor,'hbtn'));
+      summary.append(tagged);
+    }
     left.append(summary,composer.element);
     page.textContent='';
   }else{
