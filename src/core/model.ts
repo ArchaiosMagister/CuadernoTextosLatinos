@@ -1,4 +1,6 @@
 /** Modelo persistido. No se introduce aún ninguna operación de edición. */
+import type {ParsedTeacherDocx} from './docx-import.js';
+
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
 export interface TextSource {
@@ -12,6 +14,8 @@ export interface LatinText {
   title: string;
   latin: string;
   source: TextSource;
+  /** Datos editoriales completos de un Word docente importado al banco. */
+  teacherDocument?: ParsedTeacherDocx;
   tagIds: string[];
   createdAt: string;
   updatedAt: string;
