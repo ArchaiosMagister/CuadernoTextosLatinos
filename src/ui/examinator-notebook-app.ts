@@ -321,6 +321,22 @@ async function enrichVocabulary(latin:string,placementId:string,editionId:string
       +'Puedes editar su vocabulario manualmente.',6000);
   }
 }
+/** El banco es independiente de la sesión: no abre ni altera ningún cuaderno. */
+async function saveBankTexts(inputs:readonly TextDraft[]):Promise<void>{
+  if(!inputs.length)return;
+  await writeSource(async()=>{
+    const before=await workspace.loadCorpus();
+    let next=before.corpus;
+    for(const input of inputs){
+      if(!input.title.trim()||!input.latin.trim())throw Error('Cada texto necesita título y latín.');
+      next=upsertText(next,input,'bank.'+crypto.randomUUID(),new Date().toISOString());
+    }
+    await workspace.saveCorpus(next,before.revision);
+  });
+  await reload();render();
+  window.dispatchEvent(new CustomEvent('corpus-updated'));
+}
+
 function addText(input:TextDraft):Promise<void>{
   const target=currentId;
   return writeSource(async()=>{
@@ -504,13 +520,15 @@ function openOwnTexts():void{
   input.addEventListener('input',populate);
   tagFilter.addEventListener('change',populate);
   populate();
-  if(active())panel.append(button('Pegar texto propio',()=>{
-    close();pasteText();
+  panel.append(button('Pegar texto al banco',()=>{
+    close();pasteText('bank');
+  },'tbtn'),button('Importar Word al banco',()=>{
+    close();importWord('bank');
   },'tbtn'));
   const modal=M.modal('Banco de textos',panel,[{label:'Cerrar'}]);close=modal.close;
 }
-function pasteText():void{
-  if(!active())return;
+function pasteText(destination:'notebook'|'bank'='notebook'):void{
+  if(destination==='notebook'&&!active())return;
   const form=el('form','original-paste');
   const inputs=new Map<string,HTMLInputElement|HTMLTextAreaElement>();
   for(const [field,name] of [
@@ -521,16 +539,19 @@ function pasteText():void{
     const input=field==='latin'?el('textarea'):el('input');
     if(field==='latin')(input as HTMLTextAreaElement).rows=7;
     input.setAttribute('aria-label',name);
-    if(field==='title')input.value=nextNotebookTextTitle(composer.activeEdition()?.placements??[]);
+    if(field==='title')input.value=destination==='bank'?'':nextNotebookTextTitle(composer.activeEdition()?.placements??[]);
     inputs.set(field,input);label.append(caption,input);form.append(label);
   }
   let close=()=>{};
-  const save=button('Añadir al cuaderno',async()=>{
+  const save=button(destination==='bank'?'Guardar en el banco':'Añadir al cuaderno',async()=>{
     const value=(name:string)=>inputs.get(name)?.value.trim()??'';
     save.disabled=true;
     try{
-      await addText({title:value('title'),author:value('author'),work:value('work'),
-        reference:value('reference'),latin:value('latin')});
+      const input={title:value('title'),author:value('author'),work:value('work'),
+        reference:value('reference'),latin:value('latin')};
+      if(destination==='bank'){
+        await saveBankTexts([input]);M.toast('Texto guardado en el banco.');
+      }else await addText(input);
       close();
     }finally{save.disabled=false;}
   },'hbtn primary');
@@ -540,7 +561,8 @@ function pasteText():void{
   inputs.get('title')?.focus();
 }
 
-function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failures:string[],editionId:string):void{
+function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failures:string[],
+  editionId:string|null):void{
   const panel=el('div','word-review');
   const pending=[...documents];
   let importing=false;
@@ -582,13 +604,25 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     }
     cards.set(data,card);panel.append(card);
   }
-  const importLabel=documents.length===1?'Incorporar al cuaderno':'Incorporar '+documents.length+' textos';
+  const importLabel=editionId===null
+    ?'Guardar '+documents.length+(documents.length===1?' texto en el banco':' textos en el banco')
+    :documents.length===1?'Incorporar al cuaderno':'Incorporar '+documents.length+' textos';
   const confirm=async():Promise<void|false>=>{
     if(importing)return false;
     importing=true;
     try{
       if(pending.some(({data})=>!data.title)){
         M.toast('Introduce un título para cada texto.');return false;
+      }
+      if(editionId===null){
+        // Un único commit del corpus: el lote completo se guarda o no se guarda.
+        await saveBankTexts(pending.map(({data})=>({
+          title:data.title,author:data.author??'',work:data.work??'',
+          reference:data.reference??'',latin:data.latin,teacherDocument:data,
+        })));
+        pending.length=0;
+        M.toast(documents.length+' textos Word guardados en el banco.');
+        return;
       }
       while(pending.length){
         const {data,file}=pending[0]!;
@@ -611,9 +645,11 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     ...(documents.length?[{label:importLabel,primary:true,onclick:confirm}]:[])],
     {width:'min(700px, 96vw)',noFocus:true});
 }
-function importWord():void{
-  if(!active()||!currentId){M.toast('Abre o crea un cuaderno antes de importar.');return;}
-  const editionId=currentId;
+function importWord(destination:'notebook'|'bank'='notebook'):void{
+  if(destination==='notebook'&&(!active()||!currentId)){
+    M.toast('Abre o crea un cuaderno antes de importar.');return;
+  }
+  const editionId=destination==='bank'?null:currentId;
   const picker=el('input');picker.type='file';picker.multiple=true;
   picker.accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   picker.style.display='none';document.body.append(picker);
@@ -905,6 +941,10 @@ function renderHome():HTMLElement{
   bankHeading.append(el('h4','','Banco de textos propios'),
     el('p','small muted',corpus.texts.length+' textos distintos'));
   bank.append(bankHeading);
+  const bankActions=el('div','cuaderno-home-actions');
+  bankActions.append(button('Pegar texto al banco',()=>pasteText('bank'),'hbtn'),
+    button('Importar Word al banco',()=>importWord('bank'),'hbtn primary'));
+  bank.append(bankActions);
   const search=el('input');search.type='search';
   search.placeholder='Buscar por texto, autor u obra';
   search.setAttribute('aria-label','Buscar en banco de textos propios');
