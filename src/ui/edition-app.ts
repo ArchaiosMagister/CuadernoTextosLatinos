@@ -1455,7 +1455,7 @@ export function createEditionPane(options:{
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
     const e=draft;
-    panel.append(legacyNotebookPicker());
+    panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
     panel.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));

@@ -16,7 +16,7 @@ export class AcademicEngineError extends Error {
   constructor(message: string) { super(message); this.name = 'AcademicEngineError'; }
 }
 function fail(msg: string): never { throw new AcademicEngineError(msg); }
-const normalize = (value: string): string => value.normalize('NFC').toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
+export const normalizeAcademicExercise = (value: string): string => value.normalize('NFC').toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
 /** Adaptación tipográfica SOLO de propuestas generadas: el banco docente
  * conserva su grafía y los términos manuales no se reescriben.
  */
@@ -113,16 +113,16 @@ function validSlotRecord(row: AcademicBankRecordV1,kind:AcademicSlotKindV1,sourc
 }
 function existingValues(q: Extract<QuestionV1,{kind:'choice'}>, exclusion: readonly string[]):Set<string> {
   const ids=new Set(exclusion);
-  return new Set(q.options.flatMap(o=>o.slots.filter(s=>!ids.has(s.id)).map(s=>normalize(s.value))));
+  return new Set(q.options.flatMap(o=>o.slots.filter(s=>!ids.has(s.id)).map(s=>normalizeAcademicExercise(s.value))));
 }
 /** La unicidad del cuaderno se calcula por valor, no por ID de ficha ni por texto. */
 function notebookUsage(edition:NotebookEditionV1):ReadonlySet<string> {
   return new Set(edition.placements.flatMap(p=>p.questions.flatMap(q=>
-    q.kind==='choice'?q.options.flatMap(o=>o.slots.map(s=>normalize(s.value))):[])));
+    q.kind==='choice'?q.options.flatMap(o=>o.slots.map(s=>normalizeAcademicExercise(s.value))):[])));
 }
 /** Solo se reutiliza una palabra ya usada si no queda ninguna candidata nueva y válida. */
 function preferNew<T extends {value:string}>(rows:readonly T[],used:ReadonlySet<string>):readonly T[] {
-  const fresh=rows.filter(row=>!used.has(normalize(row.value)));
+  const fresh=rows.filter(row=>!used.has(normalizeAcademicExercise(row.value)));
   return fresh.length?fresh:rows;
 }
 function makePlan(edition:NotebookEditionV1,target:AcademicTargetV1,kind:AcademicPlanV1['kind'],bank:VerifiedAcademicBankV1,
@@ -137,7 +137,7 @@ function makePlan(edition:NotebookEditionV1,target:AcademicTargetV1,kind:Academi
 export class AcademicQuestionEngineV1 {
   constructor(readonly bank: VerifiedAcademicBankV1) {}
 
-  previewSlot(edition:NotebookEditionV1,target:AcademicSlotTargetV1):AcademicPreviewV1 {
+  previewSlot(edition:NotebookEditionV1,target:AcademicSlotTargetV1,onlyUnused=false):AcademicPreviewV1 {
     const valid=validateEdition(edition);
     const p=getPlacement(valid,target.placementId);
     const q=getChoice(p,target.questionId),option=getOption(q,target.optionId);
@@ -145,10 +145,11 @@ export class AcademicQuestionEngineV1 {
     const sourceForm=target.sourceForm??null;
     if(option.kind==='preverb'&&!sourceForm)fail('Es necesario elegir la forma de partida preverbial');
     const taken=existingValues(q,[slot.id]);
-    taken.add(normalize(slot.value));
+    taken.add(normalizeAcademicExercise(slot.value));
     const eligible=this.bank.verified(option.kind,sourceForm,
-      option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalize(row.value)));
-    const rows=preferNew(eligible,notebookUsage(valid));
+      option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalizeAcademicExercise(row.value)));
+    const usage=notebookUsage(valid);
+    const rows=onlyUnused?eligible.filter(row=>!usage.has(normalizeAcademicExercise(row.value))):preferNew(eligible,usage);
     return {status:slot.locked?'locked':rows.length?'ready':'no-candidates',
       candidates:rows.map(r=>({id:r.id,value:generatedAcademicValue(option.kind,r.value),
         lemmaId:r.lemmaId,analysis:r.analysis})),
@@ -210,7 +211,7 @@ export class AcademicQuestionEngineV1 {
     const allocated=new Set<string>(),items:AcademicAssignmentV1[]=[];
     const excludedOthers=existingValues(q,slots.map(s=>s.id));
     for(const v of excluded)excludedOthers.add(v);
-    slots.filter(s=>s.locked&&!allowManualReplacement).forEach(s=>excludedOthers.add(normalize(s.value)));
+    slots.filter(s=>s.locked&&!allowManualReplacement).forEach(s=>excludedOthers.add(normalizeAcademicExercise(s.value)));
     for(let i=0;i<count;i++){
       const existing=slots[i];
       const id=existing?.id??newIds?.[i-slots.length];
@@ -221,17 +222,17 @@ export class AcademicQuestionEngineV1 {
         items.push({slotId:id,candidateId:null,sourceForm});
         continue;
       }
-      const current=existing?normalize(existing.value):null;
+      const current=existing?normalizeAcademicExercise(existing.value):null;
       const all=this.bank.verified(option.kind,sourceForm,
         option.kind==='phonetics'?selectedPhoneticRules:undefined).filter(row=>
-        normalize(row.value)!==current);
-      const distinct=all.filter(row=>!excludedOthers.has(normalize(row.value)));
+        normalizeAcademicExercise(row.value)!==current);
+      const distinct=all.filter(row=>!excludedOthers.has(normalizeAcademicExercise(row.value)));
       // Puede agotarse el subconjunto de términos distintos aunque el banco
       // siga teniendo fichas verificadas: en ese único caso se admite repetir.
       const candidates=distinct.length?distinct:all;
       if(!candidates.length)fail(`No hay términos verificables para ${option.kind} (${i+1}/${count})`);
       const chosen=choose(preferNew(candidates,usedInNotebook),seed+i);
-      excludedOthers.add(normalize(chosen.value));
+      excludedOthers.add(normalizeAcademicExercise(chosen.value));
       items.push({slotId:id,candidateId:chosen.id,sourceForm,
         ...(distinct.length?{}:{unavoidableRepeat:true})});
     }
@@ -266,7 +267,7 @@ export class AcademicQuestionEngineV1 {
         const candidate=entry.candidateId?this.bank.findVerified(entry.candidateId):null;
         const current=o.slots.find(s=>s.id===entry.slotId);
         const value=candidate?.value??current?.value;
-        if(value)excluded.add(normalize(value));
+        if(value)excluded.add(normalizeAcademicExercise(value));
       }
     }
     if(!assignments.length)fail('La pregunta no contiene apartados activos');
@@ -301,9 +302,9 @@ export class AcademicQuestionEngineV1 {
         if(candidate.candidateId===null)fail('Falta propuesta de palabra individual');
         const row=this.bank.findVerified(candidate.candidateId);
         if(!row||!validSlotRecord(row,option.kind,candidate.sourceForm,plan.target.phoneticRules))fail('Propuesta académica no válida');
-        if(normalize(row.value)===normalize(slot.value))fail('La propuesta no cambia la palabra');
+        if(normalizeAcademicExercise(row.value)===normalizeAcademicExercise(slot.value))fail('La propuesta no cambia la palabra');
         const taken=existingValues(q,[slot.id]);
-        if(taken.has(normalize(row.value)))fail('La palabra ya aparece en otro apartado');
+        if(taken.has(normalizeAcademicExercise(row.value)))fail('La palabra ya aparece en otro apartado');
         return regenerateSlot(edition,p.id,q.id,a.optionId,slot.id,
           {value:generatedAcademicValue(option.kind,row.value),
             proposedLemmaId:row.lemmaId,provenance:row.evidence},at,plan.replaceLocked);
@@ -318,7 +319,7 @@ export class AcademicQuestionEngineV1 {
         if(old?.locked&&!plan.replaceLocked)fail('No se puede sustituir una palabra protegida');
         const row=this.bank.findVerified(entry.candidateId);
         if(!row||!validSlotRecord(row,option.kind,entry.sourceForm,plan.target.phoneticRules))fail('Propuesta fuera de banco/curso/fuente');
-        const valueKey=normalize(row.value);
+        const valueKey=normalizeAcademicExercise(row.value);
         if(used.has(valueKey)&&!entry.unavoidableRepeat)fail('Dos casillas recibirían la misma palabra');
         if(entry.unavoidableRepeat){
           // Un plan manipulado no debe poder declarar escasez cuando hay una
@@ -326,13 +327,13 @@ export class AcademicQuestionEngineV1 {
           const otherExisting=existingValues(q,original.slots.map(slot=>slot.id));
           const hasAlternative=this.bank.verified(option.kind,entry.sourceForm,
             option.kind==='phonetics'?plan.target.phoneticRules:undefined).some(candidate=>{
-            const key=normalize(candidate.value);
-            return key!==normalize(old?.value??'')&&!used.has(key)&&!otherExisting.has(key);
+            const key=normalizeAcademicExercise(candidate.value);
+            return key!==normalizeAcademicExercise(old?.value??'')&&!used.has(key)&&!otherExisting.has(key);
           });
           if(hasAlternative)fail('La repetición no está justificada por agotamiento del banco');
         }
         used.add(valueKey);
-        if(old && valueKey===normalize(old.value))fail('La regeneración no cambia el valor');
+        if(old && valueKey===normalizeAcademicExercise(old.value))fail('La regeneración no cambia el valor');
         slots.push({id:entry.slotId,value:generatedAcademicValue(option.kind,row.value),
           proposedLemmaId:row.lemmaId,
           origin:'generated',locked:false,provenance:row.evidence});
@@ -348,7 +349,7 @@ export class AcademicQuestionEngineV1 {
       const others=existingValues(q,getOption(q,a.optionId).slots.map(s=>s.id));
       for(const s of targetOption.slots){
         const planned=a.items.find(item=>item.slotId===s.id);
-        if(others.has(normalize(s.value))&&!planned?.unavoidableRepeat)
+        if(others.has(normalizeAcademicExercise(s.value))&&!planned?.unavoidableRepeat)
           fail('La propuesta duplica una palabra del resto');
       }
       // La operación granular existente solo admite candidatos generados.
@@ -370,10 +371,10 @@ export class AcademicQuestionEngineV1 {
     }
     // No se admiten candidatos que dupliquen un término conservado.
     const changed=new Set(plan.assignments.flatMap(a=>a.items.filter(i=>i.candidateId!==null).map(i=>i.slotId)));
-    const preserved=new Set(q.options.flatMap(o=>o.slots.filter(s=>!changed.has(s.id)).map(s=>normalize(s.value))));
+    const preserved=new Set(q.options.flatMap(o=>o.slots.filter(s=>!changed.has(s.id)).map(s=>normalizeAcademicExercise(s.value))));
     const unavoidable=new Set(plan.assignments.flatMap(a=>a.items.filter(i=>i.unavoidableRepeat).map(i=>i.slotId)));
     for(const o of modified.options)for(const slot of o.slots){
-      if(changed.has(slot.id)&&preserved.has(normalize(slot.value))&&!unavoidable.has(slot.id)) {
+      if(changed.has(slot.id)&&preserved.has(normalizeAcademicExercise(slot.value))&&!unavoidable.has(slot.id)) {
         fail('La propuesta duplica una palabra conservada');
       }
     }
