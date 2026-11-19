@@ -9,6 +9,15 @@ export interface TextSource {
   reference: string | null;
 }
 
+/** Revisión humana de propuestas por fragmento, conservada con el texto de origen. */
+export interface BankGrammarDecision {
+  startUtf16:number;
+  endUtf16:number;
+  exact:string;
+  tagId:string;
+  status:'accepted'|'rejected';
+  chosenTagId:string|null;
+}
 export interface LatinText {
   id: string;
   title: string;
@@ -16,6 +25,8 @@ export interface LatinText {
   source: TextSource;
   /** Datos editoriales completos de un Word docente importado al banco. */
   teacherDocument?: ParsedTeacherDocx;
+  /** Aceptaciones y descartes de Collatinus, sin atribución automática. */
+  bankGrammarDecisions?: BankGrammarDecision[];
   tagIds: string[];
   createdAt: string;
   updatedAt: string;

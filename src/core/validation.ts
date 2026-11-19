@@ -133,12 +133,44 @@ function importedWord(value: unknown, path: string, latin: string): NonNullable<
     latin:body,underlines,vocabulary,lexical,preverbBases,warnings};
 }
 
+/** Mantener decisiones con anclajes válidos al pasaje original. */
+function bankGrammarDecisions(value: unknown,path:string,latin:string):
+  NonNullable<LatinText['bankGrammarDecisions']>{
+  if(!Array.isArray(value)||value.length>2000)
+    invalid(path,'lista de decisiones gramaticales inválida');
+  const unique=new Set<string>();
+  return value.map((row:unknown,i:number)=>{
+    const p=path+'['+i+']';
+    const data=record(row,p,['startUtf16','endUtf16','exact','tagId','status','chosenTagId']);
+    const start=data.startUtf16,end=data.endUtf16;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+      (start as number)<0||(end as number)<=(start as number)||(end as number)>latin.length)
+      invalid(p,'offset fuera del texto');
+    const exact=nonBlank(data.exact,p+'.exact',latin.length);
+    if(latin.slice(start as number,end as number)!==exact)
+      invalid(p,'la lectura no coincide con el latín');
+    const tagId=identifier(data.tagId,p+'.tagId');
+    if(data.status!=='accepted'&&data.status!=='rejected')
+      invalid(p+'.status','estado desconocido');
+    const status=data.status as 'accepted'|'rejected';
+    const chosenTagId=data.chosenTagId===null?null:identifier(data.chosenTagId,p+'.chosenTagId');
+    if((status==='accepted')!==Boolean(chosenTagId))
+      invalid(p,'una aceptación debe indicar su etiqueta; un descarte no puede hacerlo');
+    const key=[start,end,tagId].join(':');
+    if(unique.has(key))invalid(p,'decisión duplicada');unique.add(key);
+    return {startUtf16:start as number,endUtf16:end as number,exact,tagId,status,chosenTagId};
+  });
+}
+
 function text(value: unknown, path: string): LatinText {
   const hasWord=value!==null&&typeof value==='object'&&!Array.isArray(value)
     &&Object.hasOwn(value,'teacherDocument');
+  const hasReview=value!==null&&typeof value==='object'&&!Array.isArray(value)
+    &&Object.hasOwn(value,'bankGrammarDecisions');
   const data = record(value, path, [
     'id', 'title', 'latin', 'source', 'tagIds', 'createdAt', 'updatedAt',
     ...(hasWord?['teacherDocument']:[]),
+    ...(hasReview?['bankGrammarDecisions']:[]),
   ]);
   const createdAt = timestamp(data.createdAt, `${path}.createdAt`);
   const updatedAt = timestamp(data.updatedAt, `${path}.updatedAt`);
@@ -149,6 +181,9 @@ function text(value: unknown, path: string): LatinText {
     latin: nonBlank(data.latin, `${path}.latin`, 200_000),
     source: source(data.source, `${path}.source`),
     ...(hasWord?{teacherDocument:importedWord(data.teacherDocument,path+'.teacherDocument',
+      nonBlank(data.latin,path+'.latin',200_000))}:{}),
+    ...(hasReview?{bankGrammarDecisions:bankGrammarDecisions(
+      data.bankGrammarDecisions,path+'.bankGrammarDecisions',
       nonBlank(data.latin,path+'.latin',200_000))}:{}),
     tagIds: stringIds(data.tagIds, `${path}.tagIds`),
     createdAt,

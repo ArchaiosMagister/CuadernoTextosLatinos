@@ -2,7 +2,8 @@ import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
 import {fingerprintForMark} from '../core/edition-validation.js';
 import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
-import type {CorpusV1} from '../core/model.js';
+import {renderBankGrammarEditor} from './bank-grammar-editor.js';
+import type {CorpusV1,LatinText,BankGrammarDecision} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
@@ -20,7 +21,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -457,6 +458,83 @@ function openLibrary():void{
   if(!M.openLibrary)throw new Error('La biblioteca original no se ha cargado.');
   void M.openLibrary().catch(e=>M.toast('Biblioteca: '+String(e),5500));
 }
+/** Editar el etiquetado de una FUENTE, no el de una aparición de cuaderno. */
+async function editBankText(textId:string,
+  operation:(source:LatinText,existing:CorpusV1)=>CorpusV1):Promise<void>{
+  await writeSource(async()=>{
+    const historical=await repo.load();
+    if(historical.corpus.texts.some(t=>t.id===textId)){
+      await repo.save(operation(historical.corpus.texts.find(t=>t.id===textId)!,historical.corpus),
+        historical.revision);
+      return;
+    }
+    const editorial=await workspace.loadCorpus();
+    const source=editorial.corpus.texts.find(t=>t.id===textId);
+    if(!source)throw Error('La fuente ya no está disponible en el banco.');
+    await workspace.saveCorpus(operation(source,editorial.corpus),editorial.revision);
+  });
+  await reload();render();
+  window.dispatchEvent(new CustomEvent('corpus-updated'));
+}
+function openBankGrammarEditor(textId:string):void{
+  const current=()=>{
+    const text=corpus.texts.find(t=>t.id===textId);
+    if(!text)throw Error('El texto ya no existe en el banco.');
+    return {text,corpus};
+  };
+  const controls={
+    current,
+    notice:(message:string)=>M.toast(message,5500),
+    saveTags:async(ids:string[])=>{
+      await editBankText(textId,(_source,stored)=>{
+        // Las etiquetas personalizadas de otro repositorio local se conservan.
+        const merged=attachGrammarTags(stored,textId,ids,corpus.tags);
+        return validateCorpus({...merged,texts:merged.texts.map(t=>t.id!==textId?t:{
+          ...t,
+          ...(t.bankGrammarDecisions?{bankGrammarDecisions:t.bankGrammarDecisions.filter(
+            d=>d.status!=='accepted'||ids.includes(d.chosenTagId??''))}:{}),
+        })});
+      });
+    },
+    addCustomTag:async(label:string)=>{
+      if(!isCustomTagLabelValid(label))throw Error('Nombre de etiqueta inválido.');
+      await editBankText(textId,(source,stored)=>{
+        let tag=findTagByLabel(label,allGrammarTags(corpus));
+        if(!tag)tag={id:'custom.'+crypto.randomUUID(),label:label.trim(),kind:'custom',parentId:null};
+        return attachGrammarTags(stored,textId,[...source.tagIds,tag.id],[...corpus.tags,tag]);
+      });
+    },
+    analyze:async()=>{
+      const {text}=current();
+      const engine=await collatinus();
+      const tokens=await engine.call('analyze',{text:text.latin}) as CollatinusGrammarToken[];
+      if(current().text.latin!==text.latin)throw Error('El pasaje cambió. Analízalo de nuevo.');
+      if(!Array.isArray(tokens))throw Error('Collatinus no devolvió tokens válidos.');
+      return proposeCollatinusGrammar(text.latin,tokens);
+    },
+    decide:async(proposal:CollatinusGrammarProposal,chosenTagId:string|null)=>{
+      await editBankText(textId,(source,stored)=>{
+        if(source.latin.slice(proposal.start,proposal.end)!==corpus.texts.find(t=>t.id===textId)
+          ?.latin.slice(proposal.start,proposal.end))
+          throw Error('La fuente cambió. Vuelve a analizarla.');
+        const currentDecision:BankGrammarDecision={
+          startUtf16:proposal.start,endUtf16:proposal.end,
+          exact:source.latin.slice(proposal.start,proposal.end),
+          tagId:proposal.tagId,status:chosenTagId===null?'rejected':'accepted',
+          chosenTagId,
+        };
+        const without=(source.bankGrammarDecisions??[]).filter(d=>
+          d.startUtf16!==proposal.start||d.endUtf16!==proposal.end||d.tagId!==proposal.tagId);
+        const ids=chosenTagId?[...new Set([...source.tagIds,chosenTagId])]:source.tagIds;
+        const tagged=attachGrammarTags(stored,textId,ids,corpus.tags);
+        return validateCorpus({...tagged,texts:tagged.texts.map(t=>t.id!==textId?t:
+          {...t,bankGrammarDecisions:[...without,currentDecision]})});
+      });
+    },
+  };
+  const panel=renderBankGrammarEditor(controls);
+  M.modal('Etiquetas · '+current().text.title,panel,[{label:'Cerrar'}],{width:'min(740px, 96vw)'});
+}
 function openOwnTexts():void{
   const panel=el('div','');
   const list=el('div','original-own-list');
@@ -480,14 +558,15 @@ function openOwnTexts():void{
     const filters=Array.from(tagFilter.selectedOptions,option=>option.value);
     const matching=corpus.texts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle)
-      && (matchesGrammarFilters(t.tagIds,filters,tags) || notebooks.some(notebook=>
-        notebook.edition.placements.some(placement=>placement.source.sourceId===t.id
-          && matchesGrammarFilters(placementGrammarTags(placement),filters,tags)))));
+      && matchesGrammarFilters(t.tagIds,filters,tags));
     for(const t of matching){
       const row=el('article','original-own-row');
       row.append(el('strong','',t.title));
       const source=[t.source.author,t.source.work,t.source.reference].filter(Boolean).join(' · ');
       if(source)row.append(el('small','muted',source));
+      const tagging=button('Etiquetar',()=>openBankGrammarEditor(t.id),'tbtn');
+      tagging.setAttribute('aria-label','Etiquetar «'+t.title+'»');
+      row.append(tagging);
       if(active()){
         const add=button('Añadir al cuaderno',async()=>{
           close();
@@ -955,25 +1034,25 @@ function renderHome():HTMLElement{
   search.setAttribute('aria-label','Buscar en banco de textos propios');
   bank.append(search);
   const catalogue=allGrammarTags(corpus);
-  const assignments=new Map<string,Set<string>>();
-  for(const text of corpus.texts)assignments.set(text.id,new Set(text.tagIds));
-  for(const notebook of notebooks)for(const placement of notebook.edition.placements){
-    const id=placement.source.sourceId;
-    if(!id||!assignments.has(id))continue;
-    const ids=assignments.get(id)!;
-    for(const tag of placementGrammarTags(placement))ids.add(tag);
-  }
-  const idsFor=(id:string):string[]=>[...(assignments.get(id)??[])];
+  // El banco cuenta exclusivamente etiquetas de la FUENTE.
+  // Las asignadas en un cuaderno pertenecen a esa aparición independiente.
+  const idsFor=(id:string):string[]=>[...(corpus.texts.find(t=>t.id===id)?.tagIds??[])];
   const listing=el('div','cuaderno-home-bank-list');
   function appendTextRows(target:HTMLElement,texts:typeof corpus.texts):void{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
     for(const text of texts){
-      const row=el('details','cuaderno-home-text');
-      row.append(el('summary','',text.title));
+      const row=el('article','cuaderno-home-text');
+      const head=el('div','cuaderno-home-text-head');
+      head.append(el('strong','',text.title));
+      const tag=button('Etiquetar',()=>openBankGrammarEditor(text.id),'hbtn');
+      tag.setAttribute('aria-label','Etiquetar «'+text.title+'»');
+      head.append(tag);row.append(head);
+      const preview=el('details','cuaderno-home-text-preview');
+      preview.append(el('summary','','Ver pasaje'));
       const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
-      if(origin)row.append(el('p','small muted',origin));
-      row.append(el('p','cuaderno-home-latin',text.latin));
-      target.append(row);
+      if(origin)preview.append(el('p','small muted',origin));
+      preview.append(el('p','cuaderno-home-latin',text.latin));
+      row.append(preview);target.append(row);
     }
   }
   function populate():void{
