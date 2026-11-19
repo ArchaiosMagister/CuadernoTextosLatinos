@@ -949,7 +949,13 @@ function renderHome():HTMLElement{
   const heading=el('div','cuaderno-home-heading');
   heading.append(el('h4','','Mis cuadernos'));
   const actions=el('div','cuaderno-home-actions');
-  actions.append(button('Nuevo cuaderno',createNotebook,'hbtn primary'));
+  // Reutilizar el botón original, con su manejador y su id, en vez de crear
+  // un control redundante. Las pruebas y la accesibilidad conservan su acceso.
+  const newButton=document.getElementById('btnNew');
+  if(newButton instanceof HTMLButtonElement){
+    newButton.textContent='Nuevo cuaderno';newButton.className='hbtn primary';
+    actions.append(newButton);
+  }else actions.append(button('Nuevo cuaderno',createNotebook,'hbtn primary'));
   const restore=el('input');restore.type='file';restore.accept='.json,application/json';restore.hidden=true;
   restore.setAttribute('aria-label','Seleccionar copia de cuaderno');
   restore.addEventListener('change',async()=>{
@@ -1057,6 +1063,15 @@ function renderHome():HTMLElement{
   return home;
 }
 function render():void{
+  // El control se mueve entre Inicio y la cabecera sin cambiar el manejador.
+  const originalNew=document.getElementById('btnNew');
+  if(originalNew instanceof HTMLButtonElement){
+    const header=document.querySelector('body > header');
+    const brand=header?.querySelector('.brand');
+    if(brand && originalNew.parentElement!==header)brand.after(originalNew);
+    originalNew.textContent='Nuevo';
+    originalNew.className='hbtn';
+  }
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
   if(!left||!page)throw new Error('Falta el documento original de Examinator2.');
