@@ -88,11 +88,11 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
 test('Word conserva ligaduras y glosas separadas sin alterar el modelo',()=>{
   const edition=fixture(),p=edition.placements[0]!;
   p.vocabulary=[{
-    id:'voc.œ',lemma:'poena',headword:'pœna, –æ',meaning:'pena | castigo',
+    id:'voc.oe',lemma:'poena',headword:'pœna, –æ',meaning:'pena | castigo',
     note:'f.',included:true,order:0,provenance:null,
     reviewState:'manual',origin:'manual',locked:true,glossesSeparated:true,
   },{
-    id:'voc.æ',lemma:'caelum',headword:'cælum, –ī',meaning:'cielo',note:null,
+    id:'voc.ae',lemma:'caelum',headword:'cælum, –ī',meaning:'cielo',note:null,
     included:true,order:1,provenance:null,reviewState:'needs-review',
     origin:'generated',locked:false,collatinusSource:true,
   }];
