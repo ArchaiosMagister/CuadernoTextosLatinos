@@ -143,6 +143,146 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   #editor .edition-menu-nav{grid-template-columns:repeat(5,minmax(0,1fr));}
   #editor .edition-menu-nav .btn{font-size:10.5px;}
 }
+/* PR C · ÚNICAMENTE PANELES del cuaderno experimental.
+   Referencia: Examinator2 usa campos 5–8 px, botones de ~30 px y panel
+   de hasta 600 px. No se modifica su biblioteca, el lector ni la hoja A4.
+   Las reglas de impresión quedan excluidas deliberadamente. */
+@media screen{
+  body[data-has-editor='true']{--cuaderno-menu-width:clamp(350px,44%,600px);}
+  #editor .edition-settings{gap:5px;}
+  #editor .edition-menu-nav{padding:5px 0;gap:3px;}
+  #editor .edition-menu-nav .btn{
+    min-height:30px;padding:5px 2px;line-height:1.25;
+    font-size:11.5px;font-weight:500;border-radius:6px;
+  }
+  #editor .edition-menu-content{
+    padding:8px;gap:8px;align-content:start;min-width:0;
+  }
+  #editor .edition-menu-content .edition-field{
+    min-width:0;gap:3px;margin:0;font-size:12.5px;font-weight:600;
+  }
+  #editor .edition-menu-content .edition-field-label{
+    color:var(--ink-2);font-size:12px;font-weight:600;line-height:1.3;
+  }
+  #editor .edition-menu-content input.field-control,
+  #editor .edition-menu-content select.field-control{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+    min-height:30px;margin:0;padding:5px 8px;
+    border:1px solid var(--rule);border-radius:6px;
+    font:400 13px/1.3 var(--ui-font);
+  }
+  #editor .edition-menu-content textarea.field-control{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+    min-height:110px;height:142px;margin:0;padding:6px 8px;
+    border:1px solid var(--rule);border-radius:6px;
+    font:400 15px/1.5 var(--text-font);resize:vertical;
+  }
+  #editor .edition-menu-content .btn{
+    box-sizing:border-box;max-width:100%;min-height:30px;
+    padding:4px 8px;border-radius:6px;
+    font:600 12px/1.35 var(--ui-font);
+    white-space:normal;overflow-wrap:anywhere;
+  }
+  /* Los iconos y el indicador Guardada tienen tamaños estables. */
+  #editor .edition-vocab-row .edition-vocab-save{
+    width:84px;min-width:84px;max-width:84px;
+    min-height:28px;padding:3px 2px;white-space:nowrap;font-size:11px;
+  }
+  #editor .edition-vocab-row .edition-vocab-remove,
+  #editor .edition-vocab-row .edition-vocab-reset{
+    width:28px;min-width:28px;min-height:28px;
+    padding:0;font-size:18px;
+  }
+  #editor .edition-menu-content .edition-vocab-row input.field-control{
+    min-height:28px;padding:3px 5px;font-size:12px;
+  }
+  #editor .edition-menu-content .edition-vocab-quantity .field-control{
+    width:auto;min-width:135px;max-width:210px;min-height:30px;
+    padding:4px 6px;font-size:12px;
+  }
+  #editor .edition-menu-content .edition-vocab-modes .btn{
+    min-height:30px;padding:4px 8px;
+  }
+  /* Texto y Formato son formularios compactos, sin ocultar controles. */
+  #editor .edition-menu-text,
+  #editor .edition-menu-format{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    column-gap:8px;row-gap:8px;
+  }
+  #editor .edition-menu-text>.edition-field:first-child,
+  #editor .edition-menu-text>.edition-field:has(textarea),
+  #editor .edition-menu-text>.edition-academic-select,
+  #editor .edition-menu-text>.hint,
+  #editor .edition-menu-format>.edition-margin-grid,
+  #editor .edition-menu-format>select.field-control,
+  #editor .edition-menu-format>.edition-option-head,
+  #editor .edition-menu-format>.hint{
+    grid-column:1/-1;
+  }
+  #editor .edition-menu-format>.edition-margin-grid{gap:6px 8px;}
+  #editor .edition-menu-format>.edition-field{max-width:100%;}
+  /* Cada tarjeta sigue accesible, pero desperdicia menos altura. */
+  #editor .edition-question-panel{
+    padding:9px;gap:7px;border-radius:7px;
+  }
+  #editor .edition-question-panel h3{margin:0;font-size:13px;}
+  #editor .edition-question-top{gap:6px;}
+  #editor .edition-option{padding:7px 8px;gap:6px;margin:0;}
+  #editor .edition-question-shortcuts{gap:5px;}
+  #editor .edition-menu-content .edition-question-jump{
+    min-height:29px;padding:4px 6px;text-align:left;font-size:11.5px;
+  }
+  #editor .edition-academic-option,
+  #editor .edition-academic-question,
+  #editor .edition-academic-morph{
+    padding:7px 8px;gap:6px;margin:4px 0 0;
+  }
+  #editor .edition-academic-option>.edition-field{max-width:205px;}
+  #editor .edition-academic-review{padding:8px;gap:7px;margin:6px 0;}
+  #editor .edition-inline-edit{gap:5px;min-width:0;}
+  #editor .edition-inline-edit>.edition-field{
+    flex:1 1 132px;min-width:0;
+  }
+  #editor .edition-inline-edit>.field-control{
+    flex:1 1 132px;min-width:0;width:auto;
+  }
+  #editor .edition-inline-edit .btn{flex:0 0 auto;}
+  #editor .edition-menu-content .edition-notebook-row{
+    gap:4px;padding:5px 0;
+  }
+  #editor .edition-notebook-row>span{
+    flex:1 1 145px;min-width:0;overflow-wrap:anywhere;
+  }
+  #editor .edition-notebook-row>.btn{
+    min-width:30px;min-height:30px;padding:4px 7px;
+  }
+  #editor .edition-menu-content .edition-vocab-add{gap:5px;}
+  #editor .edition-menu-content .edition-vocab-add>.btn{
+    flex:0 0 auto;
+  }
+}
+/* Safari iPhone: 16 px al enfocar evita el zoom involuntario.
+   Se conservan la hoja A4 desplazable y las cinco pestañas. */
+@media screen and (max-width:760px){
+  #editor .edition-menu-text,
+  #editor .edition-menu-format{grid-template-columns:minmax(0,1fr);}
+  #editor .edition-menu-content input.field-control,
+  #editor .edition-menu-content select.field-control,
+  #editor .edition-menu-content textarea.field-control{
+    font-size:16px;min-height:34px;
+  }
+  #editor .edition-menu-content textarea.field-control{
+    min-height:110px;height:140px;
+  }
+  #editor .edition-menu-content .edition-vocab-row input.field-control{
+    font-size:16px;min-height:34px;
+  }
+  #editor .edition-menu-content .edition-vocab-quantity .field-control{
+    font-size:16px;min-height:34px;max-width:none;flex:1;
+  }
+  #editor .edition-menu-content{padding:7px;gap:7px;}
+  #editor .edition-menu-nav .btn{font-size:10.5px;}
+}
 @media print{
   .edition-print-root .edition-paper-head{display:block!important;}
   .edition-print-root .edition-paper-head h2{font-family:inherit!important;}
