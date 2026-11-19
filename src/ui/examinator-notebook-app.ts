@@ -423,7 +423,7 @@ function openNotebooks():void{
   for(const x of saved){
     const row=el('div','row original-open-row');
     const details=el('span','',x.edition.title);
-    details.append(el('small','muted',' · '+x.edition.placements.length+' textos · '+
+    details.append(el('small','muted',' · '+x.edition.placements.length+(x.edition.placements.length===1?' texto · ':' textos · ')+
       new Date(x.edition.updatedAt).toLocaleString('es')));
     row.append(details,button('Abrir',async()=>{
       close();await openNotebook(x.edition.id);
@@ -1023,7 +1023,7 @@ function renderHome():HTMLElement{
   const bank=el('section','cuaderno-home-bank');
   const bankHeading=el('div','cuaderno-home-bank-heading');
   bankHeading.append(el('h4','','Banco de textos propios'),
-    el('p','small muted',corpus.texts.length+' textos distintos'));
+    el('p','small muted',corpus.texts.length+(corpus.texts.length===1?' texto distinto':' textos distintos')));
   bank.append(bankHeading);
   const bankActions=el('div','cuaderno-home-actions');
   bankActions.append(button('Pegar texto al banco',()=>pasteText('bank'),'hbtn'),
