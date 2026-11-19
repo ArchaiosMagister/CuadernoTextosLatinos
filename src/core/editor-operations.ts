@@ -1,4 +1,5 @@
 import type { CorpusV1, LatinText, Notebook } from './model.js';
+import type {ParsedTeacherDocx} from './docx-import.js';
 import { validateCorpus } from './validation.js';
 
 export interface TextDraft {
@@ -8,6 +9,7 @@ export interface TextDraft {
   author: string;
   work: string;
   reference: string;
+  teacherDocument?: ParsedTeacherDocx;
 }
 const nullText = (value: string): string | null => value.trim() || null;
 
@@ -16,12 +18,15 @@ export function upsertText(corpus: CorpusV1, draft: TextDraft, id: string, now: 
   const entry: LatinText = {
     id: previous?.id ?? id,
     title: draft.title.trim(),
-    latin: draft.latin.trim(),
+    latin: draft.teacherDocument ? draft.latin : draft.latin.trim(),
     source: {
       author: nullText(draft.author),
       work: nullText(draft.work),
       reference: nullText(draft.reference),
     },
+    ...(draft.teacherDocument ? {teacherDocument:draft.teacherDocument} :
+      previous?.teacherDocument&&previous.latin===draft.latin.trim()
+        ? {teacherDocument:previous.teacherDocument} : {}),
     tagIds: previous?.tagIds ?? [],
     createdAt: previous?.createdAt ?? now,
     updatedAt: previous && now < previous.createdAt ? previous.createdAt : now,
