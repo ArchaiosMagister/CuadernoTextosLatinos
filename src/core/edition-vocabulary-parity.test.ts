@@ -17,9 +17,10 @@ test('V1 histórico sigue válido; las opciones nuevas se conservan tras validar
   const historical=validateEdition(e);
   assert.equal(historical.placements[0]?.vocabularySelectionMode,undefined);
   assert.equal(historical.placements[0]?.vocabulary[0]?.glossesSeparated,undefined);
-  p.vocabulary[0]!.glossesSeparated=true;
-  p.vocabulary[0]!.collatinusSource=true;
-  p.vocabularySelectionMode='todo';p.vocabularyQuantityMode='ninguna';
+  e.placements[0]!.vocabulary[0]!.glossesSeparated=true;
+  e.placements[0]!.vocabulary[0]!.collatinusSource=true;
+  e.placements[0]!.vocabularySelectionMode='todo';
+  e.placements[0]!.vocabularyQuantityMode='ninguna';
   const extended=validateEdition(e);
   assert.equal(extended.placements[0]?.vocabulary[0]?.glossesSeparated,true);
   assert.equal(extended.placements[0]?.vocabulary[0]?.collatinusSource,true);
@@ -28,5 +29,5 @@ test('V1 histórico sigue válido; las opciones nuevas se conservan tras validar
   assert.equal(checked.placements[0]?.vocabulary[0]?.origin,'generated');
   assert.equal(checked.placements[0]?.vocabulary[0]?.locked,false);
   assert.equal(checked.placements[0]?.vocabulary[0]?.included,false);
-  assert.throws(()=>validateEdition({...e,placements:[{...p,vocabularyQuantityMode:'invalido'}]}));
+  assert.throws(()=>validateEdition({...e,placements:[{...e.placements[0],vocabularyQuantityMode:'invalido'}]}));
 });
