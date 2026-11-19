@@ -632,12 +632,16 @@ async function removeBankTexts(ids:readonly string[]):Promise<void>{
       if(saved.corpus.notebooks.some(book=>book.textIds.some(id=>unique.includes(id))))
         throw Error('Uno de los textos pertenece a un cuaderno antiguo. Operación cancelada.');
     }
-    let updated=editorial.corpus;
-    for(const id of unique)if(updated.texts.some(text=>text.id===id))updated=deleteText(updated,id);
-    if(updated!==editorial.corpus)await repo.save(updated,editorial.revision);
-    updated=working.corpus;
-    for(const id of unique)if(updated.texts.some(text=>text.id===id))updated=deleteText(updated,id);
-    if(updated!==working.corpus)await workspace.saveCorpus(updated,working.revision);
+    const selected=new Set(unique);
+    const removeBatch=(source:CorpusV1):CorpusV1=>{
+      const texts=source.texts.filter(text=>!selected.has(text.id));
+      return texts.length===source.texts.length?source:validateCorpus({...source,texts});
+    };
+    const nextEditorial=removeBatch(editorial.corpus);
+    const nextWorking=removeBatch(working.corpus);
+    // Cada repositorio se valida una sola vez, incluso para miles de textos.
+    if(nextEditorial!==editorial.corpus)await repo.save(nextEditorial,editorial.revision);
+    if(nextWorking!==working.corpus)await workspace.saveCorpus(nextWorking,working.revision);
   });
   await reload();render();
   M.toast(count===1?'Texto retirado del banco.':count+' textos retirados del banco.');
