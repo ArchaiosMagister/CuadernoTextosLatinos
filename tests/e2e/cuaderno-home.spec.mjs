@@ -65,6 +65,7 @@ test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({pag
   await source.locator('summary').first().click();
   await source.getByRole('button',{name:'Etiquetar'}).click();
   const tagModal=page.locator('.modal').last();
+  await tagModal.getByText('Añadir o quitar etiquetas manualmente',{exact:true}).click();
   await tagModal.locator('.cuaderno-bank-tag-option').filter({hasText:'Oración de relativo'})
     .getByRole('checkbox').check();
   await tagModal.getByRole('button',{name:'Guardar etiquetas'}).click();
