@@ -385,10 +385,9 @@ async function deleteNotebook(id:string):Promise<void>{
     if(!snapshot||snapshot.edition.legacyNotebookId!==null)
       throw Error('Este cuaderno no se puede eliminar.');
     const title=snapshot.edition.title;
-    if(!window.confirm('¿Eliminar el cuaderno «'+title+'» y su historial? Se descargará una copia de seguridad.'))return;
-    const backup=await createWorkspaceBackup(workspace);
-    downloadBackup(backup,'copia-antes-de-eliminar-cuaderno');
-    if(!window.confirm('Comprueba que has guardado el JSON. ¿Confirmas la eliminación definitiva de «'+title+'»?'))return;
+    if(!window.confirm('¿Eliminar definitivamente «'+title+'» y su historial? '+
+      'Te recomendamos hacer antes una copia de seguridad desde la tarjeta del cuaderno, '+
+      'pero no es obligatorio. Esta acción no se puede deshacer.'))return;
     await workspace.deleteEdition(id,snapshot.revision);
     if(currentId===id){
       currentId=null;rememberNotebook();
@@ -847,12 +846,136 @@ async function openGrammarEditor():Promise<void>{
   await update();
   M.modal('Etiquetas del texto',panel,[{label:'Cerrar'}]);
 }
+
+async function returnToHome():Promise<void>{
+  if(!await composer.flush())throw Error('No se han podido guardar los cambios pendientes.');
+  composer.closeEdition();currentId=null;rememberNotebook();
+  await reload();render();
+}
+/** Pantalla de entrada, independiente de la hoja A4 y de cualquier cuaderno activo. */
+function renderHome():HTMLElement{
+  const home=el('section','card cuaderno-home');
+  home.append(el('h3','','Cuaderno de textos latinos'));
+  const heading=el('div','cuaderno-home-heading');
+  heading.append(el('h4','','Mis cuadernos'));
+  const actions=el('div','cuaderno-home-actions');
+  actions.append(button('Nuevo cuaderno',createNotebook,'hbtn primary'));
+  const restore=el('input');restore.type='file';restore.accept='.json,application/json';restore.hidden=true;
+  restore.setAttribute('aria-label','Seleccionar copia de cuaderno');
+  restore.addEventListener('change',async()=>{
+    const file=restore.files?.[0];restore.value='';
+    if(!file)return;
+    try{await restoreNotebooks(file);}catch(error){M.toast('No se pudo importar la copia: '+String(error),6500);}
+  });
+  actions.append(button('Importar cuaderno',()=>restore.click(),'hbtn'),restore);
+  heading.append(actions);home.append(heading);
+  const grid=el('div','cuaderno-home-grid');
+  const saved=notebooks.filter(n=>n.edition.id!==WORKING_EDITION_ID)
+    .sort((a,b)=>b.edition.updatedAt.localeCompare(a.edition.updatedAt));
+  if(!saved.length)grid.append(el('p','muted','No hay cuadernos todavía. Puedes crear uno nuevo.'));
+  for(const record of saved){
+    const edition=record.edition;
+    const card=el('article','cuaderno-home-card');
+    card.append(el('h5','',edition.title));
+    card.append(el('p','small muted',edition.placements.length+' textos · '+
+      new Date(edition.updatedAt).toLocaleDateString('es')));
+    if(edition.legacyNotebookId!==null)card.append(el('p','small muted','Cuaderno histórico protegido'));
+    const buttons=el('div','cuaderno-home-card-actions');
+    buttons.append(button('Abrir',()=>openNotebook(edition.id),'hbtn primary'),
+      button('Hacer copia',async()=>{
+        if(!await composer.flush())throw Error('Hay cambios pendientes de guardar.');
+        const current=await workspace.loadEdition(edition.id);
+        if(!current)throw Error('El cuaderno ya no existe.');
+        downloadBackup(await createNotebookBackup(current.edition,await loadCombinedCorpus()),'copia-cuaderno');
+      },'hbtn'));
+    if(edition.legacyNotebookId===null)buttons.append(button('Eliminar',()=>deleteNotebook(edition.id),'tbtn'));
+    card.append(buttons);grid.append(card);
+  }
+  home.append(grid);
+  const backups=el('details','cuaderno-home-backups');
+  backups.append(el('summary','','Copia integral del espacio de trabajo'));
+  backups.append(button('Descargar copia integral',async()=>{
+    if(!await composer.flush())throw Error('No se han podido guardar los cambios pendientes.');
+    downloadBackup(await createWorkspaceBackup(workspace,new Date(),(await repo.load()).corpus),'copia-editorial');
+  },'hbtn'));
+  home.append(backups);
+
+  const bank=el('section','cuaderno-home-bank');
+  const bankHeading=el('div','cuaderno-home-bank-heading');
+  bankHeading.append(el('h4','','Banco de textos propios'),
+    el('p','small muted',corpus.texts.length+' textos distintos'));
+  bank.append(bankHeading);
+  const search=el('input');search.type='search';
+  search.placeholder='Buscar por texto, autor u obra';
+  search.setAttribute('aria-label','Buscar en banco de textos propios');
+  bank.append(search);
+  const catalogue=allGrammarTags(corpus);
+  const assignments=new Map<string,Set<string>>();
+  for(const text of corpus.texts)assignments.set(text.id,new Set(text.tagIds));
+  for(const notebook of notebooks)for(const placement of notebook.edition.placements){
+    const id=placement.source.sourceId;
+    if(!id||!assignments.has(id))continue;
+    const ids=assignments.get(id)!;
+    for(const tag of placementGrammarTags(placement))ids.add(tag);
+  }
+  const idsFor=(id:string):string[]=>[...(assignments.get(id)??[])];
+  const listing=el('div','cuaderno-home-bank-list');
+  function appendTextRows(target:HTMLElement,texts:typeof corpus.texts):void{
+    if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
+    for(const text of texts){
+      const row=el('details','cuaderno-home-text');
+      row.append(el('summary','',text.title));
+      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
+      if(origin)row.append(el('p','small muted',origin));
+      row.append(el('p','cuaderno-home-latin',text.latin));
+      target.append(row);
+    }
+  }
+  function populate():void{
+    listing.replaceChildren();
+    const needle=foldLatin(search.value.trim());
+    const matching=corpus.texts.filter(t=>foldLatin(
+      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+    const all=el('details','cuaderno-home-category');
+    if(needle)all.open=true;
+    all.append(el('summary','','Todos los textos ('+matching.length+')'));
+    appendTextRows(all,matching);listing.append(all);
+    const makeCategory=(tag:typeof catalogue[number],depth:number):HTMLElement=>{
+      const texts=matching.filter(t=>matchesGrammarFilters(idsFor(t.id),[tag.id],catalogue));
+      const group=el('details','cuaderno-home-category');
+      if(depth)group.classList.add('cuaderno-home-subcategory');
+      group.append(el('summary','',tag.label+' ('+texts.length+')'));
+      const children=catalogue.filter(t=>t.parentId===tag.id);
+      for(const child of children)group.append(makeCategory(child,depth+1));
+      const direct=texts.filter(t=>idsFor(t.id).includes(tag.id));
+      if(direct.length)appendTextRows(group,direct);
+      return group;
+    };
+    for(const root of catalogue.filter(t=>t.parentId===null))
+      listing.append(makeCategory(root,0));
+    const without=matching.filter(t=>idsFor(t.id).length===0);
+    const untagged=el('details','cuaderno-home-category');
+    untagged.append(el('summary','','Sin etiquetar ('+without.length+')'));
+    appendTextRows(untagged,without);listing.append(untagged);
+  }
+  search.addEventListener('input',populate);
+  populate();bank.append(listing);
+  home.append(bank);
+  return home;
+}
 function render():void{
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
   if(!left||!page)throw new Error('Falta el documento original de Examinator2.');
   left.replaceChildren();
   document.body.dataset.hasEditor=String(active());
+  document.body.dataset.cuadernoHome=String(!active());
+  if(!active()){
+    page.replaceChildren();
+    left.append(renderHome());
+    document.title='Mis cuadernos · Cuaderno de textos latinos';
+    return;
+  }
   const summary=el('section','card');
   const choose=el('select');
   choose.setAttribute('aria-label','Elegir cuaderno');
@@ -880,7 +1003,8 @@ function render():void{
     catch(error){choose.value=currentId??'';M.toast(String(error),5500);}
     finally{choose.disabled=false;}
   });
-  summary.append(el('h3','','Cuaderno de textos latinos'),choose,
+  summary.append(el('h3','','Cuaderno de textos latinos'),
+    button('Volver a mis cuadernos',returnToHome,'hbtn'),choose,
     button('Gestionar cuadernos',openNotebooks,'hbtn'));
   const backups=el('details');
   backups.append(el('summary','','Copias de seguridad'));
@@ -1021,13 +1145,8 @@ void (async()=>{
         console.warn('No se pudo preparar el cuaderno experimental para usarlo sin conexión:',error);
       });
     }
-    let last:string|null=null;
-    try{last=localStorage.getItem(lastNotebookKey);}catch{/* almacenamiento opcional */}
-    if(last&&notebooks.some(n=>n.edition.id===last&&last!==WORKING_EDITION_ID)){
-      try{await openNotebook(last);return;}
-      catch(error){M.toast(String(error),5500);}
-    }
-    composer.closeEdition();rememberNotebook();render();
+    // Inicio siempre desde Mis cuadernos, sin reabrir automáticamente el último.
+    composer.closeEdition();currentId=null;render();
   }catch(e){
     console.error(e);
     const target=document.getElementById('editor');
