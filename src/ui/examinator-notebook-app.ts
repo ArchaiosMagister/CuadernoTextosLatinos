@@ -883,7 +883,14 @@ function wireButtons():void{
     if(!(node instanceof HTMLButtonElement))throw new Error('Falta '+id);
     return node;
   };
-  byId('btnNew').onclick=()=>{void createNotebook().catch(e=>M.toast(String(e),5000));};
+  byId('btnNew').onclick=async()=>{
+    const controls=['btnNew','btnOpen','btnSave','btnLib','btnLists','btnSettings','btnDocx','btnPdf']
+      .map(id=>byId(id)).filter(control=>!control.disabled);
+    controls.forEach(control=>{control.disabled=true;});
+    try{await createNotebook();}
+    catch(error){M.toast(String(error),5000);}
+    finally{controls.forEach(control=>{control.disabled=false;});}
+  };
   byId('btnOpen').onclick=openNotebooks;
   byId('btnSave').onclick=()=>{void saveNotebook().catch(e=>M.toast(String(e),5000));};
   byId('btnLib').onclick=openLibrary;
