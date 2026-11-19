@@ -17,6 +17,14 @@ export class AcademicEngineError extends Error {
 }
 function fail(msg: string): never { throw new AcademicEngineError(msg); }
 const normalize = (value: string): string => value.normalize('NFC').toLocaleLowerCase('es').replace(/\s+/g,' ').trim();
+/** Adaptación tipográfica SOLO de propuestas generadas: el banco docente
+ * conserva su grafía y los términos manuales no se reescriben.
+ */
+export function generatedAcademicValue(kind:AcademicSlotKindV1,value:string):string {
+  if(kind!=='prefix')return value;
+  return value.replace(/^(\s*)(\p{L})/u,(_match,spaces:string,first:string)=>
+    spaces+first.toLocaleLowerCase('es'));
+}
 const choose = <T>(items: readonly T[], seed: number): T => items[((seed % items.length) + items.length) % items.length]!;
 function checkSeed(seed: number): void {
   if (!Number.isSafeInteger(seed) || seed < 0) fail('La semilla de selección debe ser un entero no negativo');
@@ -142,7 +150,8 @@ export class AcademicQuestionEngineV1 {
       option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalize(row.value)));
     const rows=preferNew(eligible,notebookUsage(valid));
     return {status:slot.locked?'locked':rows.length?'ready':'no-candidates',
-      candidates:rows.map(r=>({id:r.id,value:r.value,lemmaId:r.lemmaId,analysis:r.analysis})),
+      candidates:rows.map(r=>({id:r.id,value:generatedAcademicValue(option.kind,r.value),
+        lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts(option.kind).needsReview};
   }
   prepareSlot(edition:NotebookEditionV1,target:AcademicSlotTargetV1,
@@ -296,7 +305,8 @@ export class AcademicQuestionEngineV1 {
         const taken=existingValues(q,[slot.id]);
         if(taken.has(normalize(row.value)))fail('La palabra ya aparece en otro apartado');
         return regenerateSlot(edition,p.id,q.id,a.optionId,slot.id,
-          {value:row.value,proposedLemmaId:row.lemmaId,provenance:row.evidence},at,plan.replaceLocked);
+          {value:generatedAcademicValue(option.kind,row.value),
+            proposedLemmaId:row.lemmaId,provenance:row.evidence},at,plan.replaceLocked);
       }
       const slots:QuestionWordSlotV1[]=[];
       for(const entry of a.items){
@@ -323,7 +333,8 @@ export class AcademicQuestionEngineV1 {
         }
         used.add(valueKey);
         if(old && valueKey===normalize(old.value))fail('La regeneración no cambia el valor');
-        slots.push({id:entry.slotId,value:row.value,proposedLemmaId:row.lemmaId,
+        slots.push({id:entry.slotId,value:generatedAcademicValue(option.kind,row.value),
+          proposedLemmaId:row.lemmaId,
           origin:'generated',locked:false,provenance:row.evidence});
       }
       option.slots=slots;

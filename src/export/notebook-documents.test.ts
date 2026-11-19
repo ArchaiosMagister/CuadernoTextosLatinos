@@ -85,6 +85,27 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
   assert.match(entries.get('word/footer1.xml')!,/PAGE/);
   assert.equal((xml.match(/w:pageBreakBefore/g)??[]).length,0);
 });
+test('Word imprime prefijos generados en minúscula y respeta los manuales',()=>{
+  const edition=fixture(),placement=edition.placements[0]!;
+  const question=placement.questions.find(x=>x.kind==='choice');
+  assert.ok(question&&question.kind==='choice');
+  const prefix=question.options.find(o=>o.kind==='prefix');
+  assert.ok(prefix);
+  prefix.slots=[{
+    id:'pref.generated',value:'antifaz',origin:'generated',locked:false,
+    proposedLemmaId:null,provenance:{provider:'test',recordId:'ge.prefix.1',
+      bankRevision:'fixture',decisionId:null},
+  },{
+    id:'pref.manual',value:'Ámbito personal',origin:'manual',locked:true,
+    proposedLemmaId:null,provenance:null,
+  }];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/>antifaz</);
+  assert.match(xml,/>Ámbito personal</);
+  assert.doesNotMatch(xml,/>Antifaz</);
+  assert.equal(JSON.stringify(edition),before);
+});
 test('Word conserva ligaduras y glosas separadas sin alterar el modelo',()=>{
   const edition=fixture(),p=edition.placements[0]!;
   p.vocabulary=[{

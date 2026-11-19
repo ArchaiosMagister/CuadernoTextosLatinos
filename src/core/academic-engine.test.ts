@@ -65,6 +65,58 @@ async function create(db:WorkspaceRepository):Promise<NotebookEditionV1> {
   const e=corpus();await db.commitEdition(e.id,0,{command:'create',targetId:e.id,timestamp:NOW},()=>e);return e;
 }
 
+test('los prefijos importados conservan su grafía, pero se proponen y generan en minúscula',async()=>{
+  const originals=[
+    record('prefix',200,{value:'Antifaz'}),
+    record('prefix',201,{value:'Interdependencia'}),
+  ];
+  const e=engine(originals),ed=corpus(),t=target(ed,'prefix');
+  const before=JSON.stringify(ed);
+  assert.equal(e.bank.findVerified('prefix.200')?.value,'Antifaz');
+  assert.equal(e.previewSlot(ed,t).candidates.find(c=>c.id==='prefix.200')?.value,'antifaz');
+  assert.equal(JSON.stringify(ed),before);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>ed);
+  const out=await e.commit(db,e.prepareSlot(ed,t,'prefix.200'),LATER);
+  assert.equal(choice(out.edition).options[2]!.slots[0]!.value,'antifaz');
+  assert.equal(choice(out.edition).options[2]!.slots[0]!.origin,'generated');
+  assert.deepEqual(choice(out.edition).options[2]!.slots[1],choice(ed).options[2]!.slots[1]);
+  assert.deepEqual(choice(out.edition).options[3],choice(ed).options[3]);
+  assert.deepEqual(out.edition.placements[1],ed.placements[1]);
+  assert.equal(e.bank.findVerified('prefix.200')?.value,'Antifaz');
+});
+test('regeneración del apartado: minúsculas sin cambiar términos manuales protegidos',async()=>{
+  const ed=corpus(),q=choice(ed);
+  const manual=slot('slot.prefix.1','Ámbito manual',true);
+  q.options[2]!.slots[0]=manual;
+  const clean=validateEdition(ed);
+  const e=engine([record('prefix',200,{value:'Antifaz'}),
+    record('prefix',201,{value:'Interdependencia'})]);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>clean);
+  const plan=e.prepareSubquestion(clean,{...targeted(clean,'prefix'),desiredCount:2,seed:1});
+  const out=await e.commit(db,plan,LATER);
+  assert.deepEqual(choice(out.edition).options[2]!.slots[0],manual);
+  assert.ok(['antifaz','interdependencia'].includes(choice(out.edition).options[2]!.slots[1]!.value));
+  assert.deepEqual(choice(out.edition).options[3],choice(clean).options[3]);
+});
+test('regeneración de pregunta completa: prefijos en minúscula y demás categorías idénticas al banco',async()=>{
+  const changed=entries.map(r=>r.kind==='prefix'?{...r,
+    value:r.value[0]!.toLocaleUpperCase('es')+r.value.slice(1)}:r);
+  const e=engine(changed),ed=corpus(),q=choice(ed);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>ed);
+  const plan=e.prepareChoiceQuestion(ed,{placementId:'place.1',questionId:q.id,
+    expectedRevision:1,seed:3,desiredCountByKind:{preverb:2,phonetics:2,prefix:2,latinism:2},
+    sourceFormsByKind:{preverb:['instruxit','successerunt']}});
+  const result=await e.commit(db,plan,LATER);
+  const slots=choice(result.edition).options[2]!.slots;
+  assert.equal(slots.length,2);
+  for(const s of slots){
+    assert.equal(s.value[0],s.value[0]!.toLocaleLowerCase('es'));
+    const row=e.bank.verified('prefix').find(x=>x.id===plan.assignments
+      .find(a=>a.optionId===choice(ed).options[2]!.id)?.items.find(i=>i.slotId===s.id)?.candidateId);
+    assert.equal(s.value,row!.value[0]!.toLocaleLowerCase('es')+row!.value.slice(1));
+  }
+  assert.deepEqual(result.edition.placements[1],ed.placements[1]);
+});
 test('el banco rechaza registros sin evidencia, revisión o curso válido',()=>{
   assert.throws(()=>new VerifiedAcademicBankV1(manifest,[record('phonetics',1,{evidence:{...evidence('1'),bankRevision:'otra'}})]),AcademicBankError);
   assert.throws(()=>new VerifiedAcademicBankV1(manifest,[record('phonetics',1,{courses:[]})]),/curso/);

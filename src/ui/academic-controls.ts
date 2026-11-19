@@ -6,7 +6,7 @@ import type {
   ChoiceOptionV1, NotebookEditionV1, QuestionV1, TextPlacementV1,
 } from '../core/edition-model.js';
 import {
-  AcademicQuestionEngineV1, type AcademicPlanV1, type AcademicSlotTargetV1,
+  AcademicQuestionEngineV1, generatedAcademicValue, type AcademicPlanV1, type AcademicSlotTargetV1,
   type AcademicMorphTargetV1,
 } from '../core/academic-engine.js';
 import {
@@ -180,7 +180,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const seenBefore=existingSlots.some(slot=>slot.id!==item.slotId&&
           slot.value.normalize('NFC').toLocaleLowerCase('es')===
             rec.value.normalize('NFC').toLocaleLowerCase('es'));
-        details.push(optionName(option.kind)+': '+previous+' → '+rec.value+
+        details.push(optionName(option.kind)+': '+previous+' → '+
+          generatedAcademicValue(option.kind,rec.value)+
           (seenBefore?' (reutilizada: no quedan nuevas candidatas compatibles)':'')+
           (audit?.semanticReviewRequired?' (significado orientativo; revisar)':''));
       }
