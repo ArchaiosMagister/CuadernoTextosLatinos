@@ -119,6 +119,8 @@ export interface VocabularyEntryV1 {
   locked: boolean;
   /** Misma opción de glosas independientes que Examinator2; falta en V1 antiguo. */
   glossesSeparated?: boolean;
+  /** Etiqueta de procedencia; no implica verificación filológica individual. */
+  collatinusSource?: boolean;
 }
 
 export interface ReviewFlagV1 {
