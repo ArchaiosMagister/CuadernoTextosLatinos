@@ -8,6 +8,7 @@ test('Banco propio: etiqueta confirmada y reutilizable sin cuaderno abierto',asy
   await modal.getByRole('textbox',{name:'Título'}).fill('Pasiva propia');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est. Loquitur.');
   await modal.getByRole('button',{name:'Guardar en el banco'}).click();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 texto distinto');
   await page.locator('.cuaderno-home-category').first().locator('summary').first().click();
   await page.getByRole('button',{name:'Etiquetar «Pasiva propia»'}).first().click();
   modal=page.locator('.modal').last();
@@ -44,6 +45,7 @@ test('Banco propio: Collatinus propone pero no confirma hasta la decisión docen
   await modal.getByRole('textbox',{name:'Título'}).fill('Revisión automática');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est. Loquitur.');
   await modal.getByRole('button',{name:'Guardar en el banco'}).click();
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 texto distinto');
   await page.locator('.cuaderno-home-category').first().locator('summary').first().click();
   await page.getByRole('button',{name:'Etiquetar «Revisión automática»'}).first().click();
   modal=page.locator('.modal').last();
