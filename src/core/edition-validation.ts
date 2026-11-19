@@ -210,7 +210,7 @@ function reviewFlag(input:unknown,path:string):ReviewFlagV1 {
   return {id:id(d.id,`${path}.id`),scopeId:id(d.scopeId,`${path}.scopeId`),reason:str(d.reason,`${path}.reason`,1000)};
 }
 function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
-  const d=object(input,path,['id','startUtf16','endUtf16','exact','textFingerprint','tagIds','reviewRequired']);
+  const d=object(input,path,['id','startUtf16','endUtf16','exact','textFingerprint','tagIds','reviewRequired'],['evidence']);
   const reviewRequired=flag(d.reviewRequired,`${path}.reviewRequired`);
   const limit=reviewRequired?200_000:latin.length;
   const start=integer(d.startUtf16,`${path}.startUtf16`,0,limit);
@@ -224,8 +224,21 @@ function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
   const tagIds=array(d.tagIds,`${path}.tagIds`,200).map((v,i)=>id(v,`${path}.tagIds[${i}]`));
   if(!tagIds.length||new Set(tagIds).size!==tagIds.length)
     fail(path,'el fragmento necesita etiquetas sin repetir');
-  return {id:id(d.id,`${path}.id`),startUtf16:start,endUtf16:end,exact,
+  const result:GrammarSpanV1={id:id(d.id,`${path}.id`),startUtf16:start,endUtf16:end,exact,
     textFingerprint:fp,tagIds,reviewRequired};
+  if(d.evidence!==undefined){
+    result.evidence=array(d.evidence,path+'.evidence',200).map((value,i)=>{
+      const where=`${path}.evidence[${i}]`;
+      const record=object(value,where,['tagId','engine','rule','evidence']);
+      const tagId=id(record.tagId,where+'.tagId');
+      if(!tagIds.includes(tagId))fail(where,'evidencia de una etiqueta ausente');
+      return {tagId,engine:str(record.engine,where+'.engine',200),rule:str(record.rule,where+'.rule',200),
+        evidence:array(record.evidence,where+'.evidence',250).map((line,j)=>str(line,`${where}.evidence[${j}]`,2000))};
+    });
+    if(new Set(result.evidence.map(record=>record.tagId)).size!==result.evidence.length)
+      fail(path,'evidencia repetida para una etiqueta');
+  }
+  return result;
 }
 function placement(input:unknown,path:string):TextPlacementV1 {
   const d=object(input,path,['id','source','text','questions','vocabulary','grammaticalTagIds','reviewFlags'],

@@ -184,6 +184,10 @@ export interface CollatinusVocabularyCandidate {
 }
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
+type GrammarAssignment={
+  start:number;end:number;tagId:string;
+  evidence?:{engine:string;rule:string;evidence:string[]};
+};
 export function createEditionPane(options:{
   autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void;
   onAnalyzeVocabulary?:(latin:string,quantity:VocabularyQuantityMode)=>
@@ -208,6 +212,7 @@ export function createEditionPane(options:{
     entries:readonly CollatinusVocabularyCandidate[],latin:string)=>Promise<boolean>;
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
   addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
+  addGrammarSpans:(assignments:readonly GrammarAssignment[])=>Promise<boolean>;
   removeGrammarSpan:(id:string)=>Promise<boolean>;
   renameActiveNotebook:(title:string)=>Promise<boolean>;
   closeEdition:()=>void;
@@ -476,24 +481,32 @@ export function createEditionPane(options:{
       placements:edition.placements.map(x=>x.id===p.id?{...x,grammaticalTagIds:unique}:x)}));
     const saved=await flush();paint();return saved;
   }
-  async function addGrammarSpan(start:number,end:number,tagId:string):Promise<boolean>{
+  function addGrammarSpan(start:number,end:number,tagId:string):Promise<boolean>{
+    return addGrammarSpans([{start,end,tagId}]);
+  }
+  async function addGrammarSpans(assignments:readonly GrammarAssignment[]):Promise<boolean>{
     const placement=selection();
-    if(!placement||!draft||!tagId)return false;
+    if(!placement||!draft||!assignments.length)return false;
     const latin=placement.text.latin;
-    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)
-      ||start<0||end>latin.length||end<=start||!latin.slice(start,end).trim()){
-      setMessage('Selecciona un fragmento latino no vacío.',true);return false;
+    const spans=[...(placement.grammaticalSpans??[])];
+    for(const {start,end,tagId,evidence} of assignments){
+      if(!tagId||!Number.isSafeInteger(start)||!Number.isSafeInteger(end)
+        ||start<0||end>latin.length||end<=start||!latin.slice(start,end).trim()){
+        setMessage('Selecciona un fragmento latino no vacío.',true);return false;
+      }
+      const index=spans.findIndex(span=>!span.reviewRequired&&span.startUtf16===start&&span.endUtf16===end);
+      const existing=spans[index];
+      if(existing?.tagIds.includes(tagId))continue;
+      const span={id:existing?.id??freshId('span'),startUtf16:start,endUtf16:end,
+        exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
+        tagIds:[...(existing?.tagIds??[]),tagId],reviewRequired:false,
+        ...(evidence?{evidence:[...(existing?.evidence??[]),{tagId,...evidence}]}:
+          existing?.evidence?{evidence:existing.evidence}:{})};
+      if(index===-1)spans.push(span);else spans[index]=span;
     }
-    const spans=placement.grammaticalSpans??[];
-    const existing=spans.find(span=>!span.reviewRequired&&span.startUtf16===start&&span.endUtf16===end);
-    if(existing?.tagIds.includes(tagId))return true;
-    const span={id:existing?.id??freshId('span'),startUtf16:start,endUtf16:end,
-      exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
-      tagIds:[...(existing?.tagIds??[]),tagId],reviewRequired:false};
-    apply((edition,at)=>validateEdition({...edition,updatedAt:at,
-      placements:edition.placements.map(p=>p.id===placement.id
-        ?{...p,grammaticalSpans:existing?spans.map(previous=>previous.id===existing.id?span:previous)
-          :[...spans,span]}:p)}));
+    const next=validateEdition({...draft,updatedAt:now(),
+      placements:draft.placements.map(p=>p.id===placement.id?{...p,grammaticalSpans:spans}:p)});
+    draft=next;markDirty();
     const saved=await flush();paint();return saved;
   }
   async function removeGrammarSpan(id:string):Promise<boolean>{
@@ -1705,5 +1718,5 @@ export function createEditionPane(options:{
     addCollatinusVocabulary,
     activePlacement:()=>selection()?structuredClone(selection()!):null,
     activeEdition:()=>draft?structuredClone(draft):null,
-    setActiveTags,addGrammarSpan,removeGrammarSpan,renameActiveNotebook,closeEdition};
+    setActiveTags,addGrammarSpan,addGrammarSpans,removeGrammarSpan,renameActiveNotebook,closeEdition};
 }

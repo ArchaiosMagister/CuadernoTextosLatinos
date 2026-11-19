@@ -1,3 +1,4 @@
+import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
 import {validateCorpus} from '../core/validation.js';
 /**
@@ -578,12 +579,143 @@ async function openGrammarEditor():Promise<void>{
   const placement=composer.activePlacement();
   if(!placement)return;
   const panel=el('div');
+  const manual=el('div');
+  const suggestions=el('div','collatinus-grammar-review');
   const notice=(message:string)=>M.toast(message,5000);
+  panel.append(manual,button('Analizar etiquetas con Collatinus',analyze,'hbtn'),suggestions);
+  let analyzing=false;
+  async function analyze():Promise<void>{
+    if(analyzing)return;
+    analyzing=true;
+    try{
+      const latest=composer.activePlacement();
+      if(!latest||latest.id!==placement!.id)return;
+      const latin=latest.text.latin;
+      suggestions.replaceChildren(el('p','','Analizando el pasaje…'));
+      const engine=await collatinus();
+      const tokens=await engine.call('analyze',{text:latin}) as CollatinusGrammarToken[];
+      const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(latin)));
+      const identity=Array.from(digest,n=>n.toString(16).padStart(2,'0')).join('');
+      const key='cuaderno-collatinus-revision-v1:'+currentId+':'+latest.id+':'+identity;
+      const rejected=new Set<string>();
+      const corrections=new Map<number,{lid:number;morpho:string}>();
+      try{
+        const state=JSON.parse(localStorage.getItem(key)??'null') as {
+          rejected:string[];corrections:[number,{lid:number;morpho:string}][];
+        }|null;
+        for(const id of state?.rejected??[])rejected.add(id);
+        for(const [position,reading] of state?.corrections??[])corrections.set(position,reading);
+      }catch{/* el análisis continúa sin estas preferencias */}
+      function remember():void{
+        try{localStorage.setItem(key,JSON.stringify({rejected:[...rejected],corrections:[...corrections]}));}
+        catch{notice('La decisión queda disponible durante esta revisión.');}
+      }
+      const tags=allGrammarTags(corpus.corpus);
+      const label=(id:string)=>tags.find(tag=>tag.id===id)?.label??id;
+      function verifyText():boolean{
+        const current=composer.activePlacement();
+        return current?.id===latest!.id&&current.text.latin===latin;
+      }
+      function show():void{
+        const annotated=tokens.map(token=>{
+          const corrected=corrections.get(token.s);
+          const found=token.cands?.find(c=>c.lid===corrected?.lid&&c.morphos.includes(corrected.morpho));
+          return found&&corrected?{...token,sel:corrected,cands:[{...found,morphos:[corrected.morpho]}]}:token;
+        });
+        const proposals=proposeCollatinusGrammar(latin,annotated);
+        const current=composer.activePlacement();
+        const confirmed=current?.grammaticalSpans?.filter(span=>!span.reviewRequired)??[];
+        const unresolved=tokens.filter(token=>!token.sel).map(token=>token.w);
+        const ambiguous=tokens.filter(token=>(token.cands??[]).reduce((n,c)=>n+c.morphos.length,0)>1);
+        suggestions.replaceChildren(el('p','','Propuestas de Collatinus · '+proposals.length+
+          ' candidaturas · '+rejected.size+' descartadas'));
+        if(unresolved.length)suggestions.append(el('p','','Sin análisis: '+unresolved.join(', ')));
+        if(ambiguous.length){
+          const ambiguity=el('details');
+          ambiguity.append(el('summary','','Lecturas alternativas ('+ambiguous.length+')'));
+          for(const token of ambiguous){
+            const row=el('label','field',token.w);
+            const choose=el('select');choose.setAttribute('aria-label','Lectura de '+token.w+' en posición '+token.s);
+            const automatic=el('option','','Análisis de Collatinus');automatic.value='';choose.append(automatic);
+            const readings=(token.cands??[]).flatMap(c=>c.morphos.map(morpho=>({
+              lid:c.lid,morpho,label:c.lemma+' · '+(morpho||c.im),
+            })));
+            readings.forEach((reading,index)=>{
+              const option=el('option','',reading.label);option.value=String(index);choose.append(option);
+            });
+            const correction=corrections.get(token.s);
+            const index=readings.findIndex(reading=>reading.lid===correction?.lid&&reading.morpho===correction?.morpho);
+            choose.value=index===-1?'':String(index);
+            choose.addEventListener('change',()=>{
+              const reading=readings[Number(choose.value)];
+              if(choose.value&&reading)corrections.set(token.s,{lid:reading.lid,morpho:reading.morpho});
+              else corrections.delete(token.s);
+              remember();show();
+            });
+            row.append(choose);ambiguity.append(row);
+          }
+          suggestions.append(ambiguity);
+        }
+        const selectedProposals=new Map<CollatinusGrammarProposal,string>();
+        async function accept(selections:Map<CollatinusGrammarProposal,string>):Promise<void>{
+          if(!verifyText())throw Error('El pasaje cambió. Vuelve a analizarlo.');
+          const assignments=[...selections].map(([proposal,tagId])=>({
+            start:proposal.start,end:proposal.end,tagId,
+            ...(tagId===proposal.tagId?{evidence:{
+              engine:'Collatinus / instantánea integrada de Examinator2',
+              rule:'cuaderno-gramatica-v1:'+proposal.tagId,evidence:proposal.evidence,
+            }}:{}),
+          }));
+          if(!await composer.addGrammarSpans(assignments))throw Error('No se han guardado las etiquetas.');
+          await update();show();
+        }
+        const acceptSelected=button('Aceptar las seleccionadas',()=>accept(selectedProposals),'hbtn');
+        acceptSelected.disabled=true;
+        suggestions.append(acceptSelected);
+        for(const proposal of proposals){
+          const id=[proposal.start,proposal.end,proposal.tagId].join(':');
+          const row=el('details');
+          const accepted=confirmed.some(span=>span.startUtf16===proposal.start&&span.endUtf16===proposal.end
+            &&span.tagIds.includes(proposal.tagId));
+          const discarded=rejected.has(id);
+          row.append(el('summary','',latin.slice(proposal.start,proposal.end)+' · '+label(proposal.tagId)+
+            (accepted?' · Confirmada':discarded?' · Descartada':' · Pendiente')));
+          row.append(el('p','',proposal.evidence.join(' / ')));
+          if(proposal.alternatives.length)row.append(el('p','','Lecturas alternativas: '+proposal.alternatives.join(' / ')));
+          if(proposal.syntaxReview)row.append(el('p','hint','Requiere revisión sintáctica.'));
+          if(!accepted&&!discarded){
+            const choose=el('select');choose.setAttribute('aria-label','Etiqueta que se confirmará');
+            for(const tag of tags){
+              const option=el('option','',tag.label);option.value=tag.id;choose.append(option);
+            }
+            choose.value=proposal.tagId;
+            const check=el('input');check.type='checkbox';
+            const selectionLabel=el('label','','Seleccionar propuesta');selectionLabel.prepend(check);
+            function selectProposal():void{
+              if(check.checked)selectedProposals.set(proposal,choose.value);
+              else selectedProposals.delete(proposal);
+              acceptSelected.disabled=!selectedProposals.size;
+            }
+            check.addEventListener('change',selectProposal);choose.addEventListener('change',selectProposal);
+            row.append(choose,selectionLabel,button('Aceptar',
+              ()=>accept(new Map([[proposal,choose.value]])),'hbtn'),button('Descartar',()=>{
+              rejected.add(id);remember();show();
+            },'hbtn'));
+          }
+          suggestions.append(row);
+        }
+      }
+      if(!verifyText())throw Error('El pasaje cambió. Vuelve a analizarlo.');
+      show();
+    }catch(error){
+      suggestions.replaceChildren(el('p','','No se pudo analizar el pasaje. '+String(error)));
+    }finally{analyzing=false;}
+  }
   async function update():Promise<void>{
     await reload();
     const latest=composer.activePlacement();
     if(!latest||latest.id!==placement!.id)return;
-    panel.replaceChildren(renderGrammarEditor(latest,corpus.corpus,{
+    manual.replaceChildren(renderGrammarEditor(latest,corpus.corpus,{
       open:true,toggle:()=>{},notice,
       addSpan:composer.addGrammarSpan,removeSpan:composer.removeGrammarSpan,
       updated:update,
