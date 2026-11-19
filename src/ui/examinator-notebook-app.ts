@@ -54,6 +54,8 @@ const composer=createEditionPane({
   autoApply:true,
   autoVocabulary:false,
   findCorpusSource:async id=>(await loadCombinedCorpus()).texts.find(text=>text.id===id),
+  onEditGrammarTags:()=>openGrammarEditor(),
+  tagLabel:id=>allGrammarTags(corpus).find(tag=>tag.id===id)?.label??id,
   onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
 });
 const works=new Map<string,LibraryWork>();
