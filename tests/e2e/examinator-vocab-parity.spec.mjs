@@ -34,7 +34,7 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await page.getByRole('button',{name:'Desmarcar todas'}).click();
   expect(await page.locator('.edition-vocab-include:checked').count()).toBe(0);
-  await page.getByRole('button',{name:'Marcar todas'}).click();
+  await page.getByRole('button',{name:'Marcar todas',exact:true}).click();
   await expect(page.locator('.edition-vocab-include:checked')).not.toHaveCount(0);
   const idx=(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).findIndex(x=>x.startsWith('pœna'));
   expect(idx).toBeGreaterThanOrEqual(0);
