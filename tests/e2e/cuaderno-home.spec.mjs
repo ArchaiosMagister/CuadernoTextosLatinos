@@ -169,3 +169,26 @@ test('Editor: el banco filtra por dos etiquetas AND y conserva una sola aparici�
   await reopened.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
 });
+
+
+test('Banco del editor: modal sin desbordamiento en iPhone e iPad',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/examinator-cuadernos/');
+  page.once('dialog',dialog=>dialog.accept('Cuaderno móvil'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.original-bank-picker')).toBeVisible();
+  for(const width of [390,820]){
+    await page.setViewportSize({width,height:844});
+    const layout=await page.evaluate(()=>{
+      const rect=document.querySelector('.modal')?.getBoundingClientRect();
+      return {viewport:innerWidth,pageWidth:document.documentElement.scrollWidth,
+        left:rect?.left??-1,right:rect?.right??Number.POSITIVE_INFINITY};
+    });
+    expect(layout.pageWidth).toBeLessThanOrEqual(width+2);
+    expect(layout.left).toBeGreaterThanOrEqual(-2);
+    expect(layout.right).toBeLessThanOrEqual(width+2);
+  }
+  await modal.getByRole('button',{name:'Cerrar'}).click();
+});
