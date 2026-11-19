@@ -1,5 +1,5 @@
 import {
-  type EditorSessionV1, type EditableTextV1, type GrammarSpanV1,
+  type EditorSessionV1, type EditableTextV1, type GrammarAnchorV1,
   type MorphWordV1, type NotebookEditionV1, type QuestionV1,
   type QuestionWordSlotV1, type TextPlacementV1, type VocabularyEntryV1,
 } from './edition-model.js';
@@ -67,7 +67,7 @@ export function movePlacement(e:NotebookEditionV1,id:string,toIndex:number,at:st
   return validateEdition({...e,updatedAt:at,placements:next});
 }
 
-function reanchorGrammarSpan(span:GrammarSpanV1,previous:string,latin:string):GrammarSpanV1{
+function reanchorGrammarSpan<T extends GrammarAnchorV1>(span:T,previous:string,latin:string):T{
   if(span.reviewRequired)return span;
   if(latin.slice(span.startUtf16,span.endUtf16)===span.exact
     &&fingerprintForMark(latin,span.startUtf16,span.endUtf16)===span.textFingerprint)return span;
@@ -109,6 +109,7 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
       const marksInReview=new Set(editedText.markup.filter(m=>m.reviewRequired).map(m=>m.id));
       return {...p,text:editedText,
         ...(p.grammaticalSpans?{grammaticalSpans:spans}:{}),
+        ...(p.grammarReview?{grammarReview:p.grammarReview.map(item=>reanchorGrammarSpan(item,p.text.latin,newLatin))}:{}),
         questions:p.questions.map(q=>q.kind==='morphology'
         ? {...q,words:q.words.map(w=>marksInReview.has(w.markId)&&w.reviewState==='verified'
           ? {...w,reviewState:'needs-review' as const}:w)} : q)};

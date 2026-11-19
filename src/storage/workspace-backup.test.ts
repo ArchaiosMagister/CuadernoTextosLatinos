@@ -188,3 +188,18 @@ test('copia individual conserva toda la edición y rechaza un contenido modifica
   envelope.payload.placements[0]!.text.title='Alterado';
   await assert.rejects(readNotebookBackup(JSON.stringify(envelope)),/huella/);
 });
+
+test('la copia integral portátil conserva el banco histórico y el historial editorial',async()=>{
+  const ws=repo();
+  const saved=await fill(ws);
+  const historical=emptyCorpus();
+  historical.tags.push({id:'custom.temario',label:'Temario propio',kind:'custom',parentId:null});
+  historical.texts.push({id:'doc.temario',title:'Pasaje guardado',latin:'Roma antiqua erat.',
+    source:{author:'Eutropio',work:'Breviarium',reference:'1.1'},tagIds:['custom.temario'],createdAt:NOW,updatedAt:NOW});
+  const local=await ws.snapshot();
+  const {snapshot}=await readWorkspaceBackup(await createWorkspaceBackup(ws,date,historical));
+  assert.deepEqual(snapshot.corpus?.corpus,historical);
+  assert.deepEqual(snapshot.editions,[saved]);
+  assert.deepEqual(snapshot.history,local.history);
+  assert.deepEqual(await ws.snapshot(),local);
+});

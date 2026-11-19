@@ -1,3 +1,6 @@
+import { allGrammarTags, GRAMMAR_CATALOGUE } from '../core/grammar-tags.js';
+import { emptyCorpus, type CorpusV1, type GrammarTag } from '../core/model.js';
+import { validateCorpus } from '../core/validation.js';
 import { validateEdition } from '../core/edition-validation.js';
 import type { NotebookEditionV1 } from '../core/edition-model.js';
 import { validateWorkspaceSnapshot, WorkspaceConflictError, WorkspaceRepository,
@@ -59,9 +62,14 @@ function preview(snapshot: WorkspaceSnapshotV1, exportedAt: string): WorkspaceBa
   };
 }
 
-/** Snapshot coherente obtenido en una sola transacción readonly en los cuatro stores. */
-export async function createWorkspaceBackup(workspace: WorkspaceRepository, at = new Date()): Promise<string> {
-  const snapshot = validateWorkspaceSnapshot(await workspace.snapshot());
+/** El workspace se lee en una sola transacción y el banco histórico se incorpora a la copia portátil. */
+export async function createWorkspaceBackup(workspace: WorkspaceRepository, at = new Date(),
+  historical?:CorpusV1): Promise<string> {
+  const current=await workspace.snapshot();
+  const snapshot=validateWorkspaceSnapshot(historical?{
+    ...current,workspaceRevision:Math.max(current.workspaceRevision,1),
+    corpus:{revision:current.corpus?.revision??1,corpus:combineNotebookCorpora(current.corpus?.corpus??emptyCorpus(),historical)},
+  }:current);
   const exportedAt = at.toISOString();
   const sha256 = await hash(canonical(snapshot));
   const json = JSON.stringify({
@@ -147,10 +155,43 @@ export async function restoreWorkspaceBackup(workspace:WorkspaceRepository,json:
 
 const NOTEBOOK_BACKUP_FORMAT = 'cuaderno-textos-latinos-notebook';
 
-export async function createNotebookBackup(edition: NotebookEditionV1): Promise<string> {
-  const payload = validateEdition(edition);
+/** La copia restaurada amplía el banco del dispositivo respetando sus entradas históricas. */
+export function combineNotebookCorpora(editorial:CorpusV1,historical:CorpusV1):CorpusV1{
+  return {
+    schemaVersion:historical.schemaVersion,
+    texts:[...new Map([...editorial.texts,...historical.texts].map(text=>[text.id,text])).values()],
+    tags:[...new Map([...editorial.tags,...historical.tags].map(tag=>[tag.id,tag])).values()],
+    notebooks:[...new Map([...editorial.notebooks,...historical.notebooks].map(book=>[book.id,book])).values()],
+  };
+}
+
+function dependencySubset(edition:NotebookEditionV1, corpus:CorpusV1):CorpusV1 {
+  const sourceIds=new Set(edition.placements.flatMap(p=>p.source.kind==='corpus'&&p.source.sourceId
+    ?[p.source.sourceId]:[]));
+  const texts=corpus.texts.filter(text=>sourceIds.has(text.id));
+  const catalogue=new Map(allGrammarTags(corpus).map(tag=>[tag.id,tag]));
+  const tags=new Map<string,GrammarTag>();
+  function include(id:string):void {
+    if(tags.has(id))return;
+    const tag=catalogue.get(id);
+    if(!tag)throw new WorkspaceBackupError('Falta la definición de la etiqueta '+id+'.');
+    tags.set(id,tag);
+    if(tag.parentId)include(tag.parentId);
+  }
+  for(const text of texts)for(const id of text.tagIds)include(id);
+  for(const placement of edition.placements){
+    for(const id of placement.grammaticalTagIds)include(id);
+    for(const span of placement.grammaticalSpans??[])for(const id of span.tagIds)include(id);
+  }
+  return validateCorpus({...emptyCorpus(),texts,tags:[...tags.values()]});
+}
+
+export async function createNotebookBackup(edition: NotebookEditionV1, corpus?:CorpusV1): Promise<string> {
+  const valid = validateEdition(edition);
+  const payload = corpus ? {edition:valid, dependencies:dependencySubset(valid,corpus)} : valid;
   const json = JSON.stringify({
-    format: NOTEBOOK_BACKUP_FORMAT, backupVersion: 1, sha256: await hash(JSON.stringify(payload)), payload,
+    format: NOTEBOOK_BACKUP_FORMAT, backupVersion: corpus ? 2 : 1,
+    sha256: await hash(JSON.stringify(payload)), payload,
   });
   if (new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
     throw new WorkspaceBackupError('La copia del cuaderno supera 64 MiB.');
@@ -158,19 +199,74 @@ export async function createNotebookBackup(edition: NotebookEditionV1): Promise<
   return json;
 }
 
-export async function readNotebookBackup(json: string): Promise<{edition: NotebookEditionV1; fingerprint: string} | null> {
+type NotebookBackup = {edition:NotebookEditionV1; fingerprint:string; dependencies?:CorpusV1};
+
+export async function readNotebookBackup(json: string): Promise<NotebookBackup | null> {
   if (new Blob([json]).size > WORKSPACE_BACKUP_MAX_CHARACTERS) {
     throw new WorkspaceBackupError('La copia supera 64 MiB.');
   }
   const envelope = JSON.parse(json);
   if (envelope?.format !== NOTEBOOK_BACKUP_FORMAT) return null;
-  if (envelope.backupVersion !== 1) {
+  if (envelope.backupVersion !== 1 && envelope.backupVersion !== 2) {
     throw new WorkspaceBackupError('Versión de la copia del cuaderno incompatible.');
   }
-  const edition = validateEdition(envelope.payload);
-  const fingerprint = await hash(JSON.stringify(edition));
-  if (fingerprint !== envelope.sha256) {
-    throw new WorkspaceBackupError('Versión o huella de la copia del cuaderno inválida.');
+  const version2=envelope.backupVersion===2;
+  const edition=validateEdition(version2?envelope.payload?.edition:envelope.payload);
+  const dependencies=version2?validateCorpus(envelope.payload?.dependencies):undefined;
+  const payload=dependencies?{edition,dependencies}:edition;
+  const fingerprint=await hash(JSON.stringify(payload));
+  if(fingerprint!==envelope.sha256)throw new WorkspaceBackupError('Versión o huella de la copia del cuaderno inválida.');
+  if(dependencies&&JSON.stringify(dependencySubset(edition,dependencies))!==JSON.stringify(dependencies))
+    throw new WorkspaceBackupError('La copia contiene dependencias ajenas al cuaderno.');
+  return {edition,fingerprint,...(dependencies?{dependencies}:{})};
+}
+
+/** Integra las dependencias en el corpus editorial y conserva el banco histórico. */
+export function importNotebookDependencies(edition:NotebookEditionV1, dependencies:CorpusV1,
+  local:CorpusV1, historical:CorpusV1):{edition:NotebookEditionV1;corpus:CorpusV1}{
+  const corpus=structuredClone(local);
+  const knownTags=new Map([...local.tags,...historical.tags,...GRAMMAR_CATALOGUE].map(t=>[t.id,t]));
+  const knownTexts=new Map([...local.texts,...historical.texts].map(t=>[t.id,t]));
+  const incomingTags=new Map(dependencies.tags.map(tag=>[tag.id,tag]));
+  const tagIds=new Map<string,string>();
+  function resolveTag(id:string):string{
+    const mapped=tagIds.get(id);
+    if(mapped)return mapped;
+    const tag=incomingTags.get(id);
+    if(!tag)return id;
+    const item={...tag,parentId:tag.parentId?resolveTag(tag.parentId):null};
+    const existing=knownTags.get(id);
+    if(existing&&JSON.stringify(existing)!==JSON.stringify(item)){
+      if(item.kind==='catalogue')throw new WorkspaceBackupError('Definición de catálogo incompatible: '+id);
+      item.id='custom.'+crypto.randomUUID();
+    }
+    if(!knownTags.has(item.id)){
+      corpus.tags.push(item);
+      knownTags.set(item.id,item);
+    }else if(!corpus.tags.some(t=>t.id===item.id)){
+      // Los textos editoriales necesitan sus definiciones dentro de su propio corpus.
+      corpus.tags.push(item);
+    }
+    tagIds.set(id,item.id);
+    return item.id;
   }
-  return {edition, fingerprint};
+  for(const {id} of dependencies.tags)resolveTag(id);
+  const sourceIds=new Map<string,string>();
+  for(const text of dependencies.texts){
+    const item={...text,tagIds:text.tagIds.map(resolveTag)};
+    const existing=knownTexts.get(text.id);
+    if(existing&&JSON.stringify(existing)!==JSON.stringify(item))item.id='doc.'+crypto.randomUUID();
+    if(!corpus.texts.some(t=>t.id===item.id))corpus.texts.push(item);
+    sourceIds.set(text.id,item.id);
+  }
+  return {corpus,edition:{...edition,placements:edition.placements.map(p=>({
+    ...p,
+    source:{...p.source,sourceId:p.source.kind==='corpus'&&p.source.sourceId
+      ?sourceIds.get(p.source.sourceId)??p.source.sourceId:p.source.sourceId},
+    grammaticalTagIds:p.grammaticalTagIds.map(resolveTag),
+    ...(p.grammaticalSpans?{grammaticalSpans:p.grammaticalSpans.map(span=>({
+      ...span,tagIds:span.tagIds.map(resolveTag),
+      ...(span.evidence?{evidence:span.evidence.map(item=>({...item,tagId:resolveTag(item.tagId)}))}:{}),
+    }))}:{}),
+  }))}};
 }

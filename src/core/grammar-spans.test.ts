@@ -56,3 +56,15 @@ test('se rechaza anclaje falso sin revisión y etiquetas duplicadas',()=>{
   assert.throws(()=>validateEdition({...e,placements:[{...e.placements[0]!,
     grammaticalSpans:[{...span,exact:'Caesar',tagIds:['gram.oracion','gram.oracion']}]}]}),/repetir/);
 });
+
+test('una decisión de Collatinus conserva las coordenadas verificables tras editar el pasaje',()=>{
+  const e=fixture();
+  const decision={kind:'reading',lid:15,morpho:'lectura docente',startUtf16:0,endUtf16:6,
+    exact:'Caesar',textFingerprint:fingerprintForMark(latin,0,6),reviewRequired:false};
+  const annotated=validateEdition({...e,placements:[{...e.placements[0]!,grammarReview:[decision]}]});
+  const moved=editPlacementText(annotated,'p.1','latin','Æneas. '+latin,time);
+  assert.equal(moved.placements[0]!.grammarReview![0]!.startUtf16,7);
+  assert.equal(moved.placements[0]!.grammarReview![0]!.reviewRequired,false);
+  const changed=editPlacementText(moved,'p.1','latin',latin.replace('Caesar','Cicero'),time);
+  assert.equal(changed.placements[0]!.grammarReview![0]!.reviewRequired,true);
+});

@@ -20,7 +20,7 @@ export function renderGrammarEditor(placement:TextPlacementV1, corpus:CorpusV1, 
   saveTags:(ids:string[])=>Promise<void>;
   addCustomTag:(label:string)=>Promise<void>;
   addSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
-  removeSpan:(id:string)=>Promise<boolean>;
+  removeSpan:(id:string,tagId?:string)=>Promise<boolean>;
   updated:()=>Promise<void>;
   notice:(message:string,error?:boolean)=>void;
 }):HTMLElement{
@@ -104,6 +104,19 @@ export function renderGrammarEditor(placement:TextPlacementV1, corpus:CorpusV1, 
       const names=span.tagIds.map(id=>all.find(t=>t.id===id)?.label??id);
       row.append(el('span','',span.exact+' · '+names.join(', ')+
         (span.reviewRequired?' · Revisar anclaje':'')));
+      if(span.tagIds.length>1){
+        const tagToRemove=el('select','field-control');
+        tagToRemove.setAttribute('aria-label','Etiqueta que quitar de «'+span.exact+'»');
+        span.tagIds.forEach((id,index)=>{
+          const option=el('option','',names[index]);
+          option.value=id;tagToRemove.append(option);
+        });
+        row.append(tagToRemove,button('Quitar etiqueta',async()=>{
+          if(!await controls.removeSpan(span.id,tagToRemove.value))return;
+          await controls.updated();
+          notice('Etiqueta retirada del fragmento.');
+        }));
+      }
       row.append(button('Quitar',async()=>{
         if(!await controls.removeSpan(span.id))return;
         await controls.updated();

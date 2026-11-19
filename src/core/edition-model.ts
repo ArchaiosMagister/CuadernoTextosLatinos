@@ -84,6 +84,7 @@ export interface ChoiceOptionV1 {
   statement: EditableFieldV1;
   slots: QuestionWordSlotV1[];
   preverbBaseIds?: [string, string];
+  preverbBasesProtected?: boolean;
 }
 
 export type QuestionKindV1 = 'translation' | 'syntax' | 'morphology' | 'choice';
@@ -147,16 +148,23 @@ export interface GrammarSpanEvidenceV1 {
   evidence: string[];
 }
 
-export interface GrammarSpanV1 {
-  id: EntityId;
+export interface GrammarAnchorV1 {
   startUtf16: number;
   endUtf16: number;
   exact: string;
   textFingerprint: string;
-  tagIds: string[];
   reviewRequired: boolean;
+}
+
+export interface GrammarSpanV1 extends GrammarAnchorV1 {
+  id: EntityId;
+  tagIds: string[];
   evidence?: GrammarSpanEvidenceV1[];
 }
+
+export type GrammarReviewDecisionV1 = GrammarAnchorV1 & (
+  {kind:'rejected';tagId:string} | {kind:'reading';lid:number;morpho:string}
+);
 
 export interface TextPlacementV1 {
   id: EntityId;
@@ -170,6 +178,7 @@ export interface TextPlacementV1 {
   grammaticalTagIds: string[];
   /** Omisión deliberada en documentos anteriores a las etiquetas de fragmento. */
   grammaticalSpans?: GrammarSpanV1[];
+  grammarReview?: GrammarReviewDecisionV1[];
   reviewFlags: ReviewFlagV1[];
 }
 

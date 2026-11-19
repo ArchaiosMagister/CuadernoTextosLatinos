@@ -24,7 +24,7 @@ test('Collatinus propone una pasiva y guarda únicamente la selección confirmad
   await expect(modal.getByText('legendus · Gerundivo',{exact:false})).toHaveCount(0);
 });
 
-test('copia individual conserva las etiquetas y la restauración repetida conserva una sola copia',async({page})=>{
+test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar el cuaderno',async({page,browser})=>{
   await page.goto('/examinator-cuadernos/');
   const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
   await expect(selector).toBeVisible();
@@ -32,27 +32,71 @@ test('copia individual conserva las etiquetas y la restauración repetida conser
   await page.locator('#btnNew').click();
   await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal').last();
-  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est.');
+  await modal.getByRole('textbox',{name:'Título'}).fill('Pasaje transportable');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Amatus est. Loquitur.');
   await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await page.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
+  await modal.getByRole('textbox',{name:'Nueva etiqueta gramatical'}).fill('Pasiva del temario');
+  await modal.getByRole('button',{name:'Añadir',exact:true}).click();
+  await expect(modal.getByText('Etiquetas gramaticales (1)',{exact:true})).toBeVisible();
   await modal.getByText('Etiquetar fragmentos del texto (0)',{exact:true}).click();
   await modal.getByRole('combobox',{name:'Construcción del fragmento'}).selectOption('gram.voz.pasiva');
   await modal.getByRole('textbox',{name:'Seleccionar fragmento latino'}).evaluate(area=>area.setSelectionRange(0,10));
   await modal.getByRole('button',{name:'Etiquetar selección'}).click();
   await expect(modal.getByText('Etiquetar fragmentos del texto (1)',{exact:true})).toBeVisible();
+  await modal.getByText('Etiquetar fragmentos del texto (1)',{exact:true}).click();
+  await modal.getByRole('combobox',{name:'Construcción del fragmento'}).selectOption('gram.formas');
+  await modal.getByRole('textbox',{name:'Seleccionar fragmento latino'}).evaluate(area=>area.setSelectionRange(0,10));
+  await modal.getByRole('button',{name:'Etiquetar selección'}).click();
+  await modal.getByText('Etiquetar fragmentos del texto (1)',{exact:true}).click();
+  await modal.getByRole('combobox',{name:/Etiqueta que quitar/}).selectOption('gram.formas');
+  await modal.getByRole('button',{name:'Quitar etiqueta',exact:true}).click();
+  await modal.getByText('Etiquetar fragmentos del texto (1)',{exact:true}).click();
+  await expect(modal.locator('.notebook-fragment-row')).toContainText('Amatus est · Voz pasiva');
+  await expect(modal.getByRole('combobox',{name:/Etiqueta que quitar/})).toHaveCount(0);
+  await modal.getByRole('button',{name:'Analizar etiquetas con Collatinus'}).click();
+  await modal.getByText(/Loquitur · .* · Pendiente/).click();
+  const candidate=modal.locator('details').filter({has:page.getByText(/Loquitur · .* · Pendiente/)});
+  await candidate.getByRole('button',{name:'Descartar',exact:true}).click();
+  await expect(modal.getByText(/Loquitur · .* · Descartada/)).toBeVisible();
   await modal.getByRole('button',{name:'Cerrar'}).click();
   await page.getByText('Copias de seguridad',{exact:true}).click();
   const [download]=await Promise.all([
     page.waitForEvent('download'),page.getByRole('button',{name:'Copia del cuaderno',exact:true}).click(),
   ]);
   const path=await download.path();
-  page.once('dialog',dialog=>dialog.accept());
-  await page.locator('#editor .card input[type=file]').setInputFiles(path);
-  await expect(selector.locator('option')).toHaveCount(3);
-  await page.locator('#editor .card input[type=file]').setInputFiles(path);
-  await expect(page.getByText('Esta copia ya se había importado.',{exact:true})).toBeVisible();
-  await expect(selector.locator('option')).toHaveCount(3);
-  await page.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
-  await expect(modal.getByText('Etiquetar fragmentos del texto (1)',{exact:true})).toBeVisible();
+  const target=await browser.newContext();
+  try{
+    const restored=await target.newPage();
+    await restored.goto('/examinator-cuadernos/');
+    const restoredSelector=restored.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
+    await expect(restoredSelector.locator('option')).toHaveCount(1);
+    const file=restored.locator('#editor .card input[type=file]');
+    restored.once('dialog',dialog=>dialog.accept());
+    await file.setInputFiles(path);
+    await expect(restoredSelector.locator('option:checked')).toContainText('Cuaderno de respaldo');
+    await file.setInputFiles(path);
+    await expect(restored.getByText('Esta copia ya se había importado.',{exact:true})).toBeVisible();
+    await expect(restoredSelector.locator('option')).toHaveCount(2);
+    await restored.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
+    const restoredModal=restored.locator('.modal').last();
+    await expect(restoredModal.getByText('Etiquetar fragmentos del texto (1)',{exact:true})).toBeVisible();
+    await restoredModal.getByText('Personalizadas',{exact:true}).click();
+    await expect(restoredModal.getByLabel('Pasiva del temario',{exact:true})).toBeChecked();
+    await restoredModal.getByRole('button',{name:'Analizar etiquetas con Collatinus'}).click();
+    await expect(restoredModal.getByText(/Loquitur · .* · Descartada/)).toBeVisible();
+    await restoredModal.getByRole('button',{name:'Cerrar'}).click();
+
+    await restoredSelector.selectOption('');
+    await expect(restoredSelector.locator('option:checked')).toHaveText('Elige un cuaderno');
+    restored.once('dialog',dialog=>dialog.accept('Cuaderno nuevo'));
+    await restored.locator('#btnNew').click();
+    await restored.getByRole('button',{name:'Banco propio'}).click();
+    await restored.getByRole('button',{name:'Pasaje transportable',exact:true}).click();
+    await expect(restored.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  }finally{
+    await target.close();
+  }
+  await expect(selector.locator('option')).toHaveCount(2);
 });
