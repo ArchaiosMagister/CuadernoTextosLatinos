@@ -392,3 +392,23 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   #editor .cuaderno-home-card-actions button,
   #editor .cuaderno-home-actions button{min-height:42px;}
 }
+
+/* La cabecera completa pertenece al editor, no a la pantalla inicial.
+   Al ocultar acciones redundantes evitamos que la fila original
+   (botones con white-space: nowrap) ensanche el viewport del iPad. */
+@media screen{
+  body[data-cuaderno-home='true'] header #btnNew,
+  body[data-cuaderno-home='true'] header #btnOpen,
+  body[data-cuaderno-home='true'] header #btnSave,
+  body[data-cuaderno-home='true'] header #btnLib,
+  body[data-cuaderno-home='true'] header #btnLists,
+  body[data-cuaderno-home='true'] header #btnSettings,
+  body[data-cuaderno-home='true'] header #btnDocx,
+  body[data-cuaderno-home='true'] header #btnPdf,
+  body[data-cuaderno-home='true'] header .sep{display:none!important;}
+  body[data-cuaderno-home='true'] header{min-width:0;max-width:100%;}
+  body[data-cuaderno-home='true'] .cuaderno-home,
+  body[data-cuaderno-home='true'] .cuaderno-home-bank,
+  body[data-cuaderno-home='true'] .cuaderno-home-bank-list{min-width:0;}
+  body[data-cuaderno-home='true'] .cuaderno-home{grid-template-columns:minmax(0,1fr);}
+}
