@@ -8,8 +8,7 @@ test('PR C: cinco menús compactos, controles uniformes y sin desbordes en escri
   await expect(page.locator('#editor .card')).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de revisión visual'));
   await page.locator('#btnNew').click();
-  await page.locator('#btnLists').click();
-  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal');
   await modal.getByRole('textbox',{name:'Título'}).fill('Texto de prueba visual');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caelum et poeta, poena et proelium.');
