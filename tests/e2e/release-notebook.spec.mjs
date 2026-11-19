@@ -102,7 +102,6 @@ test('Cuaderno experimental: copia voluntaria y una confirmación para eliminar'
   await page.reload();
   await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   await expect(page.locator('.cuaderno-home-card')).toHaveCount(1);
-  await page.locator('#btnOpen').click();
-  await expect(page.locator('.original-open-row')).toHaveCount(1);
-  await expect(page.locator('.original-open-row')).toContainText('Conservar');
+  await expect(page.locator('.cuaderno-home-card')).toHaveCount(1);
+  await expect(page.locator('.cuaderno-home-card')).toContainText('Conservar');
 });
