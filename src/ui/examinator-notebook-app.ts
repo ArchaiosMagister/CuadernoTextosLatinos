@@ -570,11 +570,16 @@ function tagBankText(text:LatinText):void{
   M.modal('Etiquetas de «'+text.title+'»',panel,[{label:'Cancelar'},
     {label:'Guardar etiquetas',primary:true,onclick:async()=>{
       await writeSource(async()=>{
-        const saved=await repo.load();
-        if(!saved.corpus.texts.some(t=>t.id===text.id))
-          throw Error('La fuente ya no está en el banco editable.');
-        const next=attachGrammarTags(saved.corpus,text.id,[...selected]);
-        await repo.save(next,saved.revision);
+        let found=false;
+        for(const repository of [repo,workspace]){
+          const saved=await (repository===repo?repo.load():workspace.loadCorpus());
+          if(!saved.corpus.texts.some(t=>t.id===text.id))continue;
+          const next=attachGrammarTags(saved.corpus,text.id,[...selected],allGrammarTags(corpus));
+          if(repository===repo)await repo.save(next,saved.revision);
+          else await workspace.saveCorpus(next,saved.revision);
+          found=true;
+        }
+        if(!found)throw Error('La fuente ya no está en el banco editable.');
       });
       await reload();render();M.toast('Etiquetas de la fuente guardadas.');
     }}]);
@@ -999,15 +1004,10 @@ function renderHome():HTMLElement{
   search.setAttribute('aria-label','Buscar en banco de textos propios');
   bank.append(search);
   const catalogue=allGrammarTags(corpus);
-  const assignments=new Map<string,Set<string>>();
-  for(const text of corpus.texts)assignments.set(text.id,new Set(text.tagIds));
-  for(const notebook of notebooks)for(const placement of notebook.edition.placements){
-    const id=placement.source.sourceId;
-    if(!id||!assignments.has(id))continue;
-    const ids=assignments.get(id)!;
-    for(const tag of placementGrammarTags(placement))ids.add(tag);
-  }
-  const idsFor=(id:string):string[]=>[...(assignments.get(id)??[])];
+  // Los filtros del banco describen la fuente; las etiquetas de una aparición
+  // en otro cuaderno no se propagan silenciosamente a la fuente.
+  const sourceTags=new Map(corpus.texts.map(text=>[text.id,text.tagIds]));
+  const idsFor=(id:string):string[]=>sourceTags.get(id)??[];
   const listing=el('div','cuaderno-home-bank-list');
   function appendTextRows(target:HTMLElement,texts:typeof corpus.texts):void{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
