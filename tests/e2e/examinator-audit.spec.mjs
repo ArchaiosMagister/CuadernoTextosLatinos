@@ -43,6 +43,8 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
     return {first:first.id,second:second.id,word:first.value};
   });
   await page.reload();
+  await page.locator('.cuaderno-home-card').filter({hasText:'Repeticiones'})
+    .getByRole('button',{name:'Abrir'}).click();
   await expect(page.locator('.edition-repetition-notice')).toContainText('Repeticiones:');
   const audit=page.getByText('Revisar cuaderno',{exact:true});
   await audit.click();
