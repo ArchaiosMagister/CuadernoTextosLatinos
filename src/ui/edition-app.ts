@@ -834,9 +834,18 @@ export function createEditionPane(options:{
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
     if(review)review.textContent='Word numera las páginas físicas. En Safari, el PDF por impresión puede salir sin numeración 1 | N: si la necesitas, abre el DOCX en Pages y expórtalo como PDF. Comprueba los saltos en textos largos.';
   }
+  let vocabularyAnalysisTimer:number|undefined;
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
       apply((e,at)=>editPlacementText(e,p.id,key,key==='latin'||key==='title'?value:value.trim()||null,at));
+      if(key==='latin'&&options.onAnalyzeVocabulary){
+        window.clearTimeout(vocabularyAnalysisTimer);
+        const editionId=draft?.id;
+        vocabularyAnalysisTimer=window.setTimeout(()=>{
+          if(draft?.id===editionId&&draft?.placements.some(x=>x.id===p.id&&x.text.latin===value))
+            void refreshCollatinusVocabulary(p,true);
+        },700);
+      }
     };
     const latin=textField('Texto latino',p.text.latin,mutate('latin'),true);
     panel.append(textField('Título del texto',p.text.title,mutate('title')),
@@ -1081,7 +1090,7 @@ export function createEditionPane(options:{
   /** Reanalizar el texto completo con Collatinus sin destruir correcciones,
    * identificadores, orden ni selección individual del cuaderno.
    */
-  async function refreshCollatinusVocabulary(p:TextPlacementV1):Promise<void>{
+  async function refreshCollatinusVocabulary(p:TextPlacementV1,fromTextEdit=false):Promise<void>{
     if(!options.onAnalyzeVocabulary){
       prepareVocabulary(p);
       return;
@@ -1094,7 +1103,7 @@ export function createEditionPane(options:{
     setMessage('Analizando vocabulario con Collatinus…');
     try{
       const entries=await options.onAnalyzeVocabulary(latin,qty);
-      if(!Array.isArray(entries)||entries.length===0){
+      if(!Array.isArray(entries)||(!fromTextEdit&&entries.length===0)){
         throw new Error('Collatinus no ha proporcionado lemas para el texto; comprueba el análisis.');
       }
       if(!draft||draft.id!==editionId||
@@ -1109,6 +1118,7 @@ export function createEditionPane(options:{
         placements:draft.placements.map(x=>{
           if(x.id!==p.id)return x;
           const old=[...x.vocabulary],seen=new Set<string>();
+          const retained=new Set<string>();
           let order=old.reduce((max,v)=>Math.max(max,v.order),-1)+1;
           const mode=x.vocabularySelectionMode??'elegir';
           for(const candidate of entries){
@@ -1122,16 +1132,18 @@ export function createEditionPane(options:{
               .some(k=>k===key||k===headKey||v.origin==='manual'&&formKeys.has(k)));
             if(i>=0){
               const previous=old[i]!;
+              retained.add(previous.id);
               if(previous.origin==='generated'&&!previous.locked){
                 old[i]={...previous,lemma,headword,meaning:candidate.meaning?.trim()||null,
                   note:candidate.note?.trim()||null,glossesSeparated:candidate.glossesSeparated===true,
                   collatinusSource:true,collatinusProper:Boolean(candidate.proper),included:previous.included};
                 refreshed++;
-              }else if(mode==='todo')old[i]={...previous,included:true};
+              }
               continue;
             }
             added++;
-            old.push({id:freshId('voc'),lemma,headword,
+            const id=freshId('voc');retained.add(id);
+            old.push({id,lemma,headword,
               meaning:candidate.meaning?.trim()||null,note:candidate.note?.trim()||null,
               included:mode==='todo'||Boolean(candidate.proper),
               order:order++,provenance:null,reviewState:'needs-review',
@@ -1139,12 +1151,13 @@ export function createEditionPane(options:{
               glossesSeparated:candidate.glossesSeparated===true,collatinusSource:true,
               collatinusProper:Boolean(candidate.proper)});
           }
-          return {...x,vocabulary:old};
+          return {...x,vocabulary:fromTextEdit?old.filter(v=>
+            v.origin!=='generated'||v.locked||!v.collatinusSource||retained.has(v.id)):old};
         }),
       });
       apply((_edition,at)=>({...nextEdition,updatedAt:at}));
       const focus=document.activeElement;
-      if(focus instanceof HTMLElement&&focus.closest('.edition-vocab-add'))paintPreview();
+      if(focus instanceof HTMLElement&&focus.closest('.edition-vocab-add,.edition-menu-text textarea'))paintPreview();
       else paint();
       setMessage('Collatinus: '+added+' entradas nuevas, '+refreshed+
         ' enunciados actualizados. Las correcciones manuales se conservan.');

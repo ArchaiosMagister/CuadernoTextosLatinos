@@ -38,9 +38,11 @@ function documentXml(){
         {text:'tractum est',under:true},', Romani iam ',
         {text:'clarissima',under:true},' gloria ',
         {text:'noti',under:true},', legatos miserunt auxilia promittentes ',
-        {text:'ei',under:true},'.']),
+        {text:'ei',under:true},' in Aegyptum et Syriam.']),
       p(['Vocabulario']),
       p(['Ægyptus, −ī: ‘Egipto’']),
+      p(['Aegyptus, −ī: ‘Egipto’']),
+      p(['Syria, −ae: ‘Siria’']),
       p(['grātĭās ăgĕre: “dar las gracias”']),
       p(['Traducción del texto. (4p.)']),
       p(['Análisis sintáctico del texto. (1p.)']),
@@ -63,13 +65,17 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(documentXml())});
   await expect(page.getByRole('button',{name:'Incorporar al cuaderno'})).toBeVisible();
-  await expect(page.getByText('4 subrayados · 2 entradas reales de vocabulario.')).toBeVisible();
+  await expect(page.getByText('4 subrayados · 4 entradas reales de vocabulario.')).toBeVisible();
   await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
   await expect(page.locator('.edition-paper-title')).toHaveText(
     'Los romanos envían legados a Ptolomeo prometiéndole ayuda',{timeout:30000});
   await expect(page.locator('.edition-paper-source')).toContainText('Eutropio');
   await expect(page.locator('.edition-underlined')).toHaveCount(4);
-  await expect(page.locator('.edition-vocabulary-line')).toHaveCount(2);
+  await page.getByRole('button',{name:'Vocabulario',exact:true}).click();
+  await expect.poll(()=>page.locator('.edition-vocab-row').count(),{timeout:110000}).toBeGreaterThan(3);
+  const vocabularyLines=page.locator('.edition-vocabulary-line');
+  await expect(vocabularyLines.filter({hasText:/Egipto/i})).toHaveCount(1);
+  await expect(vocabularyLines.filter({hasText:/Siria/i})).toHaveCount(1);
   const edition=page.locator('.edition-paper').first();
   await expect(edition).toContainText('Latinismos');
   await expect(edition.locator('.edition-choice-options > li')).toHaveCount(4);
