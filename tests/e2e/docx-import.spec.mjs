@@ -213,7 +213,7 @@ test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabul
   await page.goto('/examinator-cuadernos/');
   const bank=page.locator('.cuaderno-home-bank');
   const chooser=page.waitForEvent('filechooser');
-  await bank.getByRole('button',{name:'Importar Word'}).click();
+  await bank.getByRole('button',{name:'Importar Word al banco'}).click();
   await (await chooser).setFiles([
     {name:'primero.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       buffer:sampleDocx(documentXml())},
