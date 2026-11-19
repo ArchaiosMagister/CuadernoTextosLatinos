@@ -558,9 +558,7 @@ function openOwnTexts():void{
     const filters=Array.from(tagFilter.selectedOptions,option=>option.value);
     const matching=corpus.texts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle)
-      && (matchesGrammarFilters(t.tagIds,filters,tags) || notebooks.some(notebook=>
-        notebook.edition.placements.some(placement=>placement.source.sourceId===t.id
-          && matchesGrammarFilters(placementGrammarTags(placement),filters,tags)))));
+      && matchesGrammarFilters(t.tagIds,filters,tags));
     for(const t of matching){
       const row=el('article','original-own-row');
       row.append(el('strong','',t.title));
@@ -1036,15 +1034,9 @@ function renderHome():HTMLElement{
   search.setAttribute('aria-label','Buscar en banco de textos propios');
   bank.append(search);
   const catalogue=allGrammarTags(corpus);
-  const assignments=new Map<string,Set<string>>();
-  for(const text of corpus.texts)assignments.set(text.id,new Set(text.tagIds));
-  for(const notebook of notebooks)for(const placement of notebook.edition.placements){
-    const id=placement.source.sourceId;
-    if(!id||!assignments.has(id))continue;
-    const ids=assignments.get(id)!;
-    for(const tag of placementGrammarTags(placement))ids.add(tag);
-  }
-  const idsFor=(id:string):string[]=>[...(assignments.get(id)??[])];
+  // El banco cuenta exclusivamente etiquetas de la FUENTE.
+  // Las asignadas en un cuaderno pertenecen a esa aparición independiente.
+  const idsFor=(id:string):string[]=>[...(corpus.texts.find(t=>t.id===id)?.tagIds??[])];
   const listing=el('div','cuaderno-home-bank-list');
   function appendTextRows(target:HTMLElement,texts:typeof corpus.texts):void{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
