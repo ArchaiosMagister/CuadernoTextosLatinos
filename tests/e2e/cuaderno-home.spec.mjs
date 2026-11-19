@@ -28,7 +28,7 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   await page.getByRole('button',{name:'Volver a mis cuadernos'}).click();
   const card=page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno en tarjetas'});
   await expect(card).toBeVisible();
-  await expect(card).toContainText('1 textos');
+  await expect(card).toContainText('1 texto');
   const backup=page.waitForEvent('download');
   await card.getByRole('button',{name:'Hacer copia'}).click();
   expect((await backup).suggestedFilename()).toMatch(/^copia-cuaderno-.*\.json$/);
