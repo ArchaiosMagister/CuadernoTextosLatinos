@@ -1562,11 +1562,11 @@ export function createEditionPane(options:{
     panel.append(list);
     const advanced=experimental?node('details','edition-notebook-advanced'):null;
     if(advanced){
-      const review=node('details','edition-notebook-review');
-      review.append(node('summary','','Revisar repeticiones de palabras y preguntas'));
-      review.append(node('p','hint','Comprueba las repeticiones que el banco no haya podido evitar.'));
-      review.append(academics.renderNotebookAudit());
-      panel.append(review);
+      panel.append(node('p','hint','Auditoría de repeticiones: abre «Revisar cuaderno» para '+
+        'verificar palabras repetidas y posibles alternativas.'));
+      // El botón de auditoría debe estar siempre a la vista. Anidarlo en
+      // otro <details> impedía acceder a él en iPad.
+      panel.append(academics.renderNotebookAudit());
       advanced.append(node('summary','','Opciones avanzadas: importar desde cuadernos antiguos'));
       advanced.append(node('p','hint','Las opciones siguientes corresponden a cuadernos de una versión anterior. '+
         'Para añadir textos del banco actual, utiliza «Banco propio» encima del editor.'));
