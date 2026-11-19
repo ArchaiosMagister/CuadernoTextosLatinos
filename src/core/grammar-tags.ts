@@ -1,4 +1,5 @@
 import { foldLatin } from './library.js';
+import type { TextPlacementV1 } from './edition-model.js';
 import type { CorpusV1, GrammarTag } from './model.js';
 import { validateCorpus } from './validation.js';
 
@@ -32,6 +33,14 @@ export const GRAMMAR_CATALOGUE: readonly GrammarTag[] = [
   {id:'gram.inf.pasivo',label:'Infinitivo pasivo',kind:'catalogue',parentId:'gram.inf.forma'},
   {id:'gram.voz.pasiva',label:'Voz pasiva',kind:'catalogue',parentId:'gram.formas'},
   {id:'gram.deponente',label:'Verbo deponente',kind:'catalogue',parentId:'gram.formas'},
+  {id:'gram.gerundio',label:'Gerundio',kind:'catalogue',parentId:'gram.formas'},
+  {id:'gram.gerundivo',label:'Gerundivo',kind:'catalogue',parentId:'gram.formas'},
+  {id:'gram.subjuntivo',label:'Subjuntivo',kind:'catalogue',parentId:'gram.formas'},
+  {id:'gram.part.forma',label:'Forma del participio',kind:'catalogue',parentId:'gram.formas'},
+  {id:'gram.part.presente.activo',label:'Participio de presente activo',kind:'catalogue',parentId:'gram.part.forma'},
+  {id:'gram.part.perfecto.pasivo',label:'Participio de perfecto pasivo',kind:'catalogue',parentId:'gram.part.forma'},
+  {id:'gram.part.perfecto.deponente',label:'Participio de perfecto deponente',kind:'catalogue',parentId:'gram.part.forma'},
+  {id:'gram.part.futuro.activo',label:'Participio de futuro activo',kind:'catalogue',parentId:'gram.part.forma'},
   {id:'gram.pronombres',label:'Pronombres y determinantes',kind:'catalogue',parentId:null},
   {id:'gram.pron.enfatico',label:'Pronombre enfático (ipse)',kind:'catalogue',parentId:'gram.pronombres'},
   {id:'gram.pron.relativo',label:'Pronombre relativo',kind:'catalogue',parentId:'gram.pronombres'},
@@ -118,4 +127,12 @@ export function catalogDepth(tag:GrammarTag,tags:readonly GrammarTag[]):number{
 
 export function isCustomTagLabelValid(label:string):boolean{
   return label.trim().length>0&&label.trim().length<=160;
+}
+
+
+export function placementGrammarTags(placement:TextPlacementV1):string[]{
+  return [...new Set([
+    ...placement.grammaticalTagIds,
+    ...(placement.grammaticalSpans??[]).filter(span=>!span.reviewRequired).flatMap(span=>span.tagIds),
+  ])];
 }
