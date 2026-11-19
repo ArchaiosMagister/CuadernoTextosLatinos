@@ -1035,27 +1035,40 @@ function renderHome():HTMLElement{
     const needle=foldLatin(search.value.trim());
     const matching=corpus.texts.filter(t=>foldLatin(
       [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+    const addLazyRows=(group:HTMLDetailsElement,texts:typeof corpus.texts):void=>{
+      const items=el('div','cuaderno-home-category-items');group.append(items);
+      const update=():void=>{
+        items.replaceChildren();
+        if(group.open)appendTextRows(items,texts);
+      };
+      group.addEventListener('toggle',update);
+      if(group.open)update();
+    };
     const all=el('details','cuaderno-home-category');
     if(needle)all.open=true;
     all.append(el('summary','','Todos los textos ('+matching.length+')'));
-    appendTextRows(all,matching);listing.append(all);
-    const makeCategory=(tag:typeof catalogue[number],depth:number):HTMLElement=>{
+    addLazyRows(all,matching);listing.append(all);
+    const makeCategory=(tag:typeof catalogue[number],depth:number):HTMLDetailsElement|null=>{
       const texts=matching.filter(t=>matchesGrammarFilters(idsFor(t.id),[tag.id],catalogue));
+      if(!texts.length)return null; // ocultar etiquetas vacías, sin perderlas del catálogo
       const group=el('details','cuaderno-home-category');
       if(depth)group.classList.add('cuaderno-home-subcategory');
       group.append(el('summary','',tag.label+' ('+texts.length+')'));
-      const children=catalogue.filter(t=>t.parentId===tag.id);
-      for(const child of children)group.append(makeCategory(child,depth+1));
-      const direct=texts.filter(t=>idsFor(t.id).includes(tag.id));
-      if(direct.length)appendTextRows(group,direct);
+      for(const child of catalogue.filter(t=>t.parentId===tag.id)){
+        const nested=makeCategory(child,depth+1);
+        if(nested)group.append(nested);
+      }
+      addLazyRows(group,texts.filter(t=>idsFor(t.id).includes(tag.id)));
       return group;
     };
-    for(const root of catalogue.filter(t=>t.parentId===null))
-      listing.append(makeCategory(root,0));
+    for(const root of catalogue.filter(t=>t.parentId===null)){
+      const group=makeCategory(root,0);
+      if(group)listing.append(group);
+    }
     const without=matching.filter(t=>idsFor(t.id).length===0);
     const untagged=el('details','cuaderno-home-category');
     untagged.append(el('summary','','Sin etiquetar ('+without.length+')'));
-    appendTextRows(untagged,without);listing.append(untagged);
+    addLazyRows(untagged,without);listing.append(untagged);
   }
   search.addEventListener('input',populate);
   populate();bank.append(listing);
