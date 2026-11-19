@@ -146,8 +146,7 @@ test('Collatinus original: solo nombres propios/gentilicios de inicio; el resto 
   await expect(page.locator('#editor .card')).toBeVisible();
   page.once('dialog',d=>d.accept('Cuaderno nombres propios'));
   await page.locator('#btnNew').click();
-  await page.locator('#btnLists').click();
-  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal');
   await modal.getByRole('textbox',{name:'Título'}).fill('Paso del Rubicón');
   await modal.getByRole('textbox',{name:'Autor'}).fill('Julio César');
@@ -220,8 +219,7 @@ test('Decisión 1A: pegar texto sugiere Texto N pero conserva título escrito',a
   await expect(page.locator('#editor .card')).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de textos propios'));
   await page.locator('#btnNew').click();
-  await page.locator('#btnLists').click();
-  await page.getByRole('button',{name:'Pegar texto propio'}).click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal');
   await expect(modal.getByRole('textbox',{name:'Título'})).toHaveValue('Texto 1');
   await modal.getByRole('textbox',{name:'Título'}).fill('La llegada a Roma');
