@@ -385,6 +385,14 @@ export function createEditionPane(options:{
         setMessage('Este texto ya figura en el cuaderno; se abre sin duplicarlo.');
         return true;
       }
+      // Un DOCX del banco mantiene sus subrayados, entradas de vocabulario y
+      // ejercicios docentes. Se crea una aparición vinculada, no una importación plana.
+      if(text.teacherDocx){
+        const imported={...text.teacherDocx,title:titleOverride?.trim()||text.title,
+          latin:text.latin,author:text.source.author,work:text.source.work,
+          reference:text.source.reference};
+        return importTeacherDocument(imported,text.id);
+      }
       const at=now(),place=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
       // Un pasaje puede tener títulos docentes diferentes en cuadernos distintos.
       // La biblioteca compartida, los títulos históricos y las fuentes no cambian.
@@ -419,13 +427,13 @@ export function createEditionPane(options:{
   }
 
   /** Un Word es una aparición manual aislada del Corpus original. */
-  async function importTeacherDocument(doc:ParsedTeacherDocx):Promise<boolean>{
+  async function importTeacherDocument(doc:ParsedTeacherDocx,sourceId:string|null=null):Promise<boolean>{
     if(!draft||!session||!current||!await flush())return false;
     if(!doc.title.trim()||!doc.latin.trim())return false;
     const at=now(),editionId=current.edition.id;
     const place=createPlacement({
       id:freshId('place'),
-      source:{kind:'manual',sourceId:null,urn:null,importedAt:at},
+      source:{kind:sourceId?'corpus':'manual',sourceId,urn:null,importedAt:at},
       title:doc.title,latin:doc.latin,author:doc.author,work:doc.work,
       reference:doc.reference,
     },()=>freshId('item'));
