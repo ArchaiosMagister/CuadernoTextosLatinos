@@ -140,6 +140,13 @@ export interface SourceLinkV1 {
 
 /** Fragmento gramatical anclado a offsets UTF-16, con revisión tras editar el latín.
  * Campo opcional en ediciones V1: las copias históricas permanecen sin cambios. */
+export interface GrammarSpanEvidenceV1 {
+  tagId: string;
+  engine: string;
+  rule: string;
+  evidence: string[];
+}
+
 export interface GrammarSpanV1 {
   id: EntityId;
   startUtf16: number;
@@ -148,6 +155,7 @@ export interface GrammarSpanV1 {
   textFingerprint: string;
   tagIds: string[];
   reviewRequired: boolean;
+  evidence?: GrammarSpanEvidenceV1[];
 }
 
 export interface TextPlacementV1 {

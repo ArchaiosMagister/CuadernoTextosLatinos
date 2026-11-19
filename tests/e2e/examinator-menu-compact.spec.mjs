@@ -59,7 +59,7 @@ test('PR C: cinco menús compactos, controles uniformes y sin desbordes en escri
       body:await page.screenshot({animations:'disabled'}),
       contentType:'image/png',
     });
-    const paper=await page.locator('.edition-paper').first().evaluate(el=>el.getBoundingClientRect().width);
+    const paper=await page.locator('.edition-paper').first().evaluate(el=>el.offsetWidth);
     expect(paper).toBeGreaterThan(780);
   }
   await expect(page.locator('#btnDocx')).toBeVisible();
