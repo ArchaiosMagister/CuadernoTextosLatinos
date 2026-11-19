@@ -484,3 +484,58 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   .cuaderno-bank-manual>input,.cuaderno-bank-proposal-actions select{font-size:16px;}
   .cuaderno-bank-proposal-actions .hbtn,.cuaderno-bank-proposal-actions .tbtn{min-height:42px;}
 }
+
+
+/* Banco propio desde el editor: selección gramatical táctil y búsquedas combinadas. */
+@media screen {
+  .original-bank-picker{display:grid;gap:9px;min-width:0;}
+  .original-bank-picker>p{margin:3px 0;}
+  .original-bank-picker>input[type='search'],
+  .original-bank-filters>input[type='search']{
+    width:100%;max-width:100%;min-height:36px;box-sizing:border-box;
+    padding:7px 9px;border:1px solid var(--rule);border-radius:7px;
+    background:var(--paper);color:var(--ink);
+  }
+  .original-bank-result-count{font-weight:600;}
+  .original-bank-filters{border:1px solid var(--rule-2);border-radius:8px;padding:7px 10px;}
+  .original-bank-filters>summary{font-weight:600;cursor:pointer;padding:5px 0;}
+  .original-bank-filters>input[type='search']{margin:8px 0;}
+  .original-bank-filter-groups{display:grid;gap:5px;margin:5px 0;}
+  .original-bank-filter-group{border:1px solid var(--rule-2);border-radius:6px;padding:4px 8px;}
+  .original-bank-filter-group>summary{cursor:pointer;font-weight:600;padding:4px 0;}
+  .original-bank-filter-group[hidden],.original-bank-filter-option[hidden]{display:none!important;}
+  .original-bank-filter-choices{display:grid;gap:2px;margin:4px 0;}
+  .original-bank-filter-option{display:flex;align-items:center;gap:8px;
+    min-height:30px;padding:4px 5px;border-bottom:1px solid var(--rule-2);}
+  .original-bank-filter-option input{flex:0 0 auto;}
+  .original-bank-filter-option span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}
+  .original-bank-filter-option small{flex:0 0 auto;}
+  .original-bank-picker .original-own-list{max-height:45vh;min-height:0;margin:0;}
+  .original-bank-picker .original-own-row{padding:9px 3px;gap:7px;}
+  .original-bank-picker .original-bank-excerpt{
+    flex:1 1 100%;white-space:pre-wrap;overflow-wrap:anywhere;
+    font-family:var(--text-font);font-size:14px;line-height:1.5;
+    margin:0;color:var(--ink-2);
+  }
+  .original-bank-picker .grammar-chips{flex:1 1 100%;margin:2px 0;}
+  .original-bank-picker .original-own-row button{min-height:34px;}
+}
+@media screen and (max-width:760px){
+  .original-bank-picker>input[type='search'],
+  .original-bank-filters>input[type='search']{font-size:16px;}
+  .original-bank-filter-option{min-height:40px;}
+  .original-bank-picker .original-own-row button{min-height:42px;}
+}
+
+
+/* En iPad la cabecera original conserva botones horizontales más anchos
+   que el visor. El scroll pertenece a la cabecera, no al documento. */
+@media screen and (min-width:701px) and (max-width:1100px){
+  body[data-has-editor='true']>header{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+    overflow-x:auto;overflow-y:hidden;white-space:nowrap;
+  }
+  body[data-has-editor='true'] main#main{
+    box-sizing:border-box;width:100%;max-width:100%;min-width:0;
+  }
+}

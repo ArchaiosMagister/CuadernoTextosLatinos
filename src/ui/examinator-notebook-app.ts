@@ -20,7 +20,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag,placementGrammarTags} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -442,44 +442,104 @@ function openLibrary():void{
   void M.openLibrary().catch(e=>M.toast('Biblioteca: '+String(e),5500));
 }
 function openOwnTexts():void{
-  const panel=el('div','');
-  const list=el('div','original-own-list');
-  panel.append(el('p','muted','Aquí se guardan las fuentes de los pasajes añadidos desde la biblioteca o pegados en un cuaderno.'));
-  const input=el('input');input.type='search';input.placeholder='Buscar textos propios…';
+  // El banco que se consulta desde el editor es el mismo que el de Inicio.
+  // Se filtran etiquetas confirmadas en la fuente, nunca las de otros cuadernos.
+  const panel=el('div','original-bank-picker');
+  panel.append(el('p','muted','Elige textos del banco propio. Puedes combinar varias etiquetas '+
+    '(deben cumplirse todas) y buscar por título, autor, obra o referencia.'));
+  const input=el('input');input.type='search';input.placeholder='Buscar en el banco propio…';
   input.setAttribute('aria-label','Buscar textos guardados');
-  const tagFilter=el('select');tagFilter.setAttribute('aria-label','Filtrar por etiqueta gramatical');
-  tagFilter.multiple=true;tagFilter.size=4;
-  const tags=allGrammarTags(corpus);
-  for(const tag of tags){
-    const option=el('option','','· '.repeat(catalogDepth(tag,tags))+tag.label);
-    option.value=tag.id;tagFilter.append(option);
+  const count=el('p','small muted original-bank-result-count');
+  const list=el('div','original-own-list');
+  const tags=allGrammarTags(corpus),selected=new Set<string>();
+  const filtersPanel=el('details','original-bank-filters');
+  const filtersHeading=el('summary','','Filtrar por etiquetas');
+  filtersPanel.append(filtersHeading);
+  const filterSearch=el('input');filterSearch.type='search';
+  filterSearch.placeholder='Buscar etiqueta…';
+  filterSearch.setAttribute('aria-label','Buscar etiqueta para filtrar');
+  filtersPanel.append(filterSearch);
+  const filterGroups=el('div','original-bank-filter-groups');
+  const tagCheckboxes=new Map<string,HTMLInputElement>();
+  const tagCount=(tagId:string)=>corpus.texts.filter(t=>
+    matchesGrammarFilters(t.tagIds,[tagId],tags)).length;
+  for(const root of tags.filter(t=>t.parentId===null)){
+    const children=tags.filter(t=>matchesGrammarTag(t.id,root.id,tags));
+    const available=children.filter(t=>tagCount(t.id)>0);
+    if(!available.length)continue;
+    const group=el('details','original-bank-filter-group');
+    group.append(el('summary','',root.label+' ('+tagCount(root.id)+')'));
+    const choices=el('div','original-bank-filter-choices');
+    for(const tag of available){
+      const label=el('label','original-bank-filter-option'),check=el('input');
+      check.type='checkbox';check.value=tag.id;check.setAttribute('aria-label',tag.label);
+      check.addEventListener('change',()=>{
+        if(check.checked)selected.add(tag.id);else selected.delete(tag.id);
+        filtersHeading.textContent='Filtrar por etiquetas'+(selected.size?' ('+selected.size+')':'');
+        visibleLimit=40;populate();
+      });
+      tagCheckboxes.set(tag.id,check);
+      const name=el('span','','· '.repeat(catalogDepth(tag,tags))+tag.label);
+      const amount=el('small','muted',String(tagCount(tag.id)));
+      label.append(check,name,amount);choices.append(label);
+    }
+    group.append(choices);filterGroups.append(group);
   }
-  const filtersPanel=el('details');
-  filtersPanel.append(el('summary','','Filtrar por etiquetas'),tagFilter);
-  panel.append(input,filtersPanel,list);
-  let close=()=>{};
+  filterSearch.addEventListener('input',()=>{
+    const query=foldLatin(filterSearch.value);
+    for(const group of Array.from(filterGroups.children) as HTMLDetailsElement[]){
+      let matches=0;
+      for(const label of Array.from(group.querySelectorAll<HTMLElement>('.original-bank-filter-option'))){
+        const text=label.querySelector('span')?.textContent??'';
+        const shown=!query||foldLatin(text).includes(query);
+        label.hidden=!shown;if(shown)matches++;
+      }
+      group.hidden=!matches;
+      if(query&&matches)group.open=true;
+    }
+  });
+  const clearFilters=button('Quitar filtros de etiquetas',()=>{
+    selected.clear();
+    for(const check of tagCheckboxes.values())check.checked=false;
+    filtersHeading.textContent='Filtrar por etiquetas';
+    visibleLimit=40;populate();
+  },'tbtn');
+  filtersPanel.append(filterGroups,clearFilters);
+  panel.append(input,count,filtersPanel,list);
+  let close=()=>{},visibleLimit=40;
   const populate=()=>{
     list.replaceChildren();
     const needle=foldLatin(input.value);
-    const filters=Array.from(tagFilter.selectedOptions,option=>option.value);
+    const filters=[...selected];
     const matching=corpus.texts.filter(t=>
-      foldLatin([t.title,t.source.author??'',t.source.work??''].join(' ')).includes(needle)
-      && (matchesGrammarFilters(t.tagIds,filters,tags) || notebooks.some(notebook=>
-        notebook.edition.placements.some(placement=>placement.source.sourceId===t.id
-          && matchesGrammarFilters(placementGrammarTags(placement),filters,tags)))));
-    for(const t of matching){
+      foldLatin([t.title,t.source.author??'',t.source.work??'',t.source.reference??'']
+        .join(' ')).includes(needle)&&matchesGrammarFilters(t.tagIds,filters,tags));
+    count.textContent=matching.length+' de '+corpus.texts.length+
+      (corpus.texts.length===1?' texto del banco':' textos del banco');
+    for(const t of matching.slice(0,visibleLimit)){
       const row=el('article','original-own-row');
       row.append(el('strong','',t.title));
       const source=[t.source.author,t.source.work,t.source.reference].filter(Boolean).join(' · ');
       if(source)row.append(el('small','muted',source));
+      row.append(el('p','original-bank-excerpt',t.latin.slice(0,160)+
+        (t.latin.length>160?'…':'')));
+      if(t.tagIds.length){
+        const badges=el('div','grammar-chips');
+        for(const tagId of t.tagIds.slice(0,5)){
+          const tag=tags.find(item=>item.id===tagId);
+          if(tag)badges.append(el('span','grammar-chip',tag.label));
+        }
+        row.append(badges);
+      }
       if(active()){
         const add=button('Añadir al cuaderno',async()=>{
           close();
-          if(!await writeSource(()=>composer.addSourceToNotebook(t.id)))throw Error('No se ha añadido el texto.');
+          if(!await writeSource(()=>composer.addSourceToNotebook(t.id)))
+            throw Error('No se ha añadido el texto.');
           await reload();render();
           const editionId=currentId,placement=composer.activePlacement();
           if(editionId&&placement)void enrichVocabulary(placement.text.latin,placement.id,editionId);
-        },'tbtn');
+        },'hbtn primary');
         add.setAttribute('aria-label','Añadir «'+t.title+'» al cuaderno');
         row.append(add);
       }
@@ -500,14 +560,16 @@ function openOwnTexts():void{
       row.append(remove);list.append(row);
     }
     if(!matching.length)list.append(el('p','muted','No hay textos con ese filtro.'));
+    if(matching.length>visibleLimit)list.append(button(
+      'Mostrar más ('+(matching.length-visibleLimit)+' restantes)',()=>{
+        visibleLimit+=40;populate();
+      },'tbtn'));
   };
-  input.addEventListener('input',populate);
-  tagFilter.addEventListener('change',populate);
+  input.addEventListener('input',()=>{visibleLimit=40;populate();});
   populate();
-  if(active())panel.append(button('Pegar texto propio',()=>{
-    close();pasteText();
-  },'tbtn'));
-  const modal=M.modal('Banco de textos',panel,[{label:'Cerrar'}]);close=modal.close;
+  if(active())panel.append(button('Pegar texto propio',()=>{close();pasteText();},'tbtn'));
+  const modal=M.modal('Banco de textos',panel,[{label:'Cerrar'}],
+    {width:'min(760px, 96vw)'});close=modal.close;
 }
 
 /** Guardado de fuentes autónomas. Un DOCX conserva los datos de preguntas,
