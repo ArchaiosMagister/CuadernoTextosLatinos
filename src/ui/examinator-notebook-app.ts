@@ -1002,8 +1002,8 @@ function renderHome():HTMLElement{
     el('p','small muted',corpus.texts.length+(corpus.texts.length===1?' texto distinto':' textos distintos')));
   bank.append(bankHeading);
   const bankActions=el('div','cuaderno-home-actions');
-  bankActions.append(button('Pegar texto',()=>pasteText('bank'),'hbtn primary'),
-    button('Importar Word',()=>importWord('bank'),'hbtn'));
+  bankActions.append(button('Pegar en el banco',()=>pasteText('bank'),'hbtn primary'),
+    button('Importar Word al banco',()=>importWord('bank'),'hbtn'));
   bank.append(bankActions);
   const search=el('input');search.type='search';
   search.placeholder='Buscar por texto, autor u obra';
