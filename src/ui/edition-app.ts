@@ -22,7 +22,10 @@ import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
 import { splitInlineItalics } from '../core/edition-inline-formatting.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
-import {quotedMeaning} from '../core/vocabulary-format.js';
+import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
+import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,putPreferredVocabulary,
+  preferredFor,vocabularyKey,vocabularySortKey,
+  type VocabularyQuantityMode,type VocabularySelectionMode} from '../core/vocabulary-preferences.js';
 import {exactLatinLineHeightPt,extraLatinSpacingPt} from '../core/latin-spacing.js';
 import {isUnreviewedAutoVocabulary} from '../core/vocabulary-cleanup.js';
 
@@ -103,14 +106,15 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   const latin=buildMarkedLatin(p);latin.style.lineHeight=f.lineSpacingPt+'pt';
   latin.style.marginBottom=extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt)+'pt';
   head.append(source);paper.append(head,latin);
-  const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
+  const included=p.vocabulary.filter(v=>v.included).sort((a,b)=>
+    vocabularySortKey(a.headword).localeCompare(vocabularySortKey(b.headword),'es',{sensitivity:'base'}));
   if(included.length){
     const box=node('section','edition-vocabulary');
     box.append(node('h3','','Vocabulario'));
     for(const v of included){
       const item=node('p','edition-vocabulary-line');
       item.append(node('em','',v.headword));
-      item.append(document.createTextNode(v.meaning?': '+quotedMeaning(v.meaning):': [significado pendiente]'));
+      item.append(document.createTextNode(v.meaning?': '+formattedVocabularyMeaning(v.meaning,v.glossesSeparated):': [significado pendiente]'));
       if(v.note)item.append(document.createTextNode(' ('+v.note+')'));
       box.append(item);
     }
@@ -170,9 +174,17 @@ function formatPoints(p:TextPlacementV1):string {
 /** Edición de trabajo: los textos preparados se guardan aquí hasta que
  * el docente elige qué apariciones incluir en uno o varios cuadernos. */
 export const WORKING_EDITION_ID='ed.seleccion-textos';
+export interface CollatinusVocabularyCandidate {
+  lemma:string;headword:string;meaning:string|null;note:string|null;
+  proper?:boolean;glossesSeparated?:boolean;
+}
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
-export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void}={}):{
+export function createEditionPane(options:{
+  autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void;
+  onAnalyzeVocabulary?:(latin:string,quantity:VocabularyQuantityMode)=>
+    Promise<CollatinusVocabularyCandidate[]>;
+}={}):{
   element:HTMLElement;
   open:()=>Promise<void>;
   flush:()=>Promise<boolean>;
@@ -188,9 +200,8 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
   selectPlacement:(placementId:string)=>Promise<boolean>;
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
-  addCollatinusVocabulary:(placementId:string,entries:readonly {
-    headword:string;lemma:string;meaning:string|null;note:string|null
-  }[])=>Promise<boolean>;
+  addCollatinusVocabulary:(placementId:string,
+    entries:readonly CollatinusVocabularyCandidate[])=>Promise<boolean>;
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
   addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
   removeGrammarSpan:(id:string)=>Promise<boolean>;
@@ -953,9 +964,8 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
   }
   /** Propuestas del Collatinus original: respetan las entradas manuales y
    * no se presentan como verificaciones filológicas individuales. */
-  async function addCollatinusVocabulary(placementId:string,entries:readonly {
-    headword:string;lemma:string;meaning:string|null;note:string|null
-  }[]):Promise<boolean>{
+  async function addCollatinusVocabulary(placementId:string,
+    entries:readonly CollatinusVocabularyCandidate[]):Promise<boolean>{
     if(!draft||!current||!draft.placements.some(p=>p.id===placementId))return false;
     if(!await flush())return false;
     const p=draft.placements.find(p=>p.id===placementId);
@@ -974,6 +984,7 @@ export function createEditionPane(options:{autoApply?:boolean;autoVocabulary?:bo
         id:freshId('voc'),lemma,headword,meaning:entry.meaning?.trim()||null,
         note:entry.note?.trim()||null,included:Boolean(entry.meaning?.trim()),order:order++,
         provenance:null,reviewState:'needs-review',origin:'generated',locked:false,
+        glossesSeparated:entry.glossesSeparated===true,collatinusSource:true,
       });
     }
     if(!next.length)return true;
