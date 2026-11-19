@@ -749,7 +749,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const notice=el('p','hint edition-repetition-notice',
       'Repeticiones: '+duplicates.length+(duplicates.length===1?' palabra':' palabras')+
       ' y '+repeatedBases+(repeatedBases===1?' base preverbial':' bases preverbiales')+
-      '. Cuaderno → Revisar cuaderno.');
+      (autoApply?'. Organizar → Revisar cuaderno.':'. Cuaderno → Revisar cuaderno.'));
     notice.setAttribute('role','status');
     return notice;
   }
