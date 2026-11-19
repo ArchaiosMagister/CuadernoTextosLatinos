@@ -3,7 +3,8 @@
  * cuatro preguntas, vocabulario y campos PAGE / NUMPAGES.
  * PDF se imprime desde el mismo modelo mediante el sistema del navegador.
  */
-import {quotedMeaning} from '../core/vocabulary-format.js';
+import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
+import {vocabularySortKey} from '../core/vocabulary-preferences.js';
 import {extraLatinSpacingPt} from '../core/latin-spacing.js';
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
@@ -83,7 +84,8 @@ function latin(p:TextPlacementV1,f:PageFormatV1):string{
   return '<w:p>'+paraProps({align:'both',after:extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),linePt:f.lineSpacingPt})+body+'</w:p>';
 }
 function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
-  const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>a.headword.localeCompare(b.headword,'es',{sensitivity:'base'}));
+  const rows=p.vocabulary.filter(v=>v.included).sort((a,b)=>
+    vocabularySortKey(a.headword).localeCompare(vocabularySortKey(b.headword),'es',{sensitivity:'base'}));
   if(!rows.length)return '';
   // El ancho auto sin tblGrid dejaba la tabla fuera del A4 y LibreOffice
   // incluso omitía su primera fila ("Vocabulario"). Anchura fija entre márgenes.
@@ -92,7 +94,7 @@ function vocabulary(p:TextPlacementV1,f:PageFormatV1):string{
     '" w:type="dxa"/></w:tcPr>'+inside+'</w:tc></w:tr>';
   let body=cell(paragraph('Vocabulario',paraProps({align:'center',after:5,keepNext:true}),{bold:true}));
   for(const entry of rows){
-    const meaning=entry.meaning?': '+quotedMeaning(entry.meaning):': [significado pendiente]';
+    const meaning=entry.meaning?': '+formattedVocabularyMeaning(entry.meaning,entry.glossesSeparated):': [significado pendiente]';
     let text='<w:p>'+paraProps({after:1})+run(entry.headword,{italic:true})+
       run(meaning)+(entry.note?run(' ('+entry.note+')'):'')+'</w:p>';
     body+=cell(text);
