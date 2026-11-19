@@ -172,7 +172,7 @@ function question(input: unknown,path: string):QuestionV1 {
     options:array(d.options,`${path}.options`,4).map((v,i)=>option(v,`${path}.options[${i}]`))};
 }
 function vocabulary(input: unknown,path: string):VocabularyEntryV1 {
-  const d=object(input,path,['id','lemma','headword','meaning','note','included','order','provenance','reviewState','origin','locked']);
+  const d=object(input,path,['id','lemma','headword','meaning','note','included','order','provenance','reviewState','origin','locked'],['glossesSeparated','collatinusSource']);
   const provenance=evidence(d.provenance,`${path}.provenance`);
   const reviewState=choice(d.reviewState,`${path}.reviewState`,['verified','needs-review','manual']);
   const origin=choice(d.origin,`${path}.origin`,['generated','manual']);
@@ -182,7 +182,9 @@ function vocabulary(input: unknown,path: string):VocabularyEntryV1 {
     headword:str(d.headword,`${path}.headword`,500),
     meaning:nullable(d.meaning,`${path}.meaning`,1000),note:nullable(d.note,`${path}.note`,2000),
     included:flag(d.included,`${path}.included`),order:integer(d.order,`${path}.order`,0),provenance,
-    reviewState,origin,locked:flag(d.locked,`${path}.locked`)};
+    reviewState,origin,locked:flag(d.locked,`${path}.locked`),
+    ...(Object.hasOwn(d,'glossesSeparated')?{glossesSeparated:flag(d.glossesSeparated,`${path}.glossesSeparated`)}:{}),
+    ...(Object.hasOwn(d,'collatinusSource')?{collatinusSource:flag(d.collatinusSource,`${path}.collatinusSource`)}:{})};
 }
 function source(input:unknown,path:string):SourceLinkV1 {
   const d=object(input,path,['kind','sourceId','urn','importedAt']);
@@ -217,11 +219,15 @@ function grammarSpan(input:unknown,path:string,latin:string):GrammarSpanV1{
 }
 function placement(input:unknown,path:string):TextPlacementV1 {
   const d=object(input,path,['id','source','text','questions','vocabulary','grammaticalTagIds','reviewFlags'],
-    ['grammaticalSpans']);
+    ['grammaticalSpans','vocabularySelectionMode','vocabularyQuantityMode']);
   const sourceText=text(d.text,`${path}.text`);
   return {id:id(d.id,`${path}.id`),source:source(d.source,`${path}.source`),text:sourceText,
     questions:array(d.questions,`${path}.questions`,20).map((v,i)=>question(v,`${path}.questions[${i}]`)),
     vocabulary:array(d.vocabulary,`${path}.vocabulary`,4000).map((v,i)=>vocabulary(v,`${path}.vocabulary[${i}]`)),
+    ...(Object.hasOwn(d,'vocabularySelectionMode')?{
+      vocabularySelectionMode:choice(d.vocabularySelectionMode,`${path}.vocabularySelectionMode`,['elegir','todo'])}:{}),
+    ...(Object.hasOwn(d,'vocabularyQuantityMode')?{
+      vocabularyQuantityMode:choice(d.vocabularyQuantityMode,`${path}.vocabularyQuantityMode`,['modelo','todas','largas','ninguna'])}:{}),
     grammaticalTagIds:array(d.grammaticalTagIds,`${path}.grammaticalTagIds`,2000).map((v,i)=>id(v,`${path}.grammaticalTagIds[${i}]`)),
     ...(Object.hasOwn(d,'grammaticalSpans')?{grammaticalSpans:array(d.grammaticalSpans,
       `${path}.grammaticalSpans`,1000).map((v,i)=>grammarSpan(v,`${path}.grammaticalSpans[${i}]`,sourceText.latin))}:{}),

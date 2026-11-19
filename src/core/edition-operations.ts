@@ -167,11 +167,13 @@ export function editQuestionStatement(e:NotebookEditionV1,placementId:string,que
   },at);
 }
 export function editVocabulary(e:NotebookEditionV1,placementId:string,vocabularyId:string,
-  field:'lemma'|'headword'|'meaning'|'note'|'included',value:string|boolean|null,at:string):NotebookEditionV1 {
+  field:'lemma'|'headword'|'meaning'|'note'|'included'|'glossesSeparated',
+  value:string|boolean|null,at:string):NotebookEditionV1 {
   return replacePlacement(e,placementId,p=>{
     if(!p.vocabulary.some(w=>w.id===vocabularyId))fail('Entrada de vocabulario inexistente');
     return {...p,vocabulary:p.vocabulary.map(w=>w.id===vocabularyId
-      ? {...w,[field]:value,origin:'manual' as const,locked:true,reviewState:'manual' as const}:w)};
+      ? field==='included'?{...w,included:Boolean(value)}
+      : {...w,[field]:value,origin:'manual' as const,locked:true,reviewState:'manual' as const}:w)};
   },at);
 }
 
