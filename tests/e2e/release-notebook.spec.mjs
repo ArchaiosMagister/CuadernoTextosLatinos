@@ -71,3 +71,34 @@ test('borrar un cuaderno nuevo exige respaldo y no afecta a otro',async({page})=
   assert.equal(persistent.editions.length,1);
   assert.equal(persistent.history.length,1);
 });
+
+test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva los otros',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.locator('#editor .card')).toBeVisible();
+  for(const title of ['Conservar','Eliminar este']){
+    page.once('dialog',dialog=>dialog.accept(title));
+    await page.locator('#btnNew').click();
+    await expect(page.locator('#editor .card')).toContainText(title);
+  }
+  await page.locator('#btnOpen').click();
+  const remove=page.getByRole('button',{name:'Eliminar cuaderno Eliminar este',exact:true});
+  page.once('dialog',dialog=>dialog.dismiss());
+  await remove.click();
+  await expect(remove).toBeVisible();
+  let confirmations=0;
+  const accept=async dialog=>{confirmations++;await dialog.accept();};
+  page.on('dialog',accept);
+  const download=page.waitForEvent('download');
+  await remove.click();
+  expect((await download).suggestedFilename()).toMatch(/^copia-antes-de-eliminar-cuaderno-.*\.json$/);
+  await expect(remove).toHaveCount(0);
+  page.off('dialog',accept);
+  expect(confirmations).toBe(2);
+  const survivor=page.locator('.original-open-row').filter({hasText:'Conservar'});
+  await survivor.getByRole('button',{name:'Abrir',exact:true}).click();
+  await expect(page.locator('#editor .card')).toContainText('Conservar');
+  await page.reload();
+  await page.locator('#btnOpen').click();
+  await expect(page.locator('.original-open-row')).toHaveCount(1);
+  await expect(page.locator('.original-open-row')).toContainText('Conservar');
+});

@@ -1,6 +1,6 @@
 import type {TextPlacementV1,QuestionWordSlotV1,VocabularyEntryV1} from './edition-model.js';
 import {fingerprintForMark} from './edition-validation.js';
-import {vocabularyKey} from './vocabulary-preferences.js';
+import {isSyriaVocabulary,vocabularyKey} from './vocabulary-preferences.js';
 import {preverbStatement} from './preverb-selection.js';
 import type {ParsedTeacherDocx,LexKind} from './docx-import.js';
 
@@ -19,19 +19,31 @@ export function applyParsedTeacherDocx(
   })):base.text.markup;
   const seenVocabulary=new Set<string>();
   const vocab:VocabularyEntryV1[]=[];
+  let syria:VocabularyEntryV1|undefined;
   for(const item of doc.vocabulary){
     const m=item.meaning?.match(/^(.*?)\s+\(([^()]*)\)$/u);
     const meaning=(m?.[1]??item.meaning)?.trim()||null;
     const note=m?.[2]?.trim()||null;
+    if(syria&&isSyriaVocabulary(item.headword)){
+      const unquote=(value:string)=>value.replace(/^[‘’“”"'«»]+|[‘’“”"'«»]+$/gu,'').trim();
+      if(meaning&&(!syria.meaning||unquote(syria.meaning).toLowerCase()!==unquote(meaning).toLowerCase())){
+        syria.glossesSeparated=Boolean(syria.meaning);
+        syria.meaning=syria.meaning?unquote(syria.meaning)+' | '+unquote(meaning):meaning;
+      }
+      if(note&&syria.note!==note)syria.note=syria.note?syria.note+'; '+note:note;
+      continue;
+    }
     const key=JSON.stringify([vocabularyKey(item.headword),meaning?.normalize('NFC'),note?.normalize('NFC')]);
     if(seenVocabulary.has(key))continue;
     seenVocabulary.add(key);
-    vocab.push({
+    const entry:VocabularyEntryV1={
       id:nextId(),lemma:item.headword.split(/[,;(]/u)[0]!.trim().slice(0,250),
       headword:item.headword,meaning,note,
       included:true,order:vocab.length,provenance:null,reviewState:'manual',
       origin:'manual',locked:true,
-    });
+    };
+    vocab.push(entry);
+    if(isSyriaVocabulary(entry.headword))syria=entry;
   }
   const questions=base.questions.map(q=>{
     if(q.kind==='morphology'){

@@ -24,7 +24,7 @@ import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type Vo
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,putPreferredVocabulary,
-  preferredFor,vocabularyKey,vocabularySortKey,
+  preferredFor,vocabularyIdentity,vocabularyKey,vocabularySortKey,
   type VocabularyQuantityMode,type VocabularySelectionMode} from '../core/vocabulary-preferences.js';
 import {exactLatinLineHeightPt,extraLatinSpacingPt} from '../core/latin-spacing.js';
 import {isUnreviewedAutoVocabulary} from '../core/vocabulary-cleanup.js';
@@ -983,14 +983,14 @@ export function createEditionPane(options:{
     if(!await flush())return false;
     const p=draft?.placements.find(p=>p.id===placementId);
     if(!p||p.text.latin!==latin)return false;
-    const seen=new Set(p.vocabulary.flatMap(v=>[vocabularyKey(v.headword),vocabularyKey(v.lemma)]));
+    const seen=new Set(p.vocabulary.flatMap(v=>[vocabularyIdentity(v.headword),vocabularyIdentity(v.lemma)]));
     const manual=new Set(p.vocabulary.filter(v=>v.origin==='manual')
       .flatMap(v=>[vocabularyKey(v.headword),vocabularyKey(v.lemma)]));
     let order=p.vocabulary.reduce((m,v)=>Math.max(m,v.order),-1)+1;
     const next:VocabularyEntryV1[]=[];
     for(const entry of entries){
       const headword=entry.headword.trim(),lemma=entry.lemma.trim();
-      const key=vocabularyKey(lemma),headKey=vocabularyKey(headword);
+      const key=vocabularyIdentity(lemma),headKey=vocabularyIdentity(headword);
       if(!headword||!key||headword.length>500||seen.has(headKey)||seen.has(key)||
         entry.forms?.some(form=>manual.has(vocabularyKey(form))))continue;
       seen.add(headKey);seen.add(key);
@@ -1123,12 +1123,12 @@ export function createEditionPane(options:{
           const mode=x.vocabularySelectionMode??'elegir';
           for(const candidate of entries){
             const lemma=candidate.lemma.trim(),headword=candidate.headword.trim();
-            const key=vocabularyKey(lemma);
+            const key=vocabularyIdentity(lemma);
             if(!key||!headword||seen.has(key))continue;
             seen.add(key);
-            const headKey=vocabularyKey(headword);
-            const formKeys=new Set(candidate.forms?.map(vocabularyKey));
-            const i=old.findIndex(v=>[vocabularyKey(v.lemma),vocabularyKey(v.headword)]
+            const headKey=vocabularyIdentity(headword);
+            const formKeys=new Set(candidate.forms?.map(vocabularyIdentity));
+            const i=old.findIndex(v=>[vocabularyIdentity(v.lemma),vocabularyIdentity(v.headword)]
               .some(k=>k===key||k===headKey||v.origin==='manual'&&formKeys.has(k)));
             if(i>=0){
               const previous=old[i]!;

@@ -6,6 +6,7 @@
 import {createEditionPane,WORKING_EDITION_ID} from './edition-app.js';
 import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.js';
 import {WorkspaceRepository,type EditionSnapshotV1} from '../storage/workspace-repository.js';
+import {createWorkspaceBackup} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
@@ -295,6 +296,33 @@ async function openNotebook(id:string):Promise<void>{
   if(!await composer.openEdition(id))throw new Error('No se ha podido abrir el cuaderno.');
   currentId=id;await reload();render();
 }
+let deletingNotebook=false;
+async function deleteNotebook(id:string):Promise<void>{
+  if(deletingNotebook)return;
+  deletingNotebook=true;
+  try{
+    if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
+    const snapshot=await workspace.loadEdition(id);
+    if(!snapshot||snapshot.edition.legacyNotebookId!==null)
+      throw Error('Este cuaderno no se puede eliminar.');
+    const title=snapshot.edition.title;
+    if(!window.confirm('¿Eliminar el cuaderno «'+title+'» y su historial? Se descargará una copia de seguridad.'))return;
+    const backup=await createWorkspaceBackup(workspace);
+    const url=URL.createObjectURL(new Blob([backup],{type:'application/json;charset=utf-8'}));
+    const link=el('a');link.href=url;
+    link.download='copia-antes-de-eliminar-cuaderno-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.append(link);link.click();link.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),30000);
+    if(!window.confirm('Comprueba que has guardado el JSON. ¿Confirmas la eliminación definitiva de «'+title+'»?'))return;
+    await workspace.deleteEdition(id,snapshot.revision);
+    if(currentId===id){
+      currentId=null;
+      composer.closeEdition();
+    }
+    await reload();render();
+    M.toast('Cuaderno eliminado.');
+  }finally{deletingNotebook=false;}
+}
 function openNotebooks():void{
   const content=el('div','');
   const saved=notebooks.filter(n=>n.edition.id!==WORKING_EDITION_ID)
@@ -306,6 +334,15 @@ function openNotebooks():void{
     row.append(el('span','',x.edition.title),button('Abrir',async()=>{
       close();await openNotebook(x.edition.id);
     },'hbtn'));
+    if(x.edition.legacyNotebookId===null){
+      const remove=button('Eliminar',async()=>{
+        await deleteNotebook(x.edition.id);
+        if(notebooks.some(n=>n.edition.id===x.edition.id))return;
+        close();openNotebooks();
+      },'tbtn');
+      remove.setAttribute('aria-label','Eliminar cuaderno '+x.edition.title);
+      row.append(remove);
+    }
     content.append(row);
   }
   const m=M.modal('Abrir cuaderno',content,[{label:'Cerrar'}]);
