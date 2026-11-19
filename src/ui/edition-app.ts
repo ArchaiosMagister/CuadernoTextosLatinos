@@ -1622,7 +1622,7 @@ export function createEditionPane(options:{
       navMenus.append(tab);
     }
     editor.append(navMenus);
-    const panel=node('div','edition-menu-content');
+    const panel=node('div','edition-menu-content edition-menu-'+menu);
     const placement=selection();
     if(menu==='notebook')menuNotebook(panel);
     else if(menu==='format')menuFormat(panel);
