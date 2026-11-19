@@ -256,10 +256,10 @@ test('banco independiente: pegar sin cuaderno, conservarlo y buscarlo',async({pa
   await modal.getByRole('textbox',{name:'Título'}).fill('Ejemplo de banco propio');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Gallia est omnis divisa.');
   await modal.getByRole('button',{name:'Guardar en el banco'}).click();
-  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 textos distintos');
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 texto distinto');
   await page.getByRole('searchbox',{name:'Buscar en banco de textos propios'}).fill('Ejemplo de banco');
   await expect(page.locator('.cuaderno-home-bank-list')).toContainText('Ejemplo de banco propio');
   await page.reload();
-  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 textos distintos');
+  await expect(page.locator('.cuaderno-home-bank-heading')).toContainText('1 texto distinto');
   await expect(page.locator('#preview')).toBeHidden();
 });
