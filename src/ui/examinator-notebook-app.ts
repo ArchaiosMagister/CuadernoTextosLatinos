@@ -406,7 +406,7 @@ function openNotebooks():void{
   for(const x of saved){
     const row=el('div','row original-open-row');
     const details=el('span','',x.edition.title);
-    details.append(el('small','muted',' · '+x.edition.placements.length+(edition.placements.length===1?' texto · ':' textos · ')+
+    details.append(el('small','muted',' · '+x.edition.placements.length+(x.edition.placements.length===1?' texto · ':' textos · ')+
       new Date(x.edition.updatedAt).toLocaleString('es')));
     row.append(details,button('Abrir',async()=>{
       close();await openNotebook(x.edition.id);
