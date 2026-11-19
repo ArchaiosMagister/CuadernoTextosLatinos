@@ -9,7 +9,7 @@ import {extraLatinSpacingPt} from '../core/latin-spacing.js';
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
-import { splitInlineItalics } from '../core/edition-inline-formatting.js';
+import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
 import { zipStore } from './zip-store.js';
 
 const XML='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -65,20 +65,26 @@ function run(text:string,{bold=false,italic=false,underline=false,sizePt}:{
 function paragraph(text:string,props:string,flags:{bold?:boolean;italic?:boolean;underline?:boolean;sizePt?:number}={}):string{
   return '<w:p>'+props+run(text,flags)+'</w:p>';
 }
+/** Omitir […] en redonda tanto en Word como en la vista previa/PDF. */
+function latinRun(text:string,italic:boolean,underline=false):string{
+  return splitLatinOmissions(text).map(part=>run(part.text,{
+    italic:italic&&!part.roman,underline,
+  })).join('');
+}
 function latin(p:TextPlacementV1,f:PageFormatV1):string{
   const marks=p.text.markup.slice().sort((a,b)=>a.startUtf16-b.startUtf16);
   const source=p.text.latin;
   let cursor=0,body='';
   for(const mark of marks){
     if(mark.startUtf16<cursor||mark.endUtf16>source.length)continue;
-    body+=run(source.slice(cursor,mark.startUtf16),{italic:true});
+    body+=latinRun(source.slice(cursor,mark.startUtf16),true);
     const text=source.slice(mark.startUtf16,mark.endUtf16);
     // No aparentar un subrayado válido si el anclaje está pendiente.
-    body+=run(text,{italic:mark.kind!=='editorial-roman',
-      underline:mark.kind==='morph-underline'&&!mark.reviewRequired});
+    body+=latinRun(text,mark.kind!=='editorial-roman',
+      mark.kind==='morph-underline'&&!mark.reviewRequired);
     cursor=mark.endUtf16;
   }
-  body+=run(source.slice(cursor),{italic:true});
+  body+=latinRun(source.slice(cursor),true);
   // Espacio posterior del pasaje igual al interlineado adicional (3 pt por defecto),
   // sin la antigua separación artificial de 6 em.
   return '<w:p>'+paraProps({align:'both',after:extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),linePt:f.lineSpacingPt})+body+'</w:p>';
