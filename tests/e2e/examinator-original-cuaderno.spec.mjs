@@ -29,10 +29,9 @@ test('Examinator original como base: cabecera, biblioteca original y cuaderno pe
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await page.locator('#btnSave').click();
   await page.reload();
-  await expect(page.locator('#editor .card h3')).toBeVisible();
-  await page.locator('#btnOpen').click();
-  await expect(page.locator('.modal')).toContainText('Cuaderno original 1');
-  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno original 1'})
+    .getByRole('button',{name:'Abrir'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   expect(errors).toEqual([]);
 });
@@ -69,8 +68,7 @@ test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea pr
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
   await page.locator('#btnSave').click();
   await page.reload();
-  await page.locator('#btnOpen').click();
-  await page.locator('.original-open-row .hbtn').first().click();
+  await page.locator('.cuaderno-home-card').getByRole('button',{name:'Abrir'}).first().click();
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
 });
 
@@ -133,8 +131,7 @@ test('preguntas autocreadas usando bancos docentes sin formulario previo',async(
   await expect(options.nth(3)).not.toHaveText('Latinismos.');
   await page.locator('#btnSave').click();
   await page.reload();
-  await page.locator('#btnOpen').click();
-  await page.locator('.original-open-row .hbtn').first().click();
+  await page.locator('.cuaderno-home-card').getByRole('button',{name:'Abrir'}).first().click();
   await expect(page.locator('.edition-paper .edition-choice-options li')).toHaveCount(4);
   await expect(page.locator('.edition-paper .edition-choice-options li').nth(1))
     .not.toHaveText('Evolución fonética.');
