@@ -32,15 +32,15 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   const backup=page.waitForEvent('download');
   await card.getByRole('button',{name:'Hacer copia'}).click();
   expect((await backup).suggestedFilename()).toMatch(/^copia-cuaderno-.*\.json$/);
-  const cancelDialog=page.waitForEvent('dialog');
-  await card.getByRole('button',{name:'Eliminar'}).click();
-  await (await cancelDialog).dismiss();
+  const cancelDialog=page.waitForEvent('dialog').then(dialog=>dialog.dismiss());
+  await Promise.all([cancelDialog,card.getByRole('button',{name:'Eliminar'}).click()]);
   await expect(card).toBeVisible();
-  const confirmDialog=page.waitForEvent('dialog');
-  await card.getByRole('button',{name:'Eliminar'}).click();
-  const dialog=await confirmDialog;
-  expect(dialog.message()).toContain('copia de seguridad');
-  await dialog.accept();
+  let message='';
+  const confirmDialog=page.waitForEvent('dialog').then(async dialog=>{
+    message=dialog.message();await dialog.accept();
+  });
+  await Promise.all([confirmDialog,card.getByRole('button',{name:'Eliminar'}).click()]);
+  expect(message).toContain('copia de seguridad');
   await expect(page.locator('.cuaderno-home-card')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'Banco de textos propios'})).toBeVisible();
   await expect(page.locator('.cuaderno-home-bank')).toContainText('Pasaje para banco');
