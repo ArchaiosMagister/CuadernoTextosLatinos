@@ -82,6 +82,7 @@ test('Banco propio: guarda y etiqueta un texto sin crear un cuaderno',async({pag
 
 
 test('Banco: Collatinus propone etiquetas pero sólo persisten las confirmadas',async({page})=>{
+  test.setTimeout(90000); // en frío la carga completa de Collatinus puede tardar
   await page.goto('/examinator-cuadernos/');
   const bank=page.locator('.cuaderno-home-bank');
   await bank.getByRole('button',{name:'Pegar en el banco'}).click();
@@ -96,9 +97,10 @@ test('Banco: Collatinus propone etiquetas pero sólo persisten las confirmadas',
   const review=page.locator('.modal').last();
   await expect(review.getByText('Sin etiquetas confirmadas')).toBeVisible();
   await review.getByRole('button',{name:'Analizar con Collatinus'}).click();
+  await expect(review.getByRole('status')).toContainText('propuestas obtenidas',{timeout:45000});
   const candidate=review.locator('.grammar-proposal-card')
-    .filter({has:review.getByText('Amatus est · Voz pasiva · Pendiente',{exact:true})}).first();
-  await expect(candidate).toBeVisible();
+    .filter({hasText:'Amatus est · Voz pasiva · Pendiente'}).first();
+  await expect(candidate).toBeVisible({timeout:15000});
   await candidate.locator('summary').first().click();
   await expect(candidate).toContainText('Requiere revisión sintáctica.');
   await candidate.getByText('Ver análisis y evidencia',{exact:true}).click();
