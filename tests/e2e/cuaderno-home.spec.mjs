@@ -43,6 +43,9 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   expect(message).toContain('copia de seguridad');
   await expect(page.locator('.cuaderno-home-card')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'Banco de textos propios'})).toBeVisible();
+  await expect(page.locator('.cuaderno-home-bank')).toContainText('1 texto distinto');
+  await page.locator('.cuaderno-home-bank .cuaderno-home-category').first()
+    .locator('summary').first().click();
   await expect(page.locator('.cuaderno-home-bank')).toContainText('Pasaje para banco');
 });
 
