@@ -1303,7 +1303,8 @@ export function createEditionPane(options:{
           row.append(split);
         }
         if(options.onAnalyzeVocabulary&&(v.collatinusSource||v.origin==='generated')){
-          const reset=action('Restablecer entrada de Collatinus',async()=>{
+          remove.remove();
+          const reset=action('↺',async()=>{
             try{
               const latest=draft?.placements.find(x=>x.id===p.id);
               if(!latest)return;
@@ -1325,6 +1326,8 @@ export function createEditionPane(options:{
               paint();
             }catch(err){setMessage('No se pudo restablecer: '+String(err),true);}
           },'btn btn-outline edition-vocab-reset');
+          reset.title='Restablecer la entrada de Collatinus';
+          reset.setAttribute('aria-label','Restablecer '+v.headword);
           row.append(reset);
         }
         list.append(row);
