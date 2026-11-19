@@ -27,6 +27,9 @@ export function upsertText(corpus: CorpusV1, draft: TextDraft, id: string, now: 
     ...(draft.teacherDocument ? {teacherDocument:draft.teacherDocument} :
       previous?.teacherDocument&&previous.latin===draft.latin.trim()
         ? {teacherDocument:previous.teacherDocument} : {}),
+    ...(previous?.bankGrammarDecisions&&previous.latin===
+      (draft.teacherDocument?draft.latin:draft.latin.trim())
+      ? {bankGrammarDecisions:previous.bankGrammarDecisions}:{}),
     tagIds: previous?.tagIds ?? [],
     createdAt: previous?.createdAt ?? now,
     updatedAt: previous && now < previous.createdAt ? previous.createdAt : now,
