@@ -31,7 +31,7 @@ test('PR C: cinco menús compactos, controles uniformes y sin desbordes en escri
     expect(Math.max(...geometry)-Math.min(...geometry)).toBeLessThan(2);
     const editorWidth=await page.locator('#editor').evaluate(el=>el.getBoundingClientRect().width);
     if(size.width>=1200)expect(editorWidth).toBeLessThanOrEqual(605);
-    if(size.width>=700)expect(editorWidth).toBeGreaterThanOrEqual(345);
+    if(size.width>700)expect(editorWidth/size.width).toBeCloseTo(.40,2);
 
     for(const [label,key] of menus){
       await tabs.getByRole('button',{name:label,exact:true}).click();

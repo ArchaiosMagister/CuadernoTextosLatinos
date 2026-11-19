@@ -208,8 +208,11 @@ async function collatinusVocabulary(latin:string,quantity:VocabularyQuantityMode
   const entries=await engine.call('vocabEntries',{lids:ids,mode:quantity}) as LatinLemma[];
   if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
   const tokenGlosses=new Map<number,string>(),tokenLemmas=new Map<number,string>();
+  const forms=new Map<number,Set<string>>();
   for(const token of tokens){
     if(!token.sel)continue;
+    const existingForms=forms.get(token.sel.lid)??new Set<string>();
+    existingForms.add(token.w);forms.set(token.sel.lid,existingForms);
     if(!tokenLemmas.has(token.sel.lid))
       tokenLemmas.set(token.sel.lid,token.lplain||token.lemma||token.w);
     const gloss=token.cands?.find(c=>c.lid===token.sel?.lid)?.trad?.trim();
@@ -227,18 +230,18 @@ async function collatinusVocabulary(latin:string,quantity:VocabularyQuantityMode
       headword:saved?.headword??x.head,
       meaning:saved?.meaning??x.trad?.trim()??tokenGlosses.get(x.lid)??null,
       note:saved?.note??x.note??null,
-      proper,
+      proper,forms:[...(forms.get(x.lid)??[])],
       glossesSeparated:saved?.glossesSeparated??false,
     };
   });
 }
 async function enrichVocabulary(latin:string,placementId:string,editionId:string):Promise<void>{
   try{
-    const entries=await collatinusVocabulary(latin,'modelo');
-    const approved=entries.filter(x=>x.proper);
+    const placement=composer.activeEdition()?.placements.find(x=>x.id===placementId);
+    const entries=await collatinusVocabulary(latin,placement?.vocabularyQuantityMode??'modelo');
     if(currentId!==editionId||composer.activeEdition()?.id!==editionId||
-       !composer.activeEdition()?.placements.some(x=>x.id===placementId))return;
-    await composer.addCollatinusVocabulary(placementId,approved);
+       !composer.activeEdition()?.placements.some(x=>x.id===placementId&&x.text.latin===latin.trim()))return;
+    await composer.addCollatinusVocabulary(placementId,entries,latin.trim());
   }catch(error){
     console.warn('No se pudo terminar la lematización Collatinus:',error);
     M.toast('El texto se ha guardado; el análisis Collatinus queda pendiente. '
@@ -336,6 +339,8 @@ function openOwnTexts():void{
       close();
       if(!await composer.addSourceToNotebook(t.id))throw Error('No se ha añadido el texto.');
       await reload();render();
+      const editionId=currentId,placement=composer.activePlacement();
+      if(editionId&&placement)void enrichVocabulary(placement.text.latin,placement.id,editionId);
     },'tbtn'));
     if(!matching.length)list.append(el('p','muted','No hay textos con ese filtro.'));
   };
@@ -413,8 +418,6 @@ function reviewWordImport(documentData:ParsedTeacherDocx):void{
     if(!await composer.importTeacherDocument(imported))
       throw Error('No se ha podido guardar el Word importado.');
     close();await reload();render();M.toast('Word añadido y guardado en el cuaderno.');
-    // El DOCX sin glosario sigue el MISMO criterio que un texto pegado:
-    // solo nombres propios y gentilicios; nunca todas las formas latinas.
     const editionId=currentId,placement=composer.activePlacement();
     if(editionId&&placement)void enrichVocabulary(imported.latin,placement.id,editionId);
   },'hbtn primary'));

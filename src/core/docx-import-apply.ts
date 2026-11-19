@@ -1,5 +1,6 @@
 import type {TextPlacementV1,QuestionWordSlotV1,VocabularyEntryV1} from './edition-model.js';
 import {fingerprintForMark} from './edition-validation.js';
+import {vocabularyKey} from './vocabulary-preferences.js';
 import {preverbStatement} from './preverb-selection.js';
 import type {ParsedTeacherDocx,LexKind} from './docx-import.js';
 
@@ -16,17 +17,22 @@ export function applyParsedTeacherDocx(
     textFingerprint:fingerprintForMark(doc.latin,mark.startUtf16,mark.endUtf16),
     reviewRequired:false,
   })):base.text.markup;
-  const vocab:VocabularyEntryV1[]=doc.vocabulary.map((item,index)=>{
+  const seenVocabulary=new Set<string>();
+  const vocab:VocabularyEntryV1[]=[];
+  for(const item of doc.vocabulary){
     const m=item.meaning?.match(/^(.*?)\s+\(([^()]*)\)$/u);
     const meaning=(m?.[1]??item.meaning)?.trim()||null;
     const note=m?.[2]?.trim()||null;
-    return {
+    const key=JSON.stringify([vocabularyKey(item.headword),meaning?.normalize('NFC'),note?.normalize('NFC')]);
+    if(seenVocabulary.has(key))continue;
+    seenVocabulary.add(key);
+    vocab.push({
       id:nextId(),lemma:item.headword.split(/[,;(]/u)[0]!.trim().slice(0,250),
       headword:item.headword,meaning,note,
-      included:true,order:index,provenance:null,reviewState:'manual',
+      included:true,order:vocab.length,provenance:null,reviewState:'manual',
       origin:'manual',locked:true,
-    };
-  });
+    });
+  }
   const questions=base.questions.map(q=>{
     if(q.kind==='morphology'){
       return {...q,words:doc.underlines.length?markup.map(m=>({

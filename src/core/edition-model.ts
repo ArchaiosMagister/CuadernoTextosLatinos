@@ -121,6 +121,7 @@ export interface VocabularyEntryV1 {
   glossesSeparated?: boolean;
   /** Etiqueta de procedencia; no implica verificación filológica individual. */
   collatinusSource?: boolean;
+  collatinusProper?: boolean;
 }
 
 export interface ReviewFlagV1 {

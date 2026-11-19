@@ -172,7 +172,7 @@ function question(input: unknown,path: string):QuestionV1 {
     options:array(d.options,`${path}.options`,4).map((v,i)=>option(v,`${path}.options[${i}]`))};
 }
 function vocabulary(input: unknown,path: string):VocabularyEntryV1 {
-  const d=object(input,path,['id','lemma','headword','meaning','note','included','order','provenance','reviewState','origin','locked'],['glossesSeparated','collatinusSource']);
+  const d=object(input,path,['id','lemma','headword','meaning','note','included','order','provenance','reviewState','origin','locked'],['glossesSeparated','collatinusSource','collatinusProper']);
   const provenance=evidence(d.provenance,`${path}.provenance`);
   const reviewState=choice(d.reviewState,`${path}.reviewState`,['verified','needs-review','manual']);
   const origin=choice(d.origin,`${path}.origin`,['generated','manual']);
@@ -184,7 +184,8 @@ function vocabulary(input: unknown,path: string):VocabularyEntryV1 {
     included:flag(d.included,`${path}.included`),order:integer(d.order,`${path}.order`,0),provenance,
     reviewState,origin,locked:flag(d.locked,`${path}.locked`),
     ...(Object.hasOwn(d,'glossesSeparated')?{glossesSeparated:flag(d.glossesSeparated,`${path}.glossesSeparated`)}:{}),
-    ...(Object.hasOwn(d,'collatinusSource')?{collatinusSource:flag(d.collatinusSource,`${path}.collatinusSource`)}:{})};
+    ...(Object.hasOwn(d,'collatinusSource')?{collatinusSource:flag(d.collatinusSource,`${path}.collatinusSource`)}:{}),
+    ...(Object.hasOwn(d,'collatinusProper')?{collatinusProper:flag(d.collatinusProper,`${path}.collatinusProper`)}:{})};
 }
 function source(input:unknown,path:string):SourceLinkV1 {
   const d=object(input,path,['kind','sourceId','urn','importedAt']);

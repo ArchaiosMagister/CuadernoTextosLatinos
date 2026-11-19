@@ -56,15 +56,19 @@ function textField(label:string,value:string,change:(value:string)=>void,multili
   input.addEventListener('input',()=>change(input.value));
   wrap.append(input);return wrap;
 }
-function numberField(label:string,value:number,min:number,max:number,step:number,change:(n:number)=>void):HTMLElement {
+function numberField(label:string,value:number,min:number,max:number,step:number|'any',change:(n:number)=>void,live=false):HTMLElement {
   const wrap=node('label','edition-field');wrap.append(node('span','edition-field-label',label));
   const input=node('input','field-control');input.type='number';input.min=String(min);input.max=String(max);
   input.step=String(step);input.value=String(value);
-  input.addEventListener('change',()=>{
-    const n=Number(input.value);
-    if(Number.isFinite(n)&&n>=min&&n<=max)change(n);
-    else input.value=String(value);
-  });
+  let lastValid=value;
+  const update=()=>{
+    const n=input.valueAsNumber;
+    if(!Number.isFinite(n)||n<min||n>max)return false;
+    if(n!==lastValid){lastValid=n;change(n);}
+    return true;
+  };
+  if(live)input.addEventListener('input',update);
+  input.addEventListener('change',()=>{if(!update())input.value=String(lastValid);});
   wrap.append(input);return wrap;
 }
 function download(text:string,filename:string):void {
@@ -176,7 +180,7 @@ function formatPoints(p:TextPlacementV1):string {
 export const WORKING_EDITION_ID='ed.seleccion-textos';
 export interface CollatinusVocabularyCandidate {
   lemma:string;headword:string;meaning:string|null;note:string|null;
-  proper?:boolean;glossesSeparated?:boolean;
+  proper?:boolean;glossesSeparated?:boolean;forms?:readonly string[];
 }
 
 /** Mantiene el panel y el borrador vivos aunque el usuario cambie a Biblioteca. */
@@ -201,7 +205,7 @@ export function createEditionPane(options:{
   activePlacement:()=>TextPlacementV1|null;
   activeEdition:()=>NotebookEditionV1|null;
   addCollatinusVocabulary:(placementId:string,
-    entries:readonly CollatinusVocabularyCandidate[])=>Promise<boolean>;
+    entries:readonly CollatinusVocabularyCandidate[],latin:string)=>Promise<boolean>;
   setActiveTags:(ids:readonly string[])=>Promise<boolean>;
   addGrammarSpan:(start:number,end:number,tagId:string)=>Promise<boolean>;
   removeGrammarSpan:(id:string)=>Promise<boolean>;
@@ -965,26 +969,29 @@ export function createEditionPane(options:{
   /** Propuestas del Collatinus original: respetan las entradas manuales y
    * no se presentan como verificaciones filológicas individuales. */
   async function addCollatinusVocabulary(placementId:string,
-    entries:readonly CollatinusVocabularyCandidate[]):Promise<boolean>{
+    entries:readonly CollatinusVocabularyCandidate[],latin:string):Promise<boolean>{
     if(!draft||!current||!draft.placements.some(p=>p.id===placementId))return false;
     if(!await flush())return false;
-    const p=draft.placements.find(p=>p.id===placementId);
-    if(!p)return false;
-    const clean=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .toLocaleLowerCase('es').trim();
-    const seen=new Set(p.vocabulary.flatMap(v=>[clean(v.headword),clean(v.lemma)]));
+    const p=draft?.placements.find(p=>p.id===placementId);
+    if(!p||p.text.latin!==latin)return false;
+    const seen=new Set(p.vocabulary.flatMap(v=>[vocabularyKey(v.headword),vocabularyKey(v.lemma)]));
+    const manual=new Set(p.vocabulary.filter(v=>v.origin==='manual')
+      .flatMap(v=>[vocabularyKey(v.headword),vocabularyKey(v.lemma)]));
     let order=p.vocabulary.reduce((m,v)=>Math.max(m,v.order),-1)+1;
     const next:VocabularyEntryV1[]=[];
     for(const entry of entries){
       const headword=entry.headword.trim(),lemma=entry.lemma.trim();
-      if(!headword||!lemma||headword.length>500||seen.has(clean(headword))||
-         seen.has(clean(lemma)))continue;
-      seen.add(clean(headword));seen.add(clean(lemma));
+      const key=vocabularyKey(lemma),headKey=vocabularyKey(headword);
+      if(!headword||!key||headword.length>500||seen.has(headKey)||seen.has(key)||
+        entry.forms?.some(form=>manual.has(vocabularyKey(form))))continue;
+      seen.add(headKey);seen.add(key);
       next.push({
         id:freshId('voc'),lemma,headword,meaning:entry.meaning?.trim()||null,
-        note:entry.note?.trim()||null,included:Boolean(entry.meaning?.trim()),order:order++,
+        note:entry.note?.trim()||null,
+        included:p.vocabularySelectionMode==='todo'||Boolean(entry.proper),order:order++,
         provenance:null,reviewState:'needs-review',origin:'generated',locked:false,
         glossesSeparated:entry.glossesSeparated===true,collatinusSource:true,
+        collatinusProper:Boolean(entry.proper),
       });
     }
     if(!next.length)return true;
@@ -1003,7 +1010,7 @@ export function createEditionPane(options:{
       if(editingManual)paintPreview();
       else paint();
       setMessage('Collatinus: '+next.length+
-        ' nombres propios o gentilicios incorporados como propuestas revisables.');
+        ' entradas analizadas. Los nombres propios y gentilicios se marcan por defecto.');
     }
     return ok;
   }
@@ -1109,14 +1116,16 @@ export function createEditionPane(options:{
             const key=vocabularyKey(lemma);
             if(!key||!headword||seen.has(key))continue;
             seen.add(key);
-            const i=old.findIndex(v=>vocabularyKey(v.lemma)===key||
-              vocabularyKey(v.headword)===key);
+            const headKey=vocabularyKey(headword);
+            const formKeys=new Set(candidate.forms?.map(vocabularyKey));
+            const i=old.findIndex(v=>[vocabularyKey(v.lemma),vocabularyKey(v.headword)]
+              .some(k=>k===key||k===headKey||v.origin==='manual'&&formKeys.has(k)));
             if(i>=0){
               const previous=old[i]!;
               if(previous.origin==='generated'&&!previous.locked){
                 old[i]={...previous,lemma,headword,meaning:candidate.meaning?.trim()||null,
                   note:candidate.note?.trim()||null,glossesSeparated:candidate.glossesSeparated===true,
-                  collatinusSource:true,included:mode==='todo'?true:previous.included};
+                  collatinusSource:true,collatinusProper:Boolean(candidate.proper),included:previous.included};
                 refreshed++;
               }else if(mode==='todo')old[i]={...previous,included:true};
               continue;
@@ -1124,10 +1133,11 @@ export function createEditionPane(options:{
             added++;
             old.push({id:freshId('voc'),lemma,headword,
               meaning:candidate.meaning?.trim()||null,note:candidate.note?.trim()||null,
-              included:mode==='todo'||Boolean(candidate.proper&&candidate.meaning),
+              included:mode==='todo'||Boolean(candidate.proper),
               order:order++,provenance:null,reviewState:'needs-review',
               origin:'generated',locked:false,
-              glossesSeparated:candidate.glossesSeparated===true,collatinusSource:true});
+              glossesSeparated:candidate.glossesSeparated===true,collatinusSource:true,
+              collatinusProper:Boolean(candidate.proper)});
           }
           return {...x,vocabulary:old};
         }),
@@ -1158,7 +1168,7 @@ export function createEditionPane(options:{
           placements:edition.placements.map(x=>x.id!==p.id?x:{
             ...x,vocabularySelectionMode:key,
             vocabulary:x.vocabulary.map(v=>({...v,included:key==='todo'?true:
-              v.origin==='manual'?v.included:false})),
+              v.origin==='manual'?v.included:(v.collatinusProper??v.included)})),
           }),
         }));
         paint();
@@ -1206,8 +1216,7 @@ export function createEditionPane(options:{
     const chosen=items.filter(v=>v.included).length;
     panel.append(node('p','hint',items.length
       ?chosen+' de '+items.length+' entradas seleccionadas. Solo se imprimen las marcadas.'
-      :'No hay vocabulario todavía. Collatinus añade inicialmente los nombres propios; '
-       +'elige «Todo el texto» para obtener los demás lemas.'));
+      :'El vocabulario se prepara al analizar el texto.'));
     let preferred:ReturnType<typeof parsePreferredVocabulary>=[];
     try{preferred=parsePreferredVocabulary(localStorage.getItem(PREFERRED_VOCABULARY_KEY));}
     catch(err){panel.append(node('p','edition-error',
@@ -1400,9 +1409,9 @@ export function createEditionPane(options:{
         x.format.fontSizePt=n;
         x.format.lineSpacingPt=exactLatinLineHeightPt(n,extra);
       });paint();
-    }),numberField('Espacio adicional entre líneas (pt)',extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,.5,n=>{
-      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});paint();
-    }),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
+    }),numberField('Espacio adicional entre líneas (pt)',extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,'any',n=>{
+      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});
+    },true),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
       update(x=>{x.format.questionGapPt=n;});paint();
     }));
     const family=node('select','field-control');family.setAttribute('aria-label','Tipografía');
@@ -1637,8 +1646,10 @@ export function createEditionPane(options:{
     previewStack.append(nav);
     const preview=node('section','edition-preview'+(mobile==='config'?' edition-mobile-hidden':''));
     const papers=node('div','edition-paper-pages');
-    papers.addEventListener('pointerup',()=>academics.savePaperSelection(papers));
-    papers.addEventListener('touchend',()=>window.setTimeout(()=>academics.savePaperSelection(papers),80),{passive:true});
+    if(!options.onAnalyzeVocabulary){
+      papers.addEventListener('pointerup',()=>academics.savePaperSelection(papers));
+      papers.addEventListener('touchend',()=>window.setTimeout(()=>academics.savePaperSelection(papers),80),{passive:true});
+    }
     const bar=node('div','edition-preview-bar');
     bar.append(node('strong','','Vista A4'));
     if(options.onAddSource)bar.append(action('+ Añadir al cuaderno',
@@ -1662,7 +1673,7 @@ export function createEditionPane(options:{
     syncZoomButtons();
     zoomControls.append(zoomIn,zoomField,zoomOut);
     bar.append(zoomControls);
-    bar.append(academics.renderPaperSelect(papers));
+    if(!options.onAnalyzeVocabulary)bar.append(academics.renderPaperSelect(papers));
     // Los controles Anterior / Siguiente van justo encima del papel; no se
     // reproducen en la cabecera ni alteran el modelo al cambiar de posición.
     preview.append(bar,papers);

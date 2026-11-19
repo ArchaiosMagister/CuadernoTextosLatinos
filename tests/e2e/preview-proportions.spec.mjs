@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('editor de cuadernos: menús 47 % y vista previa 53 % en iPad y escritorio',async({page})=>{
+test('editor de cuadernos: menús 40 % y vista previa 60 % en iPad y escritorio',async({page})=>{
   await page.setViewportSize({width:1024,height:900});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
@@ -16,8 +16,8 @@ test('editor de cuadernos: menús 47 % y vista previa 53 % en iPad y escritorio'
       return {leftWidth:left.width,rightX:right.x,rightWidth:right.width,viewport,
         position:getComputedStyle(document.querySelector('#editor .edition-preview-stack')).position};
     });
-    expect(geometry.leftWidth/geometry.viewport).toBeCloseTo(.47,2);
-    expect(geometry.rightWidth/geometry.viewport).toBeCloseTo(.53,2);
+    expect(geometry.leftWidth/geometry.viewport).toBeCloseTo(.40,2);
+    expect(geometry.rightWidth/geometry.viewport).toBeCloseTo(.60,2);
     expect(Math.abs(geometry.rightX-geometry.leftWidth)).toBeLessThan(2);
     expect(geometry.position).toBe('fixed');
     await expect(page.getByRole('navigation',{name:'Secciones del cuaderno'}).getByRole('button')).toHaveCount(5);

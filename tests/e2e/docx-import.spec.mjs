@@ -78,7 +78,7 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   await expect(edition).not.toContainText('A, B, C y D');
 });
 
-test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantener formato Examinator2',async({page})=>{
+test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palabras comunes',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
@@ -105,13 +105,9 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('button',{name:/Buscar otras formas/})).toBeVisible();
-  // Ni el importador ni la búsqueda conservadora pueden insertar formas
-  // comunes sin glosa como si fueran un vocabulario docente completo.
-  const all=await page.locator('.edition-vocab-headword').evaluateAll(nodes=>
-    nodes.map(node=>node.value.toLowerCase()));
-  expect(all).not.toContain('homines');
-  expect(all).not.toContain('praestare');
-  expect(all.length).toBeLessThan(5);
+  await expect.poll(()=>page.locator('.edition-vocab-headword').count(),
+    {timeout:110000}).toBeGreaterThan(5);
+  await expect(page.locator('.edition-vocab-include:checked')).toHaveCount(0);
   // Edición en filas, no una tarjeta apilada por lema.
   const newWord=page.getByRole('textbox',{name:'Enunciado nuevo'});
   await newWord.fill('animal, -alis');
@@ -155,6 +151,12 @@ test('Salustio sin vocabulario en Word: no lematizar todas las palabras, mantene
   )).toBe(true);
   await tabs.getByRole('button',{name:'Formato'}).click();
   await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
+  const spacing=page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'});
+  await spacing.fill('0.9');
+  const lineHeight=()=>page.locator('.edition-latin').evaluate(el=>parseFloat(getComputedStyle(el).lineHeight));
+  const compactHeight=await lineHeight();
+  await spacing.fill('5');
+  expect(await lineHeight()-compactHeight).toBeCloseTo((5-.9)*4/3,1);
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await page.locator('#btnSave').click();
   await page.reload();
