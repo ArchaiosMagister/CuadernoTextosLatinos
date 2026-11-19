@@ -78,7 +78,7 @@ function source(value: unknown, path: string): TextSource {
 
 /** Compatibilidad del banco DOCX con los respaldos existentes, sin aceptar
  * offsets ajenos al pasaje ni campos inesperados en un JSON restaurado. */
-function importedWord(value: unknown, path: string, latin: string): LatinText['teacherDocument'] {
+function importedWord(value: unknown, path: string, latin: string): NonNullable<LatinText['teacherDocument']> {
   const d = record(value,path,[
     'title','author','work','reference','latin','underlines','vocabulary',
     'lexical','preverbBases','warnings',
