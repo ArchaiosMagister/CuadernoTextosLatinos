@@ -539,3 +539,53 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
     box-sizing:border-box;width:100%;max-width:100%;min-width:0;
   }
 }
+
+
+/* Mejoras docentes: etiquetas a la vista, gestión masiva del banco y ordenación. */
+@media screen{
+  #editor .cuaderno-bank-bulk{
+    display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+    padding:9px;border:1px solid var(--rule-2);border-radius:9px;
+    background:var(--paper-2);min-width:0;
+  }
+  #editor .cuaderno-bank-bulk .small{margin:0;}
+  #editor .cuaderno-bank-bulk>p{flex:1 1 100%;}
+  #editor .cuaderno-bank-bulk button{min-height:34px;}
+  #editor .cuaderno-bank-bulk button:disabled{opacity:.5;cursor:not-allowed;}
+  #editor .cuaderno-home-select{
+    display:inline-flex;align-items:center;gap:5px;font-size:.85rem;
+    padding:3px 5px;margin:0;min-height:30px;
+  }
+  #editor .cuaderno-home-select input{flex:0 0 auto;}
+  #editor .cuaderno-home-select input:disabled{opacity:.5;}
+  #editor .cuaderno-current-tags{
+    display:grid;gap:5px;margin:9px 0 4px;padding:8px;
+    background:var(--paper-2);border:1px solid var(--rule-2);border-radius:8px;
+  }
+  #editor .cuaderno-current-tags>strong{font-size:.9rem;}
+  #editor .cuaderno-current-tags .grammar-chips{margin:0;}
+  #editor .cuaderno-current-tags>.hbtn{justify-self:start;min-height:34px;}
+  #editor .edition-tags-summary{
+    display:grid;gap:6px;padding:8px;border:1px solid var(--rule-2);
+    border-radius:7px;background:var(--paper-2);min-width:0;
+  }
+  #editor .edition-tags-summary .grammar-chips{margin:0;}
+  #editor .edition-tags-summary>.btn{justify-self:start;min-height:32px;}
+  #editor .edition-notebook-list{margin:5px 0;padding-left:24px;}
+  #editor .edition-notebook-review,
+  #editor .edition-notebook-advanced{
+    border:1px solid var(--rule-2);border-radius:8px;padding:7px 10px;
+    min-width:0;margin-top:8px;
+  }
+  #editor .edition-notebook-review>summary,
+  #editor .edition-notebook-advanced>summary{cursor:pointer;font-weight:600;padding:5px 0;}
+  #editor .edition-notebook-advanced .edition-inline-edit{
+    display:flex;flex-wrap:wrap;gap:8px;min-width:0;margin:6px 0;
+  }
+  #editor .edition-notebook-advanced .edition-inline-edit .field-control{flex:1 1 150px;min-width:0;}
+}
+@media screen and (max-width:760px){
+  #editor .cuaderno-bank-bulk button,
+  #editor .cuaderno-current-tags>.hbtn{min-height:42px;}
+  #editor .edition-tags-summary>.btn{min-height:42px;}
+}
