@@ -625,7 +625,10 @@ jobs:
             }));
             console.log('Separación bibliográfica verificada:',JSON.stringify(headline));
             await adapted.locator('.edition-menu-nav').waitFor({state:'visible'});
-            await adapted.locator('.edition-preview-bar .edition-add-source').waitFor({state:'visible'});
+            await adapted.getByRole('button',{name:'Pegar texto',exact:true}).click();
+            const paste=adapted.locator('.modal').last();
+            await paste.getByRole('textbox',{name:'Texto latino',exact:true}).waitFor({state:'visible'});
+            await paste.getByRole('button',{name:'Cancelar',exact:true}).click();
             await adapted.screenshot({path:'cuaderno-examinator-original-adaptado-ipad.png',
               fullPage:false});
             if(adaptedErrors.length)
