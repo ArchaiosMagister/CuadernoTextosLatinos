@@ -85,6 +85,24 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
   assert.match(entries.get('word/footer1.xml')!,/PAGE/);
   assert.equal((xml.match(/w:pageBreakBefore/g)??[]).length,0);
 });
+test('Word conserva ligaduras y glosas separadas sin alterar el modelo',()=>{
+  const edition=fixture(),p=edition.placements[0]!;
+  p.vocabulary=[{
+    id:'voc.œ',lemma:'poena',headword:'pœna, –æ',meaning:'pena | castigo',
+    note:'f.',included:true,order:0,provenance:null,
+    reviewState:'manual',origin:'manual',locked:true,glossesSeparated:true,
+  },{
+    id:'voc.æ',lemma:'caelum',headword:'cælum, –ī',meaning:'cielo',note:null,
+    included:true,order:1,provenance:null,reviewState:'needs-review',
+    origin:'generated',locked:false,collatinusSource:true,
+  }];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/pœna, –æ/);
+  assert.match(xml,/cælum, –ī/);
+  assert.match(xml,/‘pena’ ‘castigo’/);
+  assert.equal(JSON.stringify(edition),before);
+});
 test('Cada texto posterior empieza en nueva página sin modificar la edición',()=>{
   const edition=fixture(),original=JSON.stringify(edition);
   edition.placements.push({...structuredClone(edition.placements[0]!),id:'place.2',
