@@ -1212,6 +1212,39 @@ function renderHome():HTMLElement{
   search.placeholder='Buscar por texto, autor u obra';
   search.setAttribute('aria-label','Buscar en banco de textos propios');
   bank.append(search);
+  const protectedIds=protectedBankSourceIds();
+  const selectedForRemoval=new Set<string>();
+  const bulk=el('div','cuaderno-bank-bulk');
+  bulk.setAttribute('aria-label','Selección y borrado de varios textos del banco');
+  const selectionCount=el('span','small muted','Ningún texto seleccionado');
+  const selectedButton=button('Seleccionar resultados',()=>{
+    for(const text of currentResults())if(!protectedIds.has(text.id))
+      selectedForRemoval.add(text.id);
+    updateSelection();
+  },'hbtn');
+  const deselect=button('Desmarcar todos',()=>{
+    selectedForRemoval.clear();updateSelection();
+  },'hbtn');
+  const removeSelected=button('Quitar seleccionados',()=>removeBankTexts([...selectedForRemoval]),'tbtn');
+  function currentResults():LatinText[]{
+    const needle=foldLatin(search.value.trim());
+    return corpus.texts.filter(t=>foldLatin(
+      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+  }
+  function updateSelection():void{
+    selectionCount.textContent=selectedForRemoval.size+
+      (selectedForRemoval.size===1?' texto seleccionado':' textos seleccionados');
+    removeSelected.disabled=selectedForRemoval.size===0;
+    deselect.disabled=selectedForRemoval.size===0;
+    for(const input of bank.querySelectorAll<HTMLInputElement>('.cuaderno-bank-select')){
+      input.checked=selectedForRemoval.has(input.value);
+    }
+  }
+  bulk.append(selectedButton,deselect,removeSelected,selectionCount);
+  bulk.append(el('p','small muted','Selecciona los resultados de la búsqueda o marca textos individuales. '+
+    'Los cuadernos editoriales no se borrarán. Los textos de cuadernos históricos están protegidos.'));
+  bank.append(bulk);
+  updateSelection();
   const catalogue=allGrammarTags(corpus);
   // Los filtros del banco describen la fuente; las etiquetas de una aparición
   // en otro cuaderno no se propagan silenciosamente a la fuente.
@@ -1227,8 +1260,24 @@ function renderHome():HTMLElement{
       if(origin)row.append(el('p','small muted',origin));
       row.append(el('p','cuaderno-home-latin',text.latin));
       const actions=el('div','cuaderno-home-text-actions');
-      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),
-        button('Quitar del banco',()=>removeBankText(text),'tbtn'));
+      const select=el('label','cuaderno-home-select'),checkbox=el('input','cuaderno-bank-select');
+      checkbox.type='checkbox';checkbox.value=text.id;
+      checkbox.setAttribute('aria-label','Seleccionar para quitar: '+text.title);
+      checkbox.disabled=protectedIds.has(text.id);
+      checkbox.checked=selectedForRemoval.has(text.id);
+      checkbox.addEventListener('change',()=>{
+        if(checkbox.checked)selectedForRemoval.add(text.id);
+        else selectedForRemoval.delete(text.id);
+        updateSelection();
+      });
+      select.append(checkbox,el('span','','Seleccionar'));
+      const remove=button('Quitar del banco',()=>removeBankText(text),'tbtn');
+      if(protectedIds.has(text.id)){
+        remove.disabled=true;
+        remove.title='Protegido: se utiliza en un cuaderno histórico';
+        select.title=remove.title;
+      }
+      actions.append(select,button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
       row.append(actions);
       target.append(row);
     }
@@ -1236,8 +1285,10 @@ function renderHome():HTMLElement{
   function populate():void{
     listing.replaceChildren();
     const needle=foldLatin(search.value.trim());
-    const matching=corpus.texts.filter(t=>foldLatin(
-      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+    const matching=currentResults();
+    selectedButton.textContent=needle?'Seleccionar resultados ('+matching.length+')':
+      'Seleccionar todo el banco ('+matching.length+')';
+    updateSelection();
     const addLazyRows=(group:HTMLDetailsElement,texts:typeof corpus.texts):void=>{
       const items=el('div','cuaderno-home-category-items');group.append(items);
       const update=():void=>{
