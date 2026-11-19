@@ -411,6 +411,17 @@ export function createEditionPane(options:{
       }
       paint();
       if(autoApply)await academics.generateInitial(place.id);
+      // Un Word reutilizado desde el banco mantiene sus datos editoriales:
+      // subrayados anclados al latín, vocabulario y palabras docentes.
+      if(text.teacherDocument){
+        const doc={...text.teacherDocument,title:titleOverride?.trim()||text.teacherDocument.title};
+        apply((edition,at)=>validateEdition({...edition,updatedAt:at,
+          placements:edition.placements.map(p=>p.id===place.id
+            ?applyParsedTeacherDocx(p,doc,()=>freshId('item')):p),
+        }));
+        if(!await flush())throw Error('No se han guardado los datos editoriales del Word del banco.');
+      }
+      paint();
       setMessage('Texto incorporado con preguntas generadas; puedes modificar cualquiera.');
       return true;
     }catch(e){
