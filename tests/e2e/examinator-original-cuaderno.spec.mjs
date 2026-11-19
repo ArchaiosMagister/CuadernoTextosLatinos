@@ -8,7 +8,7 @@ test('Examinator original como base: cabecera, biblioteca original y cuaderno pe
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('header .brand')).toHaveText('Examinator');
   await expect(page.locator('main#main > #editor')).toBeVisible();
-  await expect(page.locator('main#main > #preview')).toBeVisible();
+  await expect(page.locator('main#main > #preview')).toBeHidden();
   await expect(page.locator('#editor .card h3')).toHaveText('Cuaderno de textos latinos');
   await expect(page.locator('body')).toHaveCSS('grid-template-rows',/48px/);
   page.once('dialog',dialog=>dialog.accept('Cuaderno original 1'));
@@ -29,10 +29,9 @@ test('Examinator original como base: cabecera, biblioteca original y cuaderno pe
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await page.locator('#btnSave').click();
   await page.reload();
-  await expect(page.locator('#editor .card h3')).toBeVisible();
-  await page.locator('#btnOpen').click();
-  await expect(page.locator('.modal')).toContainText('Cuaderno original 1');
-  await page.locator('.original-open-row .hbtn').first().click();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno original 1'})
+    .getByRole('button',{name:'Abrir'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   expect(errors).toEqual([]);
 });
@@ -69,8 +68,7 @@ test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea pr
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
   await page.locator('#btnSave').click();
   await page.reload();
-  await page.locator('#btnOpen').click();
-  await page.locator('.original-open-row .hbtn').first().click();
+  await page.locator('.cuaderno-home-card').getByRole('button',{name:'Abrir'}).first().click();
   await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
 });
 
@@ -133,8 +131,7 @@ test('preguntas autocreadas usando bancos docentes sin formulario previo',async(
   await expect(options.nth(3)).not.toHaveText('Latinismos.');
   await page.locator('#btnSave').click();
   await page.reload();
-  await page.locator('#btnOpen').click();
-  await page.locator('.original-open-row .hbtn').first().click();
+  await page.locator('.cuaderno-home-card').getByRole('button',{name:'Abrir'}).first().click();
   await expect(page.locator('.edition-paper .edition-choice-options li')).toHaveCount(4);
   await expect(page.locator('.edition-paper .edition-choice-options li').nth(1))
     .not.toHaveText('Evolución fonética.');
@@ -306,11 +303,12 @@ test('Safari iPad: no añade selección antigua tras abrir otra obra',async({pag
 });
 
 
-test('selector visible y recuperación del último cuaderno en iPhone simulado',async({page})=>{
+test('iPhone: Inicio usa tarjetas y no reabre automáticamente el último cuaderno',async({page})=>{
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
-  await expect(selector).toBeVisible();
+  await expect(selector).toHaveCount(0);
   for(const title of ['Cuaderno primero','Cuaderno segundo']){
     page.once('dialog',dialog=>dialog.accept(title));
     await page.locator('#btnNew').click();
@@ -320,6 +318,10 @@ test('selector visible y recuperación del último cuaderno en iPhone simulado',
   await selector.selectOption(first);
   await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
   await page.reload();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  await expect(selector).toHaveCount(0);
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno primero'})
+    .getByRole('button',{name:'Abrir'}).click();
   await expect(selector.locator('option:checked')).toContainText('Cuaderno primero');
 });
 
@@ -340,7 +342,7 @@ test('WebKit: el cuaderno experimental recarga y analiza Collatinus sin red',asy
     const url='http://127.0.0.1:'+proxy.address().port+'/CuadernoTextosLatinos/examinator-cuadernos/';
     await page.goto(url);
     const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
-    await expect(selector).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
     await page.waitForFunction(()=>navigator.serviceWorker.controller?.scriptURL
       .endsWith('/examinator-cuadernos/service-worker.js'));
     page.once('dialog',dialog=>dialog.accept('Cuaderno offline'));
@@ -354,6 +356,9 @@ test('WebKit: el cuaderno experimental recarga y analiza Collatinus sin red',asy
 
     disconnected=true;
     await page.reload();
+    await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+    await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno offline'})
+      .getByRole('button',{name:'Abrir'}).click();
     await expect(selector.locator('option:checked')).toContainText('Cuaderno offline');
     await page.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
     await page.getByRole('button',{name:'Analizar etiquetas con Collatinus'}).click();

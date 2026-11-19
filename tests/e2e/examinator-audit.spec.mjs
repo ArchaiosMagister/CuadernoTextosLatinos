@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('Revisar cuaderno protege la palabra docente y permite sustituir la otra aparición',async({page})=>{
   await page.goto('/examinator-cuadernos/');
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Repeticiones'));
   await page.locator('#btnNew').click();
   for(const [title,latin] of [['Pasaje uno','Caesar Galliam vicit.'],['Pasaje dos','Roma urbs vetus est.']]){
@@ -43,6 +43,8 @@ test('Revisar cuaderno protege la palabra docente y permite sustituir la otra ap
     return {first:first.id,second:second.id,word:first.value};
   });
   await page.reload();
+  await page.locator('.cuaderno-home-card').filter({hasText:'Repeticiones'})
+    .getByRole('button',{name:'Abrir'}).click();
   await expect(page.locator('.edition-repetition-notice')).toContainText('Repeticiones:');
   const audit=page.getByText('Revisar cuaderno',{exact:true});
   await audit.click();

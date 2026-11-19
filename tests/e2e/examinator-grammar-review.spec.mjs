@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('Collatinus propone una pasiva y guarda únicamente la selección confirmada',async({page})=>{
   await page.goto('/examinator-cuadernos/');
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Revisión latina'));
   await page.locator('#btnNew').click();
   await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
@@ -26,8 +26,7 @@ test('Collatinus propone una pasiva y guarda únicamente la selección confirmad
 
 test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar el cuaderno',async({page,browser})=>{
   await page.goto('/examinator-cuadernos/');
-  const selector=page.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
-  await expect(selector).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de respaldo'));
   await page.locator('#btnNew').click();
   await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
@@ -71,7 +70,7 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     const restored=await target.newPage();
     await restored.goto('/examinator-cuadernos/');
     const restoredSelector=restored.getByRole('combobox',{name:'Elegir cuaderno',exact:true});
-    await expect(restoredSelector.locator('option')).toHaveCount(1);
+    await expect(restored.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
     const file=restored.locator('#editor .card input[type=file]');
     restored.once('dialog',dialog=>dialog.accept());
     await file.setInputFiles(path);
@@ -88,8 +87,8 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     await expect(restoredModal.getByText(/Loquitur · .* · Descartada/)).toBeVisible();
     await restoredModal.getByRole('button',{name:'Cerrar'}).click();
 
-    await restoredSelector.selectOption('');
-    await expect(restoredSelector.locator('option:checked')).toHaveText('Elige un cuaderno');
+    await restored.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+    await expect(restored.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
     restored.once('dialog',dialog=>dialog.accept('Cuaderno nuevo'));
     await restored.locator('#btnNew').click();
     await restored.getByRole('button',{name:'Banco propio'}).click();
@@ -104,5 +103,5 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
   }finally{
     await target.close();
   }
-  await expect(selector.locator('option')).toHaveCount(2);
+  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true}).locator('option')).toHaveCount(2);
 });

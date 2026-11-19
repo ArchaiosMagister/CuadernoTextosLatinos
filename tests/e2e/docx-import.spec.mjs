@@ -95,7 +95,7 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de Salustio'));
   await page.locator('#btnNew').click();
   const latin='Omnis homines qui sese student praestare ceteris animalibus summa ope niti decet.';
@@ -174,8 +174,8 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
   await page.locator('#btnSave').click();
   await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})
-    .locator('option:checked')).toContainText('Cuaderno de Salustio');
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno de Salustio'})
+    .getByRole('button',{name:'Abrir'}).click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('textbox',{name:'Traducción de animal, -alis'})).toHaveValue('animal');
 });
@@ -183,7 +183,7 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
 test('selecciona varios Word y conserva el orden de los textos en un solo cuaderno',async({page})=>{
   await page.setViewportSize({width:390,height:740});
   await page.goto('/examinator-cuadernos/');
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno por lotes'));
   await page.locator('#btnNew').click();
   const chooser=page.waitForEvent('filechooser');
