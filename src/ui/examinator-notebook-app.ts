@@ -2,7 +2,7 @@ import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
 import {fingerprintForMark} from '../core/edition-validation.js';
 import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
-import type {CorpusV1} from '../core/model.js';
+import type {CorpusV1,LatinText} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
@@ -20,7 +20,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,isCustomTagLabelValid,matchesGrammarFilters,placementGrammarTags} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -509,8 +509,79 @@ function openOwnTexts():void{
   },'tbtn'));
   const modal=M.modal('Banco de textos',panel,[{label:'Cerrar'}]);close=modal.close;
 }
-function pasteText():void{
-  if(!active())return;
+
+/** Guardado de fuentes autónomas. Un DOCX conserva los datos de preguntas,
+ * subrayados y glosario; añadirlo a un cuaderno no modifica esta fuente. */
+async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Promise<void>{
+  const clean={...input,title:input.title.trim(),latin:input.latin.trim()};
+  if(!clean.title||!clean.latin)throw Error('El título y el pasaje latino son obligatorios.');
+  const saved=await repo.load();
+  const match=saved.corpus.texts.find(t=>t.latin===clean.latin
+    &&t.source.author===(clean.author.trim()||null)
+    &&t.source.work===(clean.work.trim()||null)
+    &&t.source.reference===(clean.reference.trim()||null));
+  const id=match?.id??'doc.'+crypto.randomUUID(),at=new Date().toISOString();
+  const updated=upsertText(saved.corpus,{...clean,id},id,at);
+  const normalized=documentData?{...documentData,title:clean.title,latin:clean.latin,
+    author:clean.author.trim()||null,work:clean.work.trim()||null,
+    reference:clean.reference.trim()||null}:undefined;
+  const next=normalized?validateCorpus({...updated,texts:updated.texts.map(t=>t.id===id
+    ?{...t,teacherDocx:normalized}:t)}):updated;
+  await repo.save(next,saved.revision);
+  await reload();render();
+  M.toast(match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
+}
+async function removeBankText(text:LatinText):Promise<void>{
+  if(!window.confirm('¿Quitar «'+text.title+'» del banco? Los cuadernos conservarán sus textos.'))return;
+  await writeSource(async()=>{
+    for(const repository of [repo,workspace]){
+      const saved=await (repository===repo?repo.load():workspace.loadCorpus());
+      if(!saved.corpus.texts.some(item=>item.id===text.id))continue;
+      const next=deleteText(saved.corpus,text.id);
+      if(repository===repo)await repo.save(next,saved.revision);
+      else await workspace.saveCorpus(next,saved.revision);
+    }
+  });
+  await reload();render();M.toast('Texto retirado del banco.');
+}
+function tagBankText(text:LatinText):void{
+  const panel=el('div','cuaderno-bank-tag-editor');
+  panel.append(el('p','muted','Etiquetas de la fuente. Los cuadernos ya creados conservan sus decisiones.'));
+  const search=el('input');search.type='search';
+  search.placeholder='Buscar etiqueta gramatical…';
+  search.setAttribute('aria-label','Buscar etiqueta en el catálogo');
+  panel.append(search);
+  const all=allGrammarTags(corpus);
+  const selected=new Set(text.tagIds);
+  const list=el('div','cuaderno-bank-tag-options');
+  for(const tag of all){
+    const label=el('label','cuaderno-bank-tag-option'),check=el('input');
+    check.type='checkbox';check.checked=selected.has(tag.id);check.value=tag.id;
+    check.addEventListener('change',()=>check.checked?selected.add(tag.id):selected.delete(tag.id));
+    label.append(check,el('span','',('· '.repeat(catalogDepth(tag,all)))+tag.label));
+    list.append(label);
+  }
+  search.addEventListener('input',()=>{
+    const key=foldLatin(search.value);
+    for(const label of Array.from(list.children) as HTMLElement[])
+      label.hidden=Boolean(key)&&!foldLatin(label.textContent??'').includes(key);
+  });
+  panel.append(list);
+  M.modal('Etiquetas de «'+text.title+'»',panel,[{label:'Cancelar'},
+    {label:'Guardar etiquetas',primary:true,onclick:async()=>{
+      await writeSource(async()=>{
+        const saved=await repo.load();
+        if(!saved.corpus.texts.some(t=>t.id===text.id))
+          throw Error('La fuente ya no está en el banco editable.');
+        const next=attachGrammarTags(saved.corpus,text.id,[...selected]);
+        await repo.save(next,saved.revision);
+      });
+      await reload();render();M.toast('Etiquetas de la fuente guardadas.');
+    }}]);
+}
+
+function pasteText(destination:'notebook'|'bank'='notebook'):void{
+  if(destination==='notebook'&&!active())return;
   const form=el('form','original-paste');
   const inputs=new Map<string,HTMLInputElement|HTMLTextAreaElement>();
   for(const [field,name] of [
@@ -521,16 +592,18 @@ function pasteText():void{
     const input=field==='latin'?el('textarea'):el('input');
     if(field==='latin')(input as HTMLTextAreaElement).rows=7;
     input.setAttribute('aria-label',name);
-    if(field==='title')input.value=nextNotebookTextTitle(composer.activeEdition()?.placements??[]);
+    if(field==='title'&&destination==='notebook')input.value=nextNotebookTextTitle(composer.activeEdition()?.placements??[]);
     inputs.set(field,input);label.append(caption,input);form.append(label);
   }
   let close=()=>{};
-  const save=button('Añadir al cuaderno',async()=>{
+  const save=button(destination==='bank'?'Guardar en el banco':'Añadir al cuaderno',async()=>{
     const value=(name:string)=>inputs.get(name)?.value.trim()??'';
     save.disabled=true;
     try{
-      await addText({title:value('title'),author:value('author'),work:value('work'),
-        reference:value('reference'),latin:value('latin')});
+      const data={title:value('title'),author:value('author'),work:value('work'),
+        reference:value('reference'),latin:value('latin')};
+      if(destination==='bank')await writeSource(()=>saveBankText(data));
+      else await addText(data);
       close();
     }finally{save.disabled=false;}
   },'hbtn primary');
