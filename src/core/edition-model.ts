@@ -117,6 +117,8 @@ export interface VocabularyEntryV1 {
   reviewState: 'verified' | 'needs-review' | 'manual';
   origin: 'generated' | 'manual';
   locked: boolean;
+  /** Misma opción de glosas independientes que Examinator2; falta en V1 antiguo. */
+  glossesSeparated?: boolean;
 }
 
 export interface ReviewFlagV1 {
@@ -150,6 +152,9 @@ export interface TextPlacementV1 {
   text: EditableTextV1;
   questions: QuestionV1[];
   vocabulary: VocabularyEntryV1[];
+  /** Las opciones antiguas se interpretan como «elegir» y «modelo». */
+  vocabularySelectionMode?: 'elegir' | 'todo';
+  vocabularyQuantityMode?: 'modelo' | 'todas' | 'largas' | 'ninguna';
   grammaticalTagIds: string[];
   /** Omisión deliberada en documentos anteriores a las etiquetas de fragmento. */
   grammaticalSpans?: GrammarSpanV1[];
