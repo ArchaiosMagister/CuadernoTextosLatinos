@@ -14,6 +14,9 @@ import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import type {LibraryEntry,LibraryWork} from '../core/library.js';
 import type {CorpusSnapshot} from '../ports/corpus-repository.js';
+import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
+  type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
+import type {CollatinusVocabularyCandidate} from './edition-app.js';
 
 type Entry=ExaminatorEntry & {local?:LibraryEntry};
 type DisplayEntry=Entry & {i:number;have:boolean;builtin:boolean};
@@ -44,6 +47,7 @@ const composer=createEditionPane({
   autoApply:true,
   autoVocabulary:false,
   onAddSource:()=>openLibrary(),
+  onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
 });
 const works=new Map<string,LibraryWork>();
 const ownCache=new Set<string>();
@@ -162,7 +166,7 @@ host.api={
  * Se carga de forma diferida y NO se reutiliza la base de Examinator2 original.
  * Su análisis no sustituye una verificación individual ni una decisión docente.
  */
-type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean;
+type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean;lplain?:string;lemma?:string;
   cands?:Array<{lid:number;trad?:string}>};
 type LatinLemma={lid:number;head:string;trad:string;note:string;proper:boolean};
 type CollatinusApi={call:(method:string,args?:Record<string,unknown>)=>Promise<unknown>};
@@ -193,34 +197,48 @@ const GENTILICS=new Set([
 const lexKey=(value:string)=>value.normalize('NFD')
   .replace(/[\u0300-\u036f]/g,'').replace(/æ/g,'ae')
   .replace(/œ/g,'oe').toLowerCase().trim();
+/** Lemas de Collatinus para cualquier palabra reconocida del texto.
+ * Los significados se toman solo de Collatinus o del banco preferente del cuaderno.
+ * Ninguna ficha se presenta como verificación docente individual.
+ */
+async function collatinusVocabulary(latin:string,quantity:VocabularyQuantityMode):
+  Promise<CollatinusVocabularyCandidate[]>{
+  const engine=await collatinus();
+  const tokens=await engine.call('analyze',{text:latin}) as LatinToken[];
+  if(!Array.isArray(tokens))throw new Error('Collatinus devolvió un análisis inesperado.');
+  const ids=[...new Set(tokens.filter(t=>t.sel).map(t=>t.sel!.lid))];
+  if(!ids.length)return [];
+  const entries=await engine.call('vocabEntries',{lids:ids,mode:quantity}) as LatinLemma[];
+  if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
+  const tokenGlosses=new Map<number,string>(),tokenLemmas=new Map<number,string>();
+  for(const token of tokens){
+    if(!token.sel)continue;
+    if(!tokenLemmas.has(token.sel.lid))
+      tokenLemmas.set(token.sel.lid,token.lplain||token.lemma||token.w);
+    const gloss=token.cands?.find(c=>c.lid===token.sel?.lid)?.trad?.trim();
+    if(gloss&&!tokenGlosses.has(token.sel.lid))tokenGlosses.set(token.sel.lid,gloss);
+  }
+  let preferred:ReturnType<typeof parsePreferredVocabulary>=[];
+  try{preferred=parsePreferredVocabulary(localStorage.getItem(PREFERRED_VOCABULARY_KEY));}
+  catch(error){console.warn('El vocabulario preferente necesita revisión:',error);}
+  return entries.filter(x=>ids.includes(x.lid)).map(x=>{
+    const lemma=tokenLemmas.get(x.lid)||x.head.split(',')[0]||'';
+    const saved=preferredFor(preferred,lemma);
+    const proper=x.proper||GENTILICS.has(vocabularyKey(lemma));
+    return {
+      lemma,
+      headword:saved?.headword??x.head,
+      meaning:saved?.meaning??x.trad?.trim()??tokenGlosses.get(x.lid)??null,
+      note:saved?.note??x.note??null,
+      proper,
+      glossesSeparated:saved?.glossesSeparated??false,
+    };
+  });
+}
 async function enrichVocabulary(latin:string,placementId:string,editionId:string):Promise<void>{
   try{
-    const engine=await collatinus();
-    const tokens=await engine.call('analyze',{text:latin}) as LatinToken[];
-    if(!Array.isArray(tokens))throw new Error('Collatinus devolvió un análisis inesperado.');
-    const ids=[...new Set(tokens.filter(x=>x.sel&&(!x.amb||x.proper))
-      .map(x=>x.sel!.lid))];
-    if(!ids.length)return;
-    const entries=await engine.call('vocabEntries',{lids:ids,mode:'modelo'}) as LatinLemma[];
-    if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
-    const chosen=new Set(tokens.filter(x=>x.sel&&(!x.amb||x.proper))
-      .map(x=>x.sel!.lid));
-    // Aprovechar también la glosa corta del análisis contextual de Collatinus
-    // cuando su ficha de enunciado carece de traducción. No inventar sentidos.
-    const tokenGlosses=new Map<number,string>();
-    for(const token of tokens){
-      if(!token.sel)continue;
-      const gloss=token.cands?.find(c=>c.lid===token.sel?.lid)?.trad?.trim();
-      if(gloss&&!tokenGlosses.has(token.sel.lid))tokenGlosses.set(token.sel.lid,gloss);
-    }
-    const approved=entries.filter(x=>{
-      const lemma=lexKey(x.head.split(',')[0]??'');
-      return chosen.has(x.lid)&&(x.proper||GENTILICS.has(lemma));
-    }).map(x=>({
-      headword:x.head,lemma:x.head,meaning:x.trad?.trim()||tokenGlosses.get(x.lid)||null,
-      note:x.note||null,
-    }));
-    // No escribir resultados tardíos en otro cuaderno o aparición.
+    const entries=await collatinusVocabulary(latin,'modelo');
+    const approved=entries.filter(x=>x.proper);
     if(currentId!==editionId||composer.activeEdition()?.id!==editionId||
        !composer.activeEdition()?.placements.some(x=>x.id===placementId))return;
     await composer.addCollatinusVocabulary(placementId,approved);
