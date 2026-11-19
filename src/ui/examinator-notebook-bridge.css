@@ -148,7 +148,6 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
    de hasta 600 px. No se modifica su biblioteca, el lector ni la hoja A4.
    Las reglas de impresión quedan excluidas deliberadamente. */
 @media screen{
-  body[data-has-editor='true']{--cuaderno-menu-width:clamp(350px,44%,600px);}
   #editor .edition-settings{gap:5px;}
   #editor .edition-menu-nav{padding:5px 0;gap:3px;}
   #editor .edition-menu-nav .btn{
@@ -156,7 +155,8 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
     font-size:11.5px;font-weight:500;border-radius:6px;
   }
   #editor .edition-menu-content{
-    padding:8px;gap:8px;align-content:start;min-width:0;
+    padding:8px;gap:8px;align-content:start;min-width:0;max-width:600px;
+    box-sizing:border-box;
   }
   #editor .edition-menu-content .edition-field{
     min-width:0;gap:3px;margin:0;font-size:12.5px;font-weight:600;
@@ -167,7 +167,7 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   #editor .edition-menu-content input.field-control,
   #editor .edition-menu-content select.field-control{
     box-sizing:border-box;width:100%;max-width:100%;min-width:0;
-    min-height:30px;margin:0;padding:5px 8px;
+    height:30px;min-height:30px;margin:0;padding:5px 8px;
     border:1px solid var(--rule);border-radius:6px;
     font:400 13px/1.3 var(--ui-font);
   }
