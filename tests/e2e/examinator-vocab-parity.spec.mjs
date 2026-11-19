@@ -20,23 +20,23 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await page.getByRole('button',{name:'Todo el texto'}).click();
   const heads=page.locator('#editor .edition-vocab-headword');
-  await expect.poll(async()=>(await heads.allInputValues()).join(' | '),
+  await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:110000}).toContain('cælum');
-  await expect.poll(async()=>(await heads.allInputValues()).join(' | '),
+  await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:110000}).toContain('prœl');
-  const names=await heads.allInputValues();
+  const names=await heads.evaluateAll(nodes=>nodes.map(node=>node.value));
   expect(names.some(x=>x.startsWith('pœna'))).toBe(true);
   expect(names.some(x=>x.startsWith('poeta')&&!x.startsWith('pœta'))).toBe(true);
   await expect(page.locator('.edition-paper .edition-latin')).toContainText('Caelum et proelium');
   await page.getByRole('combobox',{name:'Cantidades vocálicas'}).selectOption('ninguna');
-  await expect.poll(async()=>(await heads.allInputValues()).join(' | '),
+  await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:110000}).toContain('pœna');
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await page.getByRole('button',{name:'Desmarcar todas'}).click();
   expect(await page.locator('.edition-vocab-include:checked').count()).toBe(0);
   await page.getByRole('button',{name:'Marcar todas'}).click();
   await expect(page.locator('.edition-vocab-include:checked')).not.toHaveCount(0);
-  const idx=(await heads.allInputValues()).findIndex(x=>x.startsWith('pœna'));
+  const idx=(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).findIndex(x=>x.startsWith('pœna'));
   expect(idx).toBeGreaterThanOrEqual(0);
   const row=page.locator('.edition-vocab-row').nth(idx);
   await row.locator('.edition-vocab-meaning').fill('pena | castigo');
@@ -52,7 +52,7 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   await page.locator('.original-open-row .hbtn').first().click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
-  await expect.poll(async()=>(await heads.allInputValues()).join(' | '),
+  await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),
     {timeout:45000}).toContain('pœna');
   expect(errors).toEqual([]);
 });
