@@ -239,5 +239,5 @@ test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabul
   await listing.getByRole('button',{name:/Añadir «Los romanos envían legados/}).first().click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
   await expect(page.locator('.edition-underlined')).toHaveCount(4);
-  await expect(page.locator('.edition-vocabulary-line')).toContainText('Egipto');
+  await expect(page.locator('.edition-vocabulary-line').filter({hasText:'Egipto'})).toHaveCount(1);
 });
