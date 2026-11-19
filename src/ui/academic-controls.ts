@@ -6,7 +6,7 @@ import type {
   ChoiceOptionV1, NotebookEditionV1, QuestionV1, TextPlacementV1,
 } from '../core/edition-model.js';
 import {
-  AcademicQuestionEngineV1, generatedAcademicValue, type AcademicPlanV1, type AcademicSlotTargetV1,
+  AcademicQuestionEngineV1, generatedAcademicValue, normalizeAcademicExercise, type AcademicPlanV1, type AcademicSlotTargetV1,
   type AcademicMorphTargetV1,
 } from '../core/academic-engine.js';
 import {
@@ -110,6 +110,12 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function countFor(o:ChoiceOptionV1):number{
     return counts.get(o.id)??(o.slots.length||defaults[o.kind]);
   }
+  function preverbKeys(option:ChoiceOptionV1):string[]{
+    if(option.statement.origin==='generated'&&option.preverbBaseIds)return [...option.preverbBaseIds];
+    const found=option.statement.value.match(/\*([^*]+)\* \(3\) y de \*([^*]+)\* \(2\)/u);
+    return found?[found[1]!,found[2]!].map(form=>
+      preverbBaseKeyForForm(academicTeacherSnapshotV1,form)).filter((id):id is string=>Boolean(id)):[];
+  }
   function usedPreverbKeys(excludingOptionId:string):string[]{
     const edition=bind.snapshot()?.edition;
     if(!edition)return [];
@@ -118,12 +124,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       if(question.kind!=='choice')continue;
       for(const option of question.options){
         if(option.id===excludingOptionId||option.kind!=='preverb'||!option.enabled)continue;
-        const found=option.statement.value.match(/\*([^*]+)\* \(3\) y de \*([^*]+)\* \(2\)/u);
-        if(!found)continue;
-        for(const form of [found[1]!,found[2]!]){
-          const key=preverbBaseKeyForForm(academicTeacherSnapshotV1,form);
-          if(key)used.add(key);
-        }
+        for(const key of preverbKeys(option))used.add(key);
       }
     }
     return [...used].sort();
@@ -221,6 +222,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     if(preverb){
       const at=new Date().toISOString();
       const text=preverbStatement(preverb.forms);
+      const first=preverbBaseKeyForForm(academicTeacherSnapshotV1,preverb.forms[0]);
+      const second=preverbBaseKeyForForm(academicTeacherSnapshotV1,preverb.forms[1]);
+      const preverbBaseIds:[string,string]|undefined=first&&second&&first!==second?[first,second]:undefined;
       // Enunciados editados manualmente no se reescriben al regenerar.
       const placement=saved.edition.placements.find(p=>p.id===preverb.placementId);
       const question=placement?.questions.find(q=>q.id===preverb.questionId);
@@ -241,6 +245,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
                     ...o,
                     ...(o.statement.locked&&o.statement.origin==='manual'?{}:{
                       statement:{value:text,origin:'generated' as const,locked:false,lastEditAt:null},
+                      ...(preverbBaseIds?{preverbBaseIds}:{}),
                     }),
                     slots:o.slots.filter(slot=>slot.origin==='manual'),
                   }),
@@ -697,8 +702,80 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       }
     });
   }
+  function renderNotebookAudit():HTMLElement{
+    const details=el('details','edition-audit');
+    details.append(el('summary','','Revisar cuaderno'));
+    const result=el('div');details.append(result);
+    async function inspect():Promise<void>{
+      await withSaved(state=>{
+        const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
+          target:AcademicSlotTargetV1;protected:boolean}[]>();
+        const baseCounts=new Map<string,string[]>();
+        for(const placement of state.edition.placements)for(const question of placement.questions){
+          if(!question.enabled||question.kind!=='choice')continue;
+          for(const option of question.options){
+            if(!option.enabled)continue;
+            if(option.kind==='preverb'){
+              for(const base of preverbKeys(option)){
+                const uses=baseCounts.get(base)??[];
+                uses.push(placement.text.title);baseCounts.set(base,uses);
+              }
+              continue;
+            }
+            for(const slot of option.slots){
+              const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
+              const uses=groups.get(key)??[];
+              uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
+                protected:slot.locked||slot.origin==='manual',
+                target:{placementId:placement.id,questionId:question.id,optionId:option.id,
+                  slotId:slot.id,expectedRevision:state.revision,
+                  ...(rulesFor(question)!==undefined?{phoneticRules:rulesFor(question)!}:{})}});
+              groups.set(key,uses);
+            }
+          }
+        }
+        result.replaceChildren(el('p','',state.edition.placements.length+' textos revisados · '+
+          baseCounts.size+' bases preverbiales distintas'));
+        const duplicates=[...groups.values()].filter(uses=>uses.length>1);
+        for(const kind of ['phonetics','prefix','latinism'] as const){
+          const rows=duplicates.filter(uses=>uses[0]?.kind===kind);
+          result.append(el('h4','',optionName(kind)+' · '+rows.length+' palabras repetidas'));
+          for(const uses of rows){
+            const first=uses[0]!;
+            result.append(el('p','',first.word+' · '+uses.map(use=>
+              use.title+(use.protected?' (protegida)':'')).join(', ')));
+            const preserved=uses.find(use=>use.protected)??first;
+            for(const use of uses.filter(use=>use!==preserved&&!use.protected)){
+              const engine=service().engine;
+              const choices=engine.previewSlot(state.edition,use.target,true).candidates;
+              const candidate=choices[0];
+              if(!candidate){
+                result.append(el('p','',use.title+' · Sin alternativa verificada libre'));
+                continue;
+              }
+              result.append(button(use.title+' · Sustituir por '+candidate.value+' ('+
+                choices.length+' alternativas)',async()=>{
+                await withSaved(async latest=>{
+                  const target={...use.target,expectedRevision:latest.revision};
+                  if(latest.revision!==state.revision||JSON.stringify(latest.edition)!==JSON.stringify(state.edition)
+                    ||!engine.previewSlot(latest.edition,target,true).candidates.some(row=>row.id===candidate.id))
+                    throw new Error('La revisión ha caducado. Vuelve a revisar el cuaderno.');
+                  const plan=engine.prepareSlot(latest.edition,target,candidate.id);
+                  await commitPlanDirect(plan,'Sustitución de la palabra repetida');
+                });
+              }));
+            }
+          }
+        }
+        for(const [base,uses] of baseCounts)if(uses.length>1)
+          result.append(el('p','','Base preverbial repetida · '+base+' · '+uses.join(', ')));
+      });
+    }
+    details.addEventListener('toggle',()=>{if(details.open)void inspect();});
+    return details;
+  }
   return {
-    clear,generateInitial,review,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
+    clear,generateInitial,review,renderNotebookAudit,renderOption,renderSlot,renderQuestion,renderMorph,renderTextSelect,
     renderPaperSelect,savePaperSelection,
   };
 }

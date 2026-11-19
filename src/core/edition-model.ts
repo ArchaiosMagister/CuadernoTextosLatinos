@@ -83,6 +83,7 @@ export interface ChoiceOptionV1 {
   enabled: boolean;
   statement: EditableFieldV1;
   slots: QuestionWordSlotV1[];
+  preverbBaseIds?: [string, string];
 }
 
 export type QuestionKindV1 = 'translation' | 'syntax' | 'morphology' | 'choice';

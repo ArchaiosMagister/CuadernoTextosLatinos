@@ -149,10 +149,18 @@ function slot(input: unknown,path: string):QuestionWordSlotV1 {
     locked:flag(d.locked,`${path}.locked`),provenance};
 }
 function option(input: unknown,path: string):ChoiceOptionV1 {
-  const d=object(input,path,['id','kind','enabled','statement','slots']);
-  return {id:id(d.id,`${path}.id`),kind:choice(d.kind,`${path}.kind`,['preverb','phonetics','prefix','latinism']),
+  const d=object(input,path,['id','kind','enabled','statement','slots'],['preverbBaseIds']);
+  const kind=choice(d.kind,`${path}.kind`,['preverb','phonetics','prefix','latinism']);
+  const result:ChoiceOptionV1={id:id(d.id,`${path}.id`),kind,
     enabled:flag(d.enabled,`${path}.enabled`),statement:editable(d.statement,`${path}.statement`),
     slots:array(d.slots,`${path}.slots`,500).map((v,i)=>slot(v,`${path}.slots[${i}]`))};
+  if(d.preverbBaseIds!==undefined){
+    const bases=array(d.preverbBaseIds,path+'.preverbBaseIds',2);
+    if(kind!=='preverb'||bases.length!==2||bases[0]===bases[1])fail(path,'bases preverbiales inválidas');
+    result.preverbBaseIds=[str(bases[0],path+'.preverbBaseIds[0]',200),
+      str(bases[1],path+'.preverbBaseIds[1]',200)];
+  }
+  return result;
 }
 function question(input: unknown,path: string):QuestionV1 {
   if(!input||typeof input!=='object')fail(path,'pregunta inválida');
