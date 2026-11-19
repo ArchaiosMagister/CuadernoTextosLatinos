@@ -183,10 +183,13 @@ test('Banco del editor: modal sin desbordamiento en iPhone e iPad',async({page})
     await page.setViewportSize({width,height:844});
     const layout=await page.evaluate(()=>{
       const rect=document.querySelector('.modal')?.getBoundingClientRect();
+      const header=document.querySelector('body>header'),main=document.querySelector('#main');
       return {viewport:innerWidth,pageWidth:document.documentElement.scrollWidth,
+        headerWidth:header?.getBoundingClientRect().width,
+        mainWidth:main?.getBoundingClientRect().width,
         left:rect?.left??-1,right:rect?.right??Number.POSITIVE_INFINITY};
     });
-    expect(layout.pageWidth).toBeLessThanOrEqual(width+2);
+    expect(layout.pageWidth,JSON.stringify(layout)).toBeLessThanOrEqual(width+2);
     expect(layout.left).toBeGreaterThanOrEqual(-2);
     expect(layout.right).toBeLessThanOrEqual(width+2);
   }
