@@ -93,8 +93,14 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     restored.once('dialog',dialog=>dialog.accept('Cuaderno nuevo'));
     await restored.locator('#btnNew').click();
     await restored.getByRole('button',{name:'Banco propio'}).click();
-    await restored.getByRole('button',{name:'Pasaje transportable',exact:true}).click();
+    await restored.getByRole('button',{name:'Añadir «Pasaje transportable» al cuaderno',exact:true}).click();
     await expect(restored.locator('.edition-counter')).toContainText('Texto 1 de 1');
+    await restored.getByRole('button',{name:'Banco propio'}).click();
+    restored.once('dialog',dialog=>dialog.accept());
+    await restored.getByRole('button',{name:'Quitar del banco: Pasaje transportable'}).click();
+    await expect(restored.getByText('No hay textos con ese filtro.',{exact:true})).toBeVisible();
+    await restored.locator('.modal').last().getByRole('button',{name:'Cerrar'}).click();
+    await expect(restored.locator('.edition-paper-title')).toHaveText('Pasaje transportable');
   }finally{
     await target.close();
   }

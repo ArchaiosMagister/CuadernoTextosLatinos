@@ -1482,7 +1482,12 @@ export function createEditionPane(options:{
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
     points.append(check,node('span','','Mostrar puntuación de las preguntas'));panel.append(points);
-    panel.append(node('p','hint','El interlineado se expresa como espacio adicional al interlineado normal, al estilo de Word: 3 pt suele ser suficiente. Los cuadernos anteriores conservan su altura de línea hasta que se ajuste este valor. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
+    const formatStatus=node('p','hint');
+    formatStatus.setAttribute('role','status');
+    panel.append(action('Aplicar a todos los textos',async()=>{
+      formatStatus.textContent=await flush()?'Formato guardado para todos los textos del cuaderno.':
+        'No se ha podido guardar el formato.';
+    },'btn btn-primary'),formatStatus,node('p','hint','El interlineado se expresa como espacio adicional al interlineado normal, al estilo de Word: 3 pt suele ser suficiente. Los cuadernos anteriores conservan su altura de línea hasta que se ajuste este valor. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;

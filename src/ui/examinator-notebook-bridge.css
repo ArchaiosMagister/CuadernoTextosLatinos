@@ -301,3 +301,33 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
     background:var(--paper-2);color:var(--ink);border:1px solid var(--rule);
   }
 }
+
+.original-open-row,.original-own-row {
+  display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;
+  padding:.55rem 0;border-bottom:1px solid var(--rule-2);
+}
+.original-open-row > span,.original-own-row > strong {flex:1 1 100%;}
+.original-own-row > small {flex:1 1 100%;}
+.word-review {display:grid;gap:.6rem;}
+.word-review-item > summary {font-weight:700;cursor:pointer;}
+.word-review-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.35rem .7rem;}
+.word-review .field {display:grid;gap:.15rem;margin:0;}
+.word-review input,.word-review textarea {width:100%;min-width:0;box-sizing:border-box;}
+.word-review textarea {margin-top:.4rem;resize:vertical;}
+.word-review p {margin:.25rem 0;}
+.word-import-errors {margin:.25rem 0;}
+.grammar-chips {display:flex;flex-wrap:wrap;gap:.35rem;margin:.25rem 0 .65rem;}
+.grammar-chip {border-radius:999px;padding:.2em .65em;font-size:.9em;background:#e5e9ed;color:#1a2c3e;}
+.grammar-chip[data-group="gram.oracion"] {background:#f1e0f8;color:#4e2061;}
+.grammar-chip[data-group="gram.formas"] {background:#dbece2;color:#154632;}
+.grammar-chip[data-group="gram.pronombres"] {background:#e1eaff;color:#253f70;}
+.grammar-chip[data-group="gram.funciones"] {background:#ffeac9;color:#60380f;}
+.grammar-tag-search {width:100%;box-sizing:border-box;margin-bottom:.45rem;}
+.simple-tag-option[hidden],.simple-tag-group[hidden] {display:none!important;}
+.grammar-proposal-card {
+  padding:.55rem .7rem;margin:.4rem 0;border:1px solid var(--rule-2);border-radius:.55rem;
+  border-inline-start:.28rem solid #a97628;background:var(--paper-2);
+}
+.grammar-proposal-card[data-state="confirmed"] {border-inline-start-color:#398361;}
+.grammar-proposal-card[data-state="dismissed"] {border-inline-start-color:var(--rule);}
+.grammar-proposal-card > summary {font-weight:700;cursor:pointer;}

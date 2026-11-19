@@ -80,7 +80,11 @@ test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva 
     await page.locator('#btnNew').click();
     await expect(page.locator('#editor .card')).toContainText(title);
   }
-  await page.locator('#btnOpen').click();
+  await page.getByRole('button',{name:'Gestionar cuadernos',exact:true}).click();
+  const backup=page.waitForEvent('download');
+  await page.locator('.original-open-row').filter({hasText:'Conservar'})
+    .getByRole('button',{name:'Hacer copia',exact:true}).click();
+  expect((await backup).suggestedFilename()).toMatch(/^copia-cuaderno-.*\.json$/);
   const remove=page.getByRole('button',{name:'Eliminar cuaderno Eliminar este',exact:true});
   const dismissal=page.waitForEvent('dialog').then(dialog=>dialog.dismiss());
   await Promise.all([dismissal,remove.click()]);

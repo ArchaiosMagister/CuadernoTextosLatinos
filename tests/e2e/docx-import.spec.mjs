@@ -179,3 +179,30 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('textbox',{name:'Traducción de animal, -alis'})).toHaveValue('animal');
 });
+
+test('selecciona varios Word y conserva el orden de los textos en un solo cuaderno',async({page})=>{
+  await page.setViewportSize({width:390,height:740});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno por lotes'));
+  await page.locator('#btnNew').click();
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
+  const file=name=>({name,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(documentXml())});
+  await (await chooser).setFiles([file('primero.docx'),file('segundo.docx')]);
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(2);
+  const first=modal.locator('.word-review-item').nth(0);
+  const second=modal.locator('.word-review-item').nth(1);
+  await first.locator('summary').first().click();
+  await first.getByRole('textbox',{name:'Título del texto'}).fill('Entrada primera');
+  await second.locator('summary').first().click();
+  await second.getByRole('textbox',{name:'Título del texto'}).fill('Entrada segunda');
+  await expect(modal.locator('.mf').getByRole('button',{name:'Incorporar 2 textos'})).toBeInViewport();
+  await modal.getByRole('button',{name:'Incorporar 2 textos'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 2 de 2');
+  await expect(page.getByRole('combobox',{name:'Ir a texto del cuaderno'}).locator('option')).toHaveText([
+    'Entrada primera','Entrada segunda',
+  ]);
+});

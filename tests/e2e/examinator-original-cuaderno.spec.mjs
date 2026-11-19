@@ -54,7 +54,7 @@ test('Examinator original conserva búsqueda, géneros, cabecera y 440px de cat�
   await page.locator('#lib [data-act=close]').click();
   await expect(page.locator('#lib')).toBeHidden();
   await page.locator('#btnLists').click();
-  await expect(page.locator('.modal .mh h2')).toHaveText('Textos propios');
+  await expect(page.locator('.modal .mh h2')).toHaveText('Banco de textos');
   await page.locator('.modal .mf button').click();
   await expect(page.locator('.modal')).toHaveCount(0);
 });
