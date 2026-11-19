@@ -103,5 +103,5 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
   }finally{
     await target.close();
   }
-  await expect(selector.locator('option')).toHaveCount(2);
+  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true}).locator('option')).toHaveCount(2);
 });
