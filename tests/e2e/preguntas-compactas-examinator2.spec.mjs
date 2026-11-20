@@ -88,7 +88,7 @@ test('C D E: pregunta cuatro en filas, regeneración individual y ajustes sin al
   await expect(global).not.toHaveAttribute('open','');
   await global.locator('summary').click();
   await expect(global.getByRole('button',{name:/Generar pregunta 4|Proponer pregunta 4 completa/})).toBeVisible();
-  await expect(choice.locator('.edition-score, .edition-error').last()).toContainText('Total activo');
+  await expect(panel.locator('.edition-score, .edition-error').last()).toContainText('Total activo');
   await expect(panel.locator('.edition-question-panel[data-kind=morphology] .edition-academic-morph')).toBeVisible();
 
   // El estado de las opciones avanzadas es puramente visual, igual que
@@ -98,7 +98,7 @@ test('C D E: pregunta cuatro en filas, regeneración individual y ajustes sin al
   await global.locator('summary').click();
   await choice.locator('.edition-question-fold').click();
   await choice.locator('.edition-question-fold').click();
-  await expect(data(page)).resolves.toEqual(before);
+  expect(await data(page)).toEqual(before);
   await expect(prefix.locator('.edition-option-statement .edition-statement-text'))
     .toHaveText('Prefijos: forma derivados.');
   expect(original.length).toBeGreaterThan(0);
