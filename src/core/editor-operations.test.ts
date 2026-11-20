@@ -78,4 +78,11 @@ test('dos cuadernos comparten una versión, inclusive tras restaurar la copia', 
     assert.equal(entry?.latin, data.latin);
     assert.deepEqual(entry?.tagIds, ['gram.infinitivo']);
   }
+  const oneReference = removeTextFromNotebook(restored, 'notebook.1', 'text.1');
+  assert.equal(oneReference.textRevisions?.length, 1);
+  assert.equal(notebookTexts(oneReference, oneReference.notebooks[1]!)[0]?.latin, data.latin);
+
+  const noReferences = removeTextFromNotebook(oneReference, 'notebook.2', 'text.1');
+  assert.deepEqual(noReferences.textRevisions, []);
+  assert.deepEqual(noReferences.notebooks.map(book => book.textIds), [[], []]);
 });

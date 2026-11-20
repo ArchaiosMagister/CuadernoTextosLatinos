@@ -129,7 +129,7 @@ export function removeTextFromNotebook(corpus: CorpusV1, notebookId: string, tex
       }
       : book),
   };
-  return validateCorpus(next);
+  return validateCorpus(removeUnusedRevisions(next));
 }
 
 export function moveTextInNotebook(corpus: CorpusV1, notebookId: string, textId: string, by: -1 | 1): CorpusV1 {
