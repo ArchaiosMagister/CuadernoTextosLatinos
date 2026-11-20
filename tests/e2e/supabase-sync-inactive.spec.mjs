@@ -23,7 +23,7 @@ test('iPad: Supabase sigue inactivo hasta iniciar sesión y confirmar subida',as
   await dialog.getByRole('textbox',{name:'URL Supabase'}).fill('https://example-project.supabase.co');
   await dialog.getByRole('textbox',{name:'Clave publicable'}).fill('sb_publishable_MOCK123');
   await dialog.getByRole('textbox',{name:'Correo docente'}).fill('profesor@example.org');
-  await dialog.getByRole('textbox',{name:'Contraseña'}).fill('contraseña temporal');
+  await dialog.locator('input[aria-label="Contraseña"]').fill('contraseña temporal');
   await page.evaluate(()=>{
     const original=window.fetch.bind(window);
     const user='11111111-1111-4111-8111-111111111111';
