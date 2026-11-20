@@ -89,11 +89,11 @@ test('catálogo CC0 incorpora una foto al cuaderno sin introducir dependencia po
     }));
     throw new Error(String(error)+' · Diagnóstico de descarga: '+JSON.stringify(diagnostic));
   }
-  const credit=await page.evaluate(async()=>{
+  const credit=await expect.poll(async()=>page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const editions=await new WorkspaceRepository().listEditions();
-    return editions.find(e=>e.edition.title==='Cuaderno con portada')?.edition.cover?.imageCredit;
-  });
-  expect(credit).toContain('CC0');
-  expect(credit).toContain('Panteón');
+    return editions.find(e=>e.edition.title==='Cuaderno con portada')?.edition.cover?.imageCredit??'';
+  }),{timeout:15000});
+  await credit.toContain('CC0');
+  await credit.toContain('Panteón');
 });
