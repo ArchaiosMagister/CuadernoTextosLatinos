@@ -575,7 +575,14 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     section.append(ui);
   }
   function renderSlot(section:HTMLElement,p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
-    section.append(button('Proponer solo esta palabra',()=>requestSlot(p,q,o,slotId,index)));
+    // Examinator2: «Otra» / «Otro» junto a cada término. Mantener el nombre
+    // accesible anterior y exactamente el mismo manejador de propuesta.
+    const short=o.kind==='preverb'||o.kind==='latinism'?'Otro':'Otra';
+    const propose=button(short,()=>requestSlot(p,q,o,slotId,index));
+    propose.title='Proponer solo esta palabra';
+    propose.setAttribute('aria-label','Proponer solo esta palabra');
+    propose.classList.add('cuaderno-ui-regen','edition-slot-regenerate');
+    section.append(propose);
   }
   function renderQuestion(section:HTMLElement,p:TextPlacementV1,q:Choice):void{
     const ui=el('div','edition-academic-question');

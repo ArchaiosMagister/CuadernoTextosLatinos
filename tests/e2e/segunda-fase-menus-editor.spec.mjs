@@ -34,7 +34,8 @@ test('fase 2: Texto, Preguntas, Formato y Organizar conservan funciones y estado
   const cards=questionPanel.locator('.edition-question-panel');
   await expect(cards).toHaveCount(4);
   await expect(questionPanel.locator('.edition-question-jump')).toHaveCount(4);
-  await expect(cards.first().getByRole('textbox',{name:'Enunciado'})).toBeVisible();
+  await expect(cards.first().locator('.edition-statement-text')).toBeVisible();
+  await expect(cards.first().getByRole('textbox',{name:'Enunciado'})).toHaveCount(0);
   await cards.first().locator('.edition-question-fold').click();
   await expect(cards.first()).toHaveClass(/is-folded/);
   await expect(cards.first().getByRole('textbox',{name:'Enunciado'})).toHaveCount(0);
@@ -42,7 +43,10 @@ test('fase 2: Texto, Preguntas, Formato y Organizar conservan funciones y estado
   await questionPanel.getByRole('navigation',{name:'Ir a una pregunta'})
     .getByRole('button',{name:'Ir a pregunta 1: Traducción'}).click();
   await expect(cards.first()).not.toHaveClass(/is-folded/);
+  await expect(cards.first().locator('.edition-statement-text')).toBeVisible();
+  await cards.first().getByRole('button',{name:'Editar enunciado',exact:true}).click();
   await expect(cards.first().getByRole('textbox',{name:'Enunciado'})).toBeVisible();
+  await cards.first().getByRole('button',{name:'Terminar edición de enunciado'}).click();
   await expect(questionPanel.locator('.edition-score, .edition-error').last()).toContainText('Total activo');
 
   await tabs.getByRole('button',{name:'Formato'}).click();
@@ -110,7 +114,7 @@ test('fase 2: el índice de preguntas no altera las preguntas, el vocabulario ni
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
   await tabs.getByRole('button',{name:'Preguntas'}).click();
   const first=page.locator('.edition-question-panel').first();
-  const originalStatement=await first.getByRole('textbox',{name:'Enunciado'}).inputValue();
+  const originalStatement=await first.locator('.edition-statement-text').first().innerText();
   const originalLatin=await page.locator('.edition-latin').first().innerText();
   const originalPoints=await first.getByRole('spinbutton',{name:'Puntos'}).inputValue();
   await first.locator('.edition-question-fold').click();
@@ -119,7 +123,7 @@ test('fase 2: el índice de preguntas no altera las preguntas, el vocabulario ni
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.locator('.edition-vocab-section')).toHaveCount(3);
   await tabs.getByRole('button',{name:'Preguntas'}).click();
-  await expect(first.getByRole('textbox',{name:'Enunciado'})).toHaveValue(originalStatement);
+  await expect(first.locator('.edition-statement-text').first()).toHaveText(originalStatement);
   await expect(first.getByRole('spinbutton',{name:'Puntos'})).toHaveValue(originalPoints);
   await expect(page.locator('.edition-latin').first()).toHaveText(originalLatin);
   await expect(page.locator('#btnDocx')).toBeVisible();

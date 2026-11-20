@@ -55,19 +55,23 @@ test('controles semánticos: colores, guardado, pestañas y tamaños en WebKit',
   await expect(save).toHaveClass(/cuaderno-ui-save/);
   await expect(save).toBeVisible();
   await expect(save).toHaveCSS('width','84px');
-  const before=await save.evaluate(element=>({
-    width:getComputedStyle(element).width,
-    bg:getComputedStyle(element).backgroundColor,
-  }));
+  // Collatinus puede repintar filas justo después de añadir una entrada.
+  // Esperar estilos reales del botón conectado, nunca leer un nodo retirado.
+  const style=async()=>save.evaluate(element=>{
+    if(!element.isConnected)return null;
+    const css=getComputedStyle(element);
+    return {width:css.width,bg:css.backgroundColor};
+  }).catch(()=>null);
+  await expect.poll(style).toMatchObject({width:'84px'});
+  const before=await style();
+  expect(before?.width).toBe('84px');
   await save.click();
   await expect(save).toHaveText('✓ Guardado');
   await expect(save).toHaveClass(/is-saved/);
-  const after=await save.evaluate(element=>({
-    width:getComputedStyle(element).width,
-    bg:getComputedStyle(element).backgroundColor,
-  }));
-  expect(after.width).toBe(before.width);
-  expect(after.bg).not.toBe(before.bg);
+  await expect.poll(style).toMatchObject({width:'84px'});
+  const after=await style();
+  expect(after?.width).toBe('84px');
+  expect(after?.bg).not.toBe(before?.bg);
   // Las entradas vinculadas a Collatinus usan «Restablecer» en vez de «Quitar».
   const deleteEntry=page.locator('#editor button.edition-vocab-remove').first();
   if(await deleteEntry.count())await expect(deleteEntry).toHaveClass(/cuaderno-ui-remove/);

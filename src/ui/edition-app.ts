@@ -904,6 +904,11 @@ export function createEditionPane(options:{
   // Preferencias de despliegue solo de interfaz, no se guardan en el cuaderno.
   let bibliographyExpanded=true;
   const foldedQuestions=new Set<string>();
+  // Estos estados son únicamente de presentación: nunca se escriben en el
+  // cuaderno ni generan de nuevo palabras al desplegar un bloque.
+  const editingQuestionStatements=new Set<string>();
+  const editingOptionStatements=new Set<string>();
+  const expandedAcademicOptions=new Set<string>();
   const formatExpanded={typography:true,spacing:true,margins:false};
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
     if(options.onEditGrammarTags){
@@ -954,34 +959,59 @@ export function createEditionPane(options:{
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
-    // Índice compacto a la manera de Examinator2: navegar a cada tarjeta sin
-    // duplicar sus campos ni modificar las palabras y decisiones del docente.
+    // Un índice sin tarjeta redundante, con las cuatro preguntas y sus
+    // funciones intactas. Los cambios de panel no regeneran ejercicios.
     const names:Record<string,string>={
       translation:'Traducción',syntax:'Sintaxis',morphology:'Morfología',choice:'Elección',
     };
     const overview=node('nav','edition-question-index');
     overview.setAttribute('aria-label','Ir a una pregunta');
-    overview.append(node('strong','','Preguntas del texto'));
     const shortcuts=node('div','edition-question-shortcuts');
     for(const [index,q] of p.questions.entries()){
       const key=p.id+':'+q.id;
-      const caption=(names[q.kind]??q.kind);
+      const caption=names[q.kind]??q.kind;
       const jump=action(String(index+1)+'. '+caption,()=>{
         if(foldedQuestions.delete(key)){
           paint();
           element.querySelectorAll<HTMLElement>('.edition-menu-questions .edition-question-panel')[index]
             ?.scrollIntoView({block:'nearest',behavior:'auto'});
-        }else{
-          panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
-            ?.scrollIntoView({block:'nearest',behavior:'auto'});
-        }
+        }else panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
+          ?.scrollIntoView({block:'nearest',behavior:'auto'});
       },'btn btn-outline edition-question-jump');
       jump.setAttribute('aria-label','Ir a pregunta '+(index+1)+': '+caption);
       if(!q.enabled)jump.classList.add('is-inactive');
       shortcuts.append(jump);
     }
-    overview.append(shortcuts);
-    panel.append(overview);
+    overview.append(shortcuts);panel.append(overview);
+
+    // Una vista de enunciado en línea; edición completa con el mismo campo
+    // y la misma operación de edición cuando el docente la necesita.
+    const statement=(container:HTMLElement,key:string,value:string,label:string,
+      onChange:(value:string)=>void,editing:Set<string>,isOption=false):void=>{
+      const view=node('div','edition-statement-row'+(isOption?' edition-option-statement':''));
+      // La vista clásica no se rediseña: sus campos siguen abiertos y
+      // localizables, evitando regresiones en otras vistas de la plataforma.
+      const classic=!options.onAnalyzeVocabulary;
+      if(classic||editing.has(key)){
+        const field=textField(label,value,onChange);
+        view.append(field);
+        if(!classic){
+          const finish=action('Terminar edición',()=>{editing.delete(key);paint();},
+            'btn btn-outline edition-statement-finish');
+          finish.setAttribute('aria-label','Terminar edición de '+label.toLowerCase());
+          view.append(finish);
+        }
+      }else{
+        const text=node('span','edition-statement-text',value||'Sin enunciado');
+        if(!value)text.classList.add('hint');
+        const edit=action('Editar',()=>{editing.add(key);paint();},
+          'btn btn-outline edition-statement-edit');
+        edit.setAttribute('aria-label','Editar '+label.toLowerCase());
+        view.append(text,edit);
+      }
+      container.append(view);
+    };
+
     for(const q of p.questions){
       const section=node('section','edition-question-panel');
       section.dataset.kind=q.kind;
@@ -989,6 +1019,7 @@ export function createEditionPane(options:{
       const top=node('div','edition-question-top');
       const check=node('input');check.type='checkbox';check.checked=q.enabled;
       check.setAttribute('aria-label','Incluir pregunta '+q.kind);
+      check.title=q.enabled?'Pregunta incluida':'Pregunta no incluida';
       check.addEventListener('change',()=>{
         apply((e,at)=>toggleQuestion(e,p.id,q.id,check.checked,at));paint();
       });
@@ -998,69 +1029,110 @@ export function createEditionPane(options:{
       } as Record<string,string>)[q.kind]??q.kind;
       const foldKey=p.id+':'+q.id;
       const folded=foldedQuestions.has(foldKey);
-      const toggle=action(folded?'Desplegar':'Plegar',()=>{
-        if(folded)foldedQuestions.delete(foldKey);
-        else foldedQuestions.add(foldKey);
-        paint();
-      },'btn btn-outline edition-question-fold');
-      toggle.setAttribute('aria-expanded',String(!folded));
-      toggle.setAttribute('aria-label',(folded?'Desplegar ':'Plegar ')+heading);
-      top.append(check,node('h3','',heading),
-        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'),toggle);
-      section.append(top);
-      if(folded){section.classList.add('is-folded');panel.append(section);continue;}
-      section.append(textField('Enunciado',q.statement.value,value=>{
-        apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
-      }));
       const points=node('div','edition-question-points');
       points.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
         apply((e,at)=>setQuestionPoints(e,p.id,q.id,Math.round(value*100),at));paint();
       }));
-      section.append(points);
+      const toggle=action(folded?'▸':'▾',()=>{
+        if(folded)foldedQuestions.delete(foldKey);
+        else foldedQuestions.add(foldKey);
+        paint();
+      },'btn btn-outline edition-question-fold');
+      toggle.title=folded?'Desplegar '+heading:'Plegar '+heading;
+      toggle.setAttribute('aria-expanded',String(!folded));
+      toggle.setAttribute('aria-label',(folded?'Desplegar ':'Plegar ')+heading);
+      top.append(check,node('h3','',heading),points,toggle);
+      section.append(top);
+      if(folded){section.classList.add('is-folded');panel.append(section);continue;}
+
+      statement(section,foldKey,q.statement.value,'Enunciado',value=>{
+        apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
+      },editingQuestionStatements);
+
       if(q.kind==='morphology')academics.renderMorph(section,p,q);
       if(q.kind==='choice'){
-        const options=q.options;
-        for(const [idx,o] of options.entries()){
+        for(const [idx,o] of q.options.entries()){
           const opt=node('div','edition-option');
-          const head=node('label','edition-option-head');
+          const head=node('div','edition-option-head');
           const checkOption=node('input');checkOption.type='checkbox';checkOption.checked=o.enabled;
+          checkOption.setAttribute('aria-label','Incluir apartado '+optionNames[o.kind]);
           checkOption.addEventListener('change',()=>{
             apply((e,at)=>toggleOption(e,p.id,q.id,o.id,checkOption.checked,at));paint();
           });
-          head.append(checkOption,node('strong','',String.fromCharCode(97+idx)+'. '+optionNames[o.kind]));
-          opt.append(head,textField('Enunciado del apartado',o.statement.value,value=>{
+          const optionTitle=node('strong','',String.fromCharCode(97+idx)+'. '+optionNames[o.kind]);
+          head.append(checkOption,optionTitle);
+          const optionKey=p.id+':'+o.id;
+          const advanced=node('details','edition-option-advanced');
+          advanced.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(optionKey);
+          advanced.append(node('summary','','Opciones del apartado'));
+          const advancedBody=node('div','edition-option-advanced-body');
+          academics.renderOption(advancedBody,p,q,o);
+          // La regeneración de todo el apartado se conserva con su manejador
+          // original, pero ahora es un botón de la cabecera, como Examinator2.
+          const generate=advancedBody.querySelector<HTMLButtonElement>('.edition-academic-option > button');
+          if(generate){
+            generate.classList.add('edition-generate-option');
+            generate.title=generate.textContent??'Generar apartado';
+            head.append(generate);
+          }
+          advanced.append(advancedBody);
+          advanced.addEventListener('toggle',()=>{
+            if(!advanced.isConnected)return;
+            if(advanced.open)expandedAcademicOptions.add(optionKey);
+            else expandedAcademicOptions.delete(optionKey);
+          });
+          opt.append(head);
+          statement(opt,optionKey,o.statement.value,'Enunciado del apartado',value=>{
             apply((e,at)=>editOptionStatement(e,p.id,q.id,o.id,value,at));
-          }));
-          opt.append(node('p','hint','Para aplicar cursiva a una palabra dentro del enunciado, rodéala de *asteriscos*.'));
+          },editingOptionStatements,true);
+
+          const rows=node('div','edition-option-rows');
           for(const [slotIndex,slot] of o.slots.entries()){
-            const word=node('div','edition-inline-edit');
+            const word=node('div','edition-inline-edit edition-qword-row');
             word.append(textField('Palabra',slot.value,value=>{
               apply((e,at)=>editSlotManual(e,p.id,q.id,o.id,slot.id,value,at));
             }));
-            word.append(action('Quitar',()=>{
+            academics.renderSlot(word,p,q,o,slot.id,slotIndex);
+            const remove=action('×',()=>{
               apply((e,at)=>validateEdition({...e,updatedAt:at,placements:e.placements.map(x=>
                 x.id!==p.id?x:{...x,questions:x.questions.map(item=>item.id!==q.id||item.kind!=='choice'?item:{
-                  ...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:opt.slots.filter(s=>s.id!==slot.id)}),
+                  ...item,options:item.options.map(option=>option.id!==o.id?option:{
+                    ...option,slots:option.slots.filter(s=>s.id!==slot.id)}),
                 })})}));paint();
-            }));
-            academics.renderSlot(word,p,q,o,slot.id,slotIndex);
-            opt.append(word);
+            },'btn btn-outline edition-qword-remove');
+            remove.title='Quitar término';
+            remove.setAttribute('aria-label','Quitar término '+(slotIndex+1)+' de '+optionNames[o.kind]);
+            word.append(remove);rows.append(word);
           }
-          const input=node('input','field-control');input.placeholder='Añadir término manual…';
+          opt.append(rows);
+          const input=node('input','field-control edition-option-add-input');
+          input.placeholder='Añadir término manual…';input.setAttribute('aria-label','Añadir término manual');
           const add=action('+ Término',()=>{
             const value=input.value.trim();if(!value)return;
             apply((e,at)=>validateEdition({...e,updatedAt:at,
               placements:e.placements.map(x=>x.id!==p.id?x:{...x,questions:x.questions.map(item=>
-                item.id!==q.id||item.kind!=='choice'?item:{...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:[
-                  ...opt.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
+                item.id!==q.id||item.kind!=='choice'?item:{...item,options:item.options.map(option=>option.id!==o.id?option:{...option,slots:[
+                  ...option.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
                     proposedLemmaId:null,provenance:null},
                 ]})})})}));paint();
-          },'btn btn-outline');
-          const row=node('div','edition-inline-edit');row.append(input,add);opt.append(row);
-          academics.renderOption(opt,p,q,o);
+          },'btn btn-outline edition-option-add-button');
+          const addRow=node('div','edition-inline-edit edition-option-add');
+          addRow.append(input,add);opt.append(addRow,advanced);
           section.append(opt);
         }
-        academics.renderQuestion(section,p,q);
+        const wholeKey=p.id+':'+q.id+':advanced';
+        const whole=node('details','edition-question-advanced');
+        whole.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(wholeKey);
+        whole.append(node('summary','','Configuración avanzada de la pregunta'));
+        const wholeBody=node('div','edition-question-advanced-body');
+        academics.renderQuestion(wholeBody,p,q);
+        whole.append(wholeBody);
+        whole.addEventListener('toggle',()=>{
+          if(!whole.isConnected)return;
+          if(whole.open)expandedAcademicOptions.add(wholeKey);
+          else expandedAcademicOptions.delete(wholeKey);
+        });
+        section.append(whole);
         const count=q.options.filter(o=>o.enabled).length;
         section.append(node('p',count<q.requiredCount?'edition-error':'hint',
           choiceHeading(q)+(count<q.requiredCount?' Faltan apartados activos.':'')));
