@@ -51,8 +51,11 @@ La documentación anterior corresponde a main sin el adaptador. El despliegue
 experimental ya lo carga de forma diferida. La inicialización carga datos,
 shim y motor en orden y espera `warm`. Vocabulario y etiquetado solicitan
 `analyze` por separado para el mismo latín, y la revisión vuelve a analizar
-el pasaje entero. Son costes visibles en el código, pendientes de cronometraje
-en frío y en caliente. La revisión del banco conserva descartes en memoria
+el pasaje entero. Son costes visibles en el código, medidos en un ensayo local con Node VM. La carga local de los cuatro
+archivos duró 0,8 s y el calentamiento, 4,3 s. Un pasaje de César tardó
+387 ms en la primera consulta y 94–114 ms en las tres repeticiones. Este
+ensayo no reproduce la red ni Safari en iPad. El contrato de integración
+del motor verificó 31 tokens y 22 propuestas en su corpus de prueba. La revisión del banco conserva descartes en memoria
 durante el diálogo. La revisión editorial conserva decisiones por ancla.
 Las lecturas dependen del contexto y los desplazamientos son UTF-16.
 No se puede cortar arbitrariamente el texto sin comprobar la equivalencia
