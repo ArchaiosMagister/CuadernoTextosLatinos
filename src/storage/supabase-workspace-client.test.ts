@@ -77,3 +77,10 @@ test('la revisión de workspace no falsea el hash de una restauración',async()=
   const restored=await workspaceHash({...snapshot,workspaceRevision:2});
   assert.equal(first,restored);
 });
+
+test('hash de nube permanece igual aunque JSONB reordene las claves',async()=>{
+  const cloud={
+    migration:null,history:[],editions:[],corpus:null,workspaceRevision:0,
+  };
+  assert.equal(await workspaceHash(snapshot),await workspaceHash(cloud));
+});
