@@ -16,6 +16,7 @@ import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/a
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
 import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
 import {validateEdition} from '../core/edition-validation.js';
+import {morphologyOccurrencesFreshFirst} from '../core/academic-repetition.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -687,8 +688,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         return records.length&&unambiguous
           ?[{surface,start:t.index!,end:t.index!+surface.length,key}]:[];
       });
-      const unique=possible.filter(t=>!already.has(t.key));
-      const pool=unique.length>=2?unique:possible;
+      // Si solo queda una forma inédita, utilizarla primero y completar
+      // únicamente lo que falte con formas previamente usadas.
+      const pool=morphologyOccurrencesFreshFirst(possible,already);
       const taken=new Set<string>();
       for(const token of pool){
         if(taken.size>=2)break;
