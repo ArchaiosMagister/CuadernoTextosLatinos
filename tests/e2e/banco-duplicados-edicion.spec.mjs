@@ -32,6 +32,8 @@ test('Banco autónomo: modifica una ficha sin crear cuaderno y conserva su ID',a
   await modal.getByRole('textbox',{name:'Título didáctico'}).fill('Texto corregido');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Gallia in partes tres divisa erat.');
   await modal.getByRole('button',{name:'Guardar cambios'}).click();
+  await expect(modal).toBeHidden({timeout:10000});
+  await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
   await expect(bank).toContainText('Texto corregido');
   await page.reload();
   const updated=await page.evaluate(async()=>{
