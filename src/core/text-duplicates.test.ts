@@ -58,3 +58,12 @@ test('los fragmentos demasiado breves no provocan coincidencias parciales espuri
   });
   assert.deepEqual(matches, []);
 });
+
+test('normaliza capítulos escritos con IV y cifras arábigas', () => {
+  const entry = { ...original, source: { author: 'César', work: 'De bello Gallico', reference: 'IV 24' } };
+  const matches = findPossibleDuplicates([entry], {
+    latin: 'Frase nueva para la referencia.',
+    author: 'Caesar', work: 'Bellum Gallicum', reference: '4.24',
+  });
+  assert.equal(matches[0]?.kind, 'citation');
+});
