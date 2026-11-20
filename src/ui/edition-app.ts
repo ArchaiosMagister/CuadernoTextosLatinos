@@ -47,7 +47,16 @@ function node<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',value=''):HTML
   const e=document.createElement(tag);if(cls)e.className=cls;if(value)e.textContent=value;return e;
 }
 function action(label:string,callback:()=>void|Promise<void>,cls='btn btn-outline'):HTMLButtonElement {
-  const e=node('button',cls,label);e.type='button';e.addEventListener('click',()=>{void callback();});return e;
+  const e=node('button',cls,label);e.type='button';
+  // Identificadores solo visuales: nunca modifican los manejadores ni sus datos.
+  if(/\\bWord\\b/.test(label))e.classList.add('cuaderno-ui-word');
+  if(/\\bPDF\\b/.test(label))e.classList.add('cuaderno-ui-pdf');
+  if(/^(?:Exportar|PDF \\/ Imprimir|Imprimir borrador)/.test(label))e.classList.add('cuaderno-ui-export');
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\\b/.test(label))e.classList.add('cuaderno-ui-regen');
+  if(/^\\+?\\s*(?:Añadir|Agregar)\\b|^\\+ Cuaderno\\b/.test(label))e.classList.add('cuaderno-ui-add');
+  if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\\b))\\b/.test(label)||label==='×')e.classList.add('cuaderno-ui-remove');
+  if(/^Guardar\\b/.test(label))e.classList.add('cuaderno-ui-save');
+  e.addEventListener('click',()=>{void callback();});return e;
 }
 function textField(label:string,value:string,change:(value:string)=>void,multiline=false):HTMLElement {
   const wrap=node('label','edition-field');
@@ -1360,7 +1369,7 @@ export function createEditionPane(options:{
           });
           row.append(input);
         }
-        saveButton=action(isSaved?'✓ Guardada':'Guardar',async()=>{
+        saveButton=action(isSaved?'✓ Guardado':'Guardar',async()=>{
           if(!await flush())return;
           const current=draft?.placements.find(x=>x.id===p.id)
             ?.vocabulary.find(x=>x.id===v.id);
@@ -1376,7 +1385,7 @@ export function createEditionPane(options:{
               note:current.note??'',glossesSeparated:current.glossesSeparated===true,
             });
             localStorage.setItem(PREFERRED_VOCABULARY_KEY,JSON.stringify(next));
-            saveButton!.textContent='✓ Guardada';
+            saveButton!.textContent='✓ Guardado';
             saveButton!.classList.add('is-saved');
             setMessage('Corrección guardada para futuros cuadernos en este dispositivo.');
           }catch(err){setMessage('No se pudo guardar el vocabulario preferente: '+String(err),true);}
