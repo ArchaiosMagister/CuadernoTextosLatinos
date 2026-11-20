@@ -112,6 +112,96 @@ function sharedPassage(a: Word[], b: Word[]): { from: number; count: number } {
   return { from: bestFrom, count: best };
 }
 
+/** Exact comparison key shared with the existing single-text detector. */
+export function normalizedLatinKey(latin: string): string {
+  return words(latin).map(word => word.value).join(' ');
+}
+
+/** The same author/work/reference normalization used by sameCitation. */
+export function normalizedCitationKey(input: PossibleDuplicateInput): string | null {
+  const author = authorName(input.author);
+  const work = workName(input.work);
+  const reference = citation(input.reference);
+  return author && work && reference ? [author, work, reference].join('\u0001') : null;
+}
+
+export interface LibraryDuplicatePair {
+  firstId: string;
+  secondId: string;
+  firstTitle: string;
+  secondTitle: string;
+  kind: PossibleDuplicate['kind'];
+  sharedWords: number;
+  excerpt: string;
+}
+
+/**
+ * Exhaustive corpus-wide duplicate audit (read-only).
+ * It indexes exact text, canonical citations and contiguous six-word shingles
+ * to avoid comparing every pair of unrelated documents. Every pair appears
+ * exactly once even when several classification rules match.
+ */
+export function auditLibraryDuplicates(
+  texts: readonly Pick<LatinText, 'id' | 'title' | 'latin' | 'source'>[],
+): LibraryDuplicatePair[] {
+  const exactIndex = new Map<string, number[]>();
+  const citationIndex = new Map<string, number[]>();
+  const shingleIndex = new Map<string, number[]>();
+  const matches: LibraryDuplicatePair[] = [];
+
+  const register = (index: Map<string, number[]>, key: string, item: number): void => {
+    const entries = index.get(key);
+    if (entries) entries.push(item);
+    else index.set(key, [item]);
+  };
+
+  for (let i = 0; i < texts.length; i++) {
+    const current = texts[i]!;
+    const tokens = words(current.latin).map(word => word.value);
+    const exact = tokens.join(' ');
+    const ref = normalizedCitationKey({
+      latin: current.latin, author: current.source.author,
+      work: current.source.work, reference: current.source.reference,
+    });
+    const shingles = new Set<string>();
+    for (let n = 0; n + 6 <= tokens.length; n++) {
+      shingles.add(tokens.slice(n, n + 6).join('\u0001'));
+    }
+    const candidates = new Set<number>();
+    for (const previous of exactIndex.get(exact) ?? []) candidates.add(previous);
+    if (ref) for (const previous of citationIndex.get(ref) ?? []) candidates.add(previous);
+    for (const shingle of shingles) {
+      for (const previous of shingleIndex.get(shingle) ?? []) candidates.add(previous);
+    }
+
+    for (const previous of candidates) {
+      const first = texts[previous]!;
+      const detected = findPossibleDuplicates([first], {
+        latin: current.latin, author: current.source.author,
+        work: current.source.work, reference: current.source.reference,
+      }, undefined, 1)[0];
+      if (!detected) continue;
+      matches.push({
+        firstId: first.id, secondId: current.id,
+        firstTitle: first.title, secondTitle: current.title,
+        kind: detected.kind, sharedWords: detected.sharedWords,
+        excerpt: detected.excerpt,
+      });
+    }
+
+    if (exact) register(exactIndex, exact, i);
+    if (ref) register(citationIndex, ref, i);
+    for (const shingle of shingles) register(shingleIndex, shingle, i);
+  }
+  const rank = { identical: 0, overlap: 1, citation: 2 };
+  return matches.sort((a, b) =>
+    rank[a.kind] - rank[b.kind] || b.sharedWords - a.sharedWords
+    || a.firstTitle.localeCompare(b.firstTitle, 'es')
+    || a.secondTitle.localeCompare(b.secondTitle, 'es')
+    || a.firstId.localeCompare(b.firstId)
+    || a.secondId.localeCompare(b.secondId));
+}
+
 /**
  * Read-only warning system: it never deletes, merges or rewrites texts.
  * Strong overlap requires at least 8 common consecutive words and either
