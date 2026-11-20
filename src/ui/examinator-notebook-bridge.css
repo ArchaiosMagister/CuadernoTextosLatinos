@@ -5,23 +5,23 @@
 :root{color-scheme:light;}
 /* Tema deliberado y persistente solo del cuaderno experimental.
    Examinator2 de referencia y el papel A4 no se modifican. */
-html[data-cuaderno-theme='dark']{
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']){
   color-scheme:dark;
   --paper:#182128;--paper-2:#26333d;--panel:#202b34;
   --ink:#edf2f3;--ink-2:#c6d3d8;--ink-3:#9cb0b9;
   --rule:#42535e;--rule-2:#354650;--accent:#a8d9e8;
   --accent-soft:#294653;--link:#a6c8ff;
 }
-html[data-cuaderno-theme='dark'] #editor .edition-menu-content,
-html[data-cuaderno-theme='dark'] #editor .edition-menu-nav{background:var(--panel);}
-html[data-cuaderno-theme='dark'] #editor .edition-preview-stack{background:#151c22;}
-html[data-cuaderno-theme='dark'] .card input:not([type='checkbox']),
-html[data-cuaderno-theme='dark'] .card textarea,
-html[data-cuaderno-theme='dark'] .card select,
-html[data-cuaderno-theme='dark'] #editor .field-control{
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) #editor .edition-menu-content,
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) #editor .edition-menu-nav{background:var(--panel);}
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) #editor .edition-preview-stack{background:#151c22;}
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .card input:not([type='checkbox']),
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .card textarea,
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .card select,
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) #editor .field-control{
   background:var(--paper);color:var(--ink);border-color:var(--rule);
 }
-html[data-cuaderno-theme='dark'] .edition-paper{
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-paper{
   color-scheme:light;background:#fff;color:#151515;
 }
 
@@ -297,7 +297,7 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
 
 @media screen {
   #editor .card input[type='file'][hidden] {display:none;}
-  html[data-cuaderno-theme='dark'] .toast {
+  html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .toast {
     background:var(--paper-2);color:var(--ink);border:1px solid var(--rule);
   }
 }
@@ -612,7 +612,7 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   --cuaderno-ui-remove:#b52638;
   --cuaderno-ui-current:#e7f1f7;--cuaderno-ui-current-ink:#145676;
 }
-html[data-cuaderno-theme='dark']{
+html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']){
   --cuaderno-ui-word:#9cc4ff;--cuaderno-ui-word-soft:#1b3555;
   --cuaderno-ui-pdf:#ffadb6;--cuaderno-ui-pdf-soft:#49262e;
   --cuaderno-ui-save:#9cc4ff;--cuaderno-ui-save-soft:#1b3555;
@@ -690,4 +690,144 @@ html[data-cuaderno-theme='dark']{
 }
 @media screen and (max-width:760px){
   #editor .cuaderno-home :is(button.hbtn,button.tbtn){min-height:42px;}
+}
+
+/* Cabecera editorial unificada; no afecta al papel ni a la impresión. */
+@media screen{
+  #editor .cuaderno-editor-overview{
+    display:grid;gap:8px;padding:10px 12px;margin-bottom:8px;min-width:0;
+  }
+  #editor .cuaderno-context-top{
+    display:flex;align-items:center;justify-content:space-between;
+    flex-wrap:wrap;gap:8px;min-width:0;
+  }
+  #editor .cuaderno-context-heading{
+    display:flex;flex:1 1 200px;align-items:center;gap:10px;min-width:0;
+  }
+  #editor .cuaderno-context-heading-text{flex:1 1 150px;min-width:0;}
+  #editor .cuaderno-context-heading h3{
+    margin:0 0 2px;font:650 11px/1.2 var(--ui-font);
+    letter-spacing:.02em;color:var(--ink-3);
+  }
+  #editor .cuaderno-context-current{
+    display:block;font:700 15px/1.3 var(--ui-font);
+    color:var(--ink);overflow-wrap:anywhere;
+  }
+  #editor .cuaderno-context-count{
+    flex:0 0 auto;white-space:nowrap;padding:4px 8px;
+    border-radius:999px;background:var(--accent-soft);
+    color:var(--accent);font:650 11px/1.2 var(--ui-font);
+  }
+  #editor .cuaderno-context-links{
+    display:flex;align-items:center;flex-wrap:wrap;gap:5px;
+  }
+  #editor .cuaderno-context-links .hbtn{
+    min-height:30px;padding:5px 7px;font-size:11.5px;
+  }
+  #editor .cuaderno-context-tools{
+    display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;
+    border-top:1px solid var(--rule-2);padding-top:8px;
+  }
+  #editor .cuaderno-editor-overview label.cuaderno-context-switch{
+    flex:1 1 160px;min-width:0;max-width:280px;
+    display:flex;flex-direction:column;gap:3px;margin:0;
+    font:600 11px/1.2 var(--ui-font);color:var(--ink-2);
+  }
+  #editor .cuaderno-context-switch select{
+    width:100%;max-width:100%;min-width:0;min-height:31px;
+    background:var(--paper);color:var(--ink);
+    padding:4px 6px;box-sizing:border-box;
+  }
+  #editor .cuaderno-context-backups{flex:0 1 auto;min-width:0;margin:0;}
+  #editor .cuaderno-context-backups>summary{
+    cursor:pointer;list-style:none;display:inline-flex;align-items:center;
+    border:1px solid var(--rule);border-radius:6px;
+    min-height:31px;padding:5px 9px;
+    font:600 11.5px/1.3 var(--ui-font);color:var(--ink-2);
+    background:var(--panel);
+  }
+  #editor .cuaderno-context-backups>summary::-webkit-details-marker{display:none;}
+  #editor .cuaderno-context-backups>summary::after{
+    content:'▾';margin-left:7px;font-size:11px;
+  }
+  #editor .cuaderno-context-backups[open]{flex:1 1 100%;}
+  #editor .cuaderno-context-backup-buttons{
+    margin:6px 0 0;padding:8px;gap:6px;
+    border:1px solid var(--rule-2);border-radius:7px;
+    background:var(--paper-2);
+  }
+  #editor .cuaderno-context-backup-buttons .hbtn{min-height:30px;font-size:11.5px;}
+  #editor .cuaderno-context-add{
+    display:grid;gap:6px;border-top:1px solid var(--rule-2);
+    padding-top:8px;
+  }
+  #editor .cuaderno-context-add h4{
+    margin:0;font:650 12px/1.25 var(--ui-font);
+    color:var(--ink-2);
+  }
+  #editor .cuaderno-context-add .row{gap:5px;}
+  #editor .cuaderno-context-add .hbtn{
+    min-height:31px;padding:5px 8px;font-size:12px;
+  }
+}
+@media screen and (max-width:760px){
+  #editor .cuaderno-context-links .hbtn,
+  #editor .cuaderno-context-add .hbtn,
+  #editor .cuaderno-context-backups>summary,
+  #editor .cuaderno-context-backup-buttons .hbtn{min-height:38px;}
+  #editor .cuaderno-context-switch select{
+    font-size:16px;min-height:38px;
+  }
+}
+
+/* OLED: negro real en fondos de aplicación, dejando blancos los documentos A4.
+   Los acentos cromáticos de Word, PDF y demás botones se mantienen. */
+html[data-cuaderno-theme='oled']{
+  color-scheme:dark;
+  --paper:#000;--paper-2:#000;--panel:#000;
+  --ink:#f2f5f6;--ink-2:#ccd7dc;--ink-3:#a0b0b8;
+  --rule:#343c41;--rule-2:#252b30;
+  --accent:#a8d9e8;--accent-soft:#09232e;--link:#9ecaff;
+}
+@media screen{
+  html[data-cuaderno-theme='oled'],
+  html[data-cuaderno-theme='oled'] body,
+  html[data-cuaderno-theme='oled'] body>header,
+  html[data-cuaderno-theme='oled'] main,
+  html[data-cuaderno-theme='oled'] #editor,
+  html[data-cuaderno-theme='oled'] #preview,
+  html[data-cuaderno-theme='oled'] #lib,
+  html[data-cuaderno-theme='oled'] #editor .edition-preview-stack,
+  html[data-cuaderno-theme='oled'] #editor .edition-preview-stack>.edition-navigation,
+  html[data-cuaderno-theme='oled'] #editor .edition-settings,
+  html[data-cuaderno-theme='oled'] #editor .edition-menu-content,
+  html[data-cuaderno-theme='oled'] #editor .edition-menu-nav,
+  html[data-cuaderno-theme='oled'] #editor .edition-question-panel,
+  html[data-cuaderno-theme='oled'] #editor .edition-option,
+  html[data-cuaderno-theme='oled'] .modal,
+  html[data-cuaderno-theme='oled'] .pop,
+  html[data-cuaderno-theme='oled'] .card,
+  html[data-cuaderno-theme='oled'] .vlist{
+    background:#000;
+  }
+  html[data-cuaderno-theme='oled'] :is(#editor,#lib,.modal) input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  html[data-cuaderno-theme='oled'] :is(#editor,#lib,.modal) select,
+  html[data-cuaderno-theme='oled'] :is(#editor,#lib,.modal) textarea,
+  html[data-cuaderno-theme='oled'] .vrow input[type='text']:focus,
+  html[data-cuaderno-theme='oled'] .vrow input[type='text']:hover{
+    background:#000;color:var(--ink);border-color:var(--rule);
+  }
+  html[data-cuaderno-theme='oled'] :is(#editor,#lib,.modal) input::placeholder,
+  html[data-cuaderno-theme='oled'] :is(#editor,#lib,.modal) textarea::placeholder{
+    color:var(--ink-3);opacity:1;
+  }
+  /* En los selectores no se confunde el negro de fondo con el activo. */
+  html[data-cuaderno-theme='oled'] #editor .edition-menu-nav .btn[aria-current='page']{
+    background:var(--cuaderno-ui-current);color:var(--cuaderno-ui-current-ink);
+  }
+  html[data-cuaderno-theme='oled'] #editor .edition-paper,
+  html[data-cuaderno-theme='oled'] .edition-paper,
+  html[data-cuaderno-theme='oled'] .edition-print-root .edition-paper{
+    background:#fff;color:#151515;color-scheme:light;
+  }
 }

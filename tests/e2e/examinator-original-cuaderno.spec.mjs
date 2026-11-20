@@ -65,11 +65,11 @@ test('cuaderno iniciado desde Examinator: cancelación de nuevo texto no crea pr
   await page.locator('#btnNew').click();
   await page.locator('#btnLib').click();
   await page.locator('#lib [data-act=close]').click();
-  await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
+  await expect(page.locator('#editor .cuaderno-context-count')).toHaveText('0 textos');
   await page.locator('#btnSave').click();
   await page.reload();
   await page.locator('.cuaderno-home-card').getByRole('button',{name:'Abrir'}).first().click();
-  await expect(page.locator('#editor .card')).toContainText('0 textos en este cuaderno');
+  await expect(page.locator('#editor .cuaderno-context-count')).toHaveText('0 textos');
 });
 
 test('título, obra y cita separados; tipografía global, menú de vocabulario y añadir desde el editor',async({page})=>{

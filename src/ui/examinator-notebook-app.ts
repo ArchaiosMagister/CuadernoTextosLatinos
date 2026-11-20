@@ -1382,7 +1382,7 @@ function render():void{
     document.title='Mis cuadernos · Cuaderno de textos latinos';
     return;
   }
-  const summary=el('section','card');
+  const summary=el('section','card cuaderno-editor-overview');
   const choose=el('select');
   choose.setAttribute('aria-label','Elegir cuaderno');
   const placeholder=el('option','',active()?'Cerrar cuaderno':'Elige un cuaderno');
@@ -1409,12 +1409,26 @@ function render():void{
     catch(error){choose.value=currentId??'';M.toast(String(error),5500);}
     finally{choose.disabled=false;}
   });
-  summary.append(el('h3','','Cuaderno de textos latinos'),
-    button('Volver a mis cuadernos',returnToHome,'hbtn'),choose,
+  // Cabecera contextual: nombre real y contador, sin repetir una línea de estado.
+  const count=composer.activeEdition()?.placements.length??0;
+  const heading=el('div','cuaderno-context-heading');
+  const headingText=el('div','cuaderno-context-heading-text');
+  headingText.append(el('h3','','Cuaderno de textos latinos'),
+    el('strong','cuaderno-context-current',currentTitle()));
+  heading.append(headingText,el('span','cuaderno-context-count',
+    count+' '+(count===1?'texto':'textos')));
+  const links=el('div','cuaderno-context-links');
+  links.append(button('Volver a mis cuadernos',returnToHome,'hbtn'),
     button('Gestionar cuadernos',openNotebooks,'hbtn'));
-  const backups=el('details');
+  const top=el('div','cuaderno-context-top');
+  top.append(heading,links);summary.append(top);
+  const tools=el('div','cuaderno-context-tools');
+  const switcher=el('label','cuaderno-context-switch');
+  switcher.append(el('span','','Cambiar cuaderno'),choose);
+  tools.append(switcher);
+  const backups=el('details','cuaderno-context-backups');
   backups.append(el('summary','','Copias de seguridad'));
-  const controls=el('div','row');
+  const controls=el('div','row cuaderno-context-backup-buttons');
   if(active())controls.append(button('Copia del cuaderno',async()=>{
     if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
     const edition=composer.activeEdition();
@@ -1434,16 +1448,17 @@ function render():void{
     finally{restoreButton.disabled=false;}
   });
   const restoreButton=button('Restaurar copia',()=>restore.click(),'hbtn');
-  controls.append(restoreButton,restore);backups.append(controls);summary.append(backups);
+  controls.append(restoreButton,restore);backups.append(controls);
+  tools.append(backups);summary.append(tools);
   if(active()){
-    summary.append(el('p','small muted',composer.activeEdition()!.placements.length+' textos en este cuaderno.'),
-      el('h4','','Añadir textos'));
+    const addPanel=el('div','cuaderno-context-add');
+    addPanel.append(el('h4','','Añadir textos'));
     const actions=el('div','row');
     actions.append(button('Biblioteca',openLibrary,'hbtn primary'),
       button('Banco propio',openOwnTexts,'hbtn'),
       button('Pegar texto',pasteText,'hbtn'),
       button('Importar Word',importWord,'hbtn'));
-    summary.append(actions);
+    addPanel.append(actions);summary.append(addPanel);
     const placement=composer.activePlacement();
     if(placement){
       const all=allGrammarTags(corpus),ids=placementGrammarTags(placement);
@@ -1472,20 +1487,28 @@ function render():void{
 }
 function wireThemeButton():void{
   const key='cuaderno-ui-theme-v1';
-  let saved:'light'|'dark'='light';
-  try{if(localStorage.getItem(key)==='dark')saved='dark';}catch{/* navegación privada */}
+  type Theme='light'|'dark'|'oled';
+  let saved:Theme='light';
+  try{
+    const stored=localStorage.getItem(key);
+    if(stored==='dark'||stored==='oled')saved=stored;
+  }catch{/* navegación privada */}
+  // Un solo control para los tres modos: claro → oscuro → OLED → claro.
   const toggle=button('Modo oscuro',()=>{
-    const current=document.documentElement.dataset.cuadernoTheme==='dark'?'dark':'light';
-    const next=current==='dark'?'light':'dark';
+    const current=document.documentElement.dataset.cuadernoTheme;
+    const next:Theme=current==='light'?'dark':current==='dark'?'oled':'light';
     setTheme(next);
     try{localStorage.setItem(key,next);}catch{/* se conserva la sesión */}
   },'hbtn');
   toggle.id='btnCuadernoTheme';
-  function setTheme(theme:'light'|'dark'):void{
+  function setTheme(theme:Theme):void{
     document.documentElement.dataset.cuadernoTheme=theme;
-    toggle.textContent=theme==='dark'?'Modo claro':'Modo oscuro';
-    toggle.title=theme==='dark'?'Activar modo claro':'Activar modo oscuro';
-    toggle.setAttribute('aria-pressed',String(theme==='dark'));
+    const nextLabel=theme==='light'?'Modo oscuro':theme==='dark'?'Modo OLED':'Modo claro';
+    toggle.textContent=nextLabel;
+    toggle.title=theme==='light'?'Activar modo oscuro':
+      theme==='dark'?'Activar negro puro OLED':'Activar modo claro';
+    toggle.setAttribute('aria-label',nextLabel);
+    toggle.setAttribute('aria-pressed',String(theme!=='light'));
   }
   const spacer=document.querySelector('header > .spacer');
   if(spacer)spacer.before(toggle);
