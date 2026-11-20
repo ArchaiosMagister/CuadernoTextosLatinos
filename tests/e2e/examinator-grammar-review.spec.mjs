@@ -95,10 +95,20 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     await restored.getByRole('button',{name:'Añadir «Pasaje transportable» al cuaderno',exact:true}).click();
     await expect(restored.locator('.edition-counter')).toContainText('Texto 1 de 1');
     await restored.getByRole('button',{name:'Banco propio'}).click();
+    const picker=restored.locator('.modal').last();
+    // Un texto ya incorporado se oculta del selector de ese cuaderno.
+    await expect(picker.getByRole('button',{name:'Quitar del banco: Pasaje transportable'})).toHaveCount(0);
+    await picker.getByRole('button',{name:'Cerrar'}).click();
+    await restored.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+    // La retirada de una fuente usada se realiza desde el banco general de Inicio.
+    const general=restored.locator('.cuaderno-home-bank');
+    await general.locator('.cuaderno-home-category').first().locator('summary').first().click();
+    const source=general.locator('.cuaderno-home-text').filter({hasText:'Pasaje transportable'}).first();
+    await source.locator('summary').first().click();
     restored.once('dialog',dialog=>dialog.accept());
-    await restored.getByRole('button',{name:'Quitar del banco: Pasaje transportable'}).click();
-    await expect(restored.getByText('No hay textos con ese filtro.',{exact:true})).toBeVisible();
-    await restored.locator('.modal').last().getByRole('button',{name:'Cerrar'}).click();
+    await source.getByRole('button',{name:'Quitar del banco'}).click();
+    await restored.locator('.cuaderno-home-card').filter({hasText:'Cuaderno nuevo'})
+      .getByRole('button',{name:'Abrir'}).click();
     await expect(restored.locator('.edition-paper-title')).toHaveText('Pasaje transportable');
   }finally{
     await target.close();

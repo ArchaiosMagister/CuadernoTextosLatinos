@@ -164,9 +164,22 @@ test('Editor: el banco filtra por dos etiquetas AND y conserva una sola aparici�
   await expect(panel.locator('.original-own-row')).toContainText('Texto relativo y pasivo');
   await panel.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await expect(page.locator('.cuaderno-current-tags')).toContainText('Oración de relativo');
+  await expect(page.locator('.cuaderno-current-tags')).toContainText('Voz pasiva');
+  const menus=page.getByRole('navigation',{name:'Secciones del cuaderno'});
+  await menus.getByRole('button',{name:'Texto',exact:true}).click();
+  await expect(page.locator('.edition-tags-summary')).toContainText('Oración de relativo');
+  await expect(page.locator('.edition-tags-summary')).toContainText('Voz pasiva');
+  await menus.getByRole('button',{name:'Organizar'}).click();
+  await expect(page.getByText('Organizar el cuaderno',{exact:true})).toBeVisible();
+  await expect(page.locator('.edition-notebook-advanced')).not.toHaveAttribute('open');
   await page.getByRole('button',{name:'Banco propio'}).click();
   const reopened=page.locator('.modal').last();
-  await reopened.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'}).click();
+  await expect(reopened.locator('.original-bank-result-count')).toContainText('2 de 2 textos del banco');
+  await expect(reopened.locator('.original-bank-hidden-count')).toContainText('1 texto ya incorporado se oculta.');
+  await expect(reopened.locator('.original-own-row')).toHaveCount(2);
+  await expect(reopened.getByRole('button',{name:'Añadir «Texto relativo y pasivo» al cuaderno'})).toHaveCount(0);
+  await reopened.getByRole('button',{name:'Cerrar'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
 });
 
@@ -194,4 +207,85 @@ test('Banco del editor: modal sin desbordamiento en iPhone e iPad',async({page})
     expect(layout.right).toBeLessThanOrEqual(width+2);
   }
   await modal.getByRole('button',{name:'Cerrar'}).click();
+});
+
+
+test('Banco: quitar varios textos con selección y confirmar sin borrar el cuaderno',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const {upsertText}=await import('/core/editor-operations.js');
+    const db=new IndexedDbCorpusRepository(),saved=await db.load(),now=new Date().toISOString();
+    let corpus=saved.corpus;
+    for(const [id,title,latin] of [
+      ['bank.a','Pasaje A','Prima verba sunt.'],
+      ['bank.b','Pasaje B','Secunda verba sunt.'],
+      ['bank.c','Pasaje C','Tertia verba sunt.'],
+    ])corpus=upsertText(corpus,{title,latin,author:'',work:'',reference:''},id,now);
+    await db.save(corpus,saved.revision);
+  });
+  await page.reload();
+  const bank=page.locator('.cuaderno-home-bank');
+  await expect(bank).toContainText('3 textos distintos');
+  await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
+  await bank.getByRole('checkbox',{name:'Seleccionar para quitar: Pasaje A'}).check();
+  await expect(bank.locator('.cuaderno-bank-bulk')).toContainText('1 texto seleccionado');
+  await bank.getByRole('checkbox',{name:'Seleccionar para quitar: Pasaje B'}).check();
+  await expect(bank.locator('.cuaderno-bank-bulk')).toContainText('2 textos seleccionados');
+  let prompt='';
+  const confirmation=page.waitForEvent('dialog').then(async dialog=>{
+    prompt=dialog.message();await dialog.accept();
+  });
+  await Promise.all([confirmation,bank.getByRole('button',{name:'Quitar seleccionados'}).click()]);
+  expect(prompt).toContain('2 textos seleccionados');
+  await expect(bank).toContainText('1 texto distinto');
+  const stored=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    return (await new IndexedDbCorpusRepository().load()).corpus.texts.map(t=>t.title);
+  });
+  expect(stored).toEqual(['Pasaje C']);
+  await bank.getByRole('searchbox',{name:'Buscar en banco de textos propios'}).fill('Pasaje C');
+  await bank.getByRole('button',{name:/Seleccionar resultados/}).click();
+  await expect(bank.locator('.cuaderno-bank-bulk')).toContainText('1 texto seleccionado');
+  await bank.getByRole('button',{name:'Desmarcar todos'}).click();
+  await expect(bank.getByRole('button',{name:'Quitar seleccionados'})).toBeDisabled();
+});
+
+test('Banco: proteger de retirada masiva los textos utilizados en cuadernos históricos',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const {upsertText,upsertNotebook,addTextToNotebook}=await import('/core/editor-operations.js');
+    const db=new IndexedDbCorpusRepository(),saved=await db.load(),now=new Date().toISOString();
+    let corpus=upsertText(saved.corpus,{title:'Fuente antigua',latin:'Quod erat demonstrandum.',
+      author:'',work:'',reference:''},'legacy.text',now);
+    corpus=upsertNotebook(corpus,'Cuaderno histórico','legacy.book');
+    corpus=addTextToNotebook(corpus,'legacy.book','legacy.text');
+    await db.save(corpus,saved.revision);
+  });
+  await page.reload();
+  const bank=page.locator('.cuaderno-home-bank');
+  await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
+  await expect(bank.getByRole('checkbox',{name:'Seleccionar para quitar: Fuente antigua'})).toBeDisabled();
+  await bank.locator('.cuaderno-home-text').filter({hasText:'Fuente antigua'})
+    .first().locator('summary').first().click();
+  await expect(bank.getByRole('button',{name:'Quitar del banco'})).toBeDisabled();
+  await bank.getByRole('button',{name:/Seleccionar todo el banco/}).click();
+  await expect(bank.getByRole('button',{name:'Quitar seleccionados'})).toBeDisabled();
+});
+
+test('Vista previa y Word: […] se muestra en redonda sin alterar el latín',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  page.once('dialog',dialog=>dialog.accept('Cuaderno de omisiones'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
+  const modal=page.locator('.modal').last();
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caesar […] venit [...] et [ … ] dixit.');
+  await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
+  const latin=page.locator('.edition-latin').first();
+  await expect(latin.locator('.edition-roman')).toHaveCount(3);
+  await expect(latin.locator('.edition-roman').nth(0)).toHaveText('[…]');
+  await expect(latin).toHaveCSS('font-style','italic');
+  await expect(latin.locator('.edition-roman').first()).toHaveCSS('font-style','normal');
+  await expect(latin).toContainText('Caesar […] venit [...] et [ … ] dixit.');
 });

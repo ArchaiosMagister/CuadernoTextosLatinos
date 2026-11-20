@@ -20,7 +20,7 @@ import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
   type ExaminatorCatalogue,type ExaminatorEntry} from '../core/examinator-library.js';
 import {foldLatin,type LibraryEntry,type LibraryWork} from '../core/library.js';
-import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag} from '../core/grammar-tags.js';
+import {allGrammarTags,attachGrammarTags,catalogDepth,findTagByLabel,GRAMMAR_GROUP_IDS,isCustomTagLabelValid,matchesGrammarFilters,matchesGrammarTag,placementGrammarTags} from '../core/grammar-tags.js';
 import {PREFERRED_VOCABULARY_KEY,parsePreferredVocabulary,preferredFor,vocabularyKey,
   type VocabularyQuantityMode} from '../core/vocabulary-preferences.js';
 import type {CollatinusVocabularyCandidate} from './edition-app.js';
@@ -54,6 +54,8 @@ const composer=createEditionPane({
   autoApply:true,
   autoVocabulary:false,
   findCorpusSource:async id=>(await loadCombinedCorpus()).texts.find(text=>text.id===id),
+  onEditGrammarTags:()=>openGrammarEditor(),
+  tagLabel:id=>allGrammarTags(corpus).find(tag=>tag.id===id)?.label??id,
   onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
 });
 const works=new Map<string,LibraryWork>();
@@ -452,6 +454,18 @@ function openOwnTexts():void{
   const count=el('p','small muted original-bank-result-count');
   const list=el('div','original-own-list');
   const tags=allGrammarTags(corpus),selected=new Set<string>();
+  const placements=composer.activeEdition()?.placements??[];
+  const usedIds=new Set(placements.flatMap(p=>p.source.sourceId?[p.source.sourceId]:[]));
+  // También reconocer pasajes que se importaron directamente (sin ID del banco).
+  const alreadyUsed=(text:LatinText):boolean=>usedIds.has(text.id)||placements.some(p=>
+    p.text.latin===text.latin&&p.text.author===text.source.author&&
+    p.text.work===text.source.work&&p.text.reference===text.source.reference);
+  const availableTexts=corpus.texts.filter(t=>!alreadyUsed(t));
+  const alreadyCount=corpus.texts.length-availableTexts.length;
+  if(alreadyCount)panel.append(el('p','small muted original-bank-hidden-count',
+    alreadyCount+(alreadyCount===1?' texto ya incorporado se oculta.':
+      ' textos ya incorporados se ocultan.')+
+    ' Puedes seguir consultándolos en el banco general de Inicio.'));
   const filtersPanel=el('details','original-bank-filters');
   const filtersHeading=el('summary','','Filtrar por etiquetas');
   filtersPanel.append(filtersHeading);
@@ -461,7 +475,7 @@ function openOwnTexts():void{
   filtersPanel.append(filterSearch);
   const filterGroups=el('div','original-bank-filter-groups');
   const tagCheckboxes=new Map<string,HTMLInputElement>();
-  const tagCount=(tagId:string)=>corpus.texts.filter(t=>
+  const tagCount=(tagId:string)=>availableTexts.filter(t=>
     matchesGrammarFilters(t.tagIds,[tagId],tags)).length;
   for(const root of tags.filter(t=>t.parentId===null)){
     const children=tags.filter(t=>matchesGrammarTag(t.id,root.id,tags));
@@ -511,11 +525,12 @@ function openOwnTexts():void{
     list.replaceChildren();
     const needle=foldLatin(input.value);
     const filters=[...selected];
-    const matching=corpus.texts.filter(t=>
+    const matching=availableTexts.filter(t=>
       foldLatin([t.title,t.source.author??'',t.source.work??'',t.source.reference??'']
         .join(' ')).includes(needle)&&matchesGrammarFilters(t.tagIds,filters,tags));
-    count.textContent=matching.length+' de '+corpus.texts.length+
-      (corpus.texts.length===1?' texto del banco':' textos del banco');
+    count.textContent=matching.length+' de '+availableTexts.length+
+      (availableTexts.length===1?' texto del banco':' textos del banco')+
+      (alreadyCount?' · '+alreadyCount+' ya incorporado'+(alreadyCount===1?' oculto':'s ocultos'):'');
     for(const t of matching.slice(0,visibleLimit)){
       const row=el('article','original-own-row');
       row.append(el('strong','',t.title));
@@ -593,18 +608,46 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Pro
   await reload();render();
   M.toast(match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
 }
-async function removeBankText(text:LatinText):Promise<void>{
-  if(!window.confirm('¿Quitar «'+text.title+'» del banco? Los cuadernos conservarán sus textos.'))return;
+/** Los cuadernos editoriales conservan sus apariciones; los cuadernos
+ * históricos, que todavía dependen del banco, se protegen del borrado. */
+function protectedBankSourceIds():Set<string>{
+  return new Set(corpus.notebooks.flatMap(book=>book.textIds));
+}
+async function removeBankTexts(ids:readonly string[]):Promise<void>{
+  const unique=[...new Set(ids)].filter(id=>corpus.texts.some(t=>t.id===id));
+  if(!unique.length)return;
+  const protectedIds=protectedBankSourceIds();
+  if(unique.some(id=>protectedIds.has(id)))
+    throw Error('Hay textos vinculados a cuadernos antiguos. No se han borrado.');
+  const count=unique.length;
+  const warning=count===1?'¿Quitar este texto del banco?':
+    '¿Quitar '+count+' textos seleccionados del banco?';
+  if(!window.confirm(warning+' Los cuadernos editoriales conservarán sus textos y preguntas. '+
+    'Esta retirada del banco no se puede deshacer sin una copia de seguridad.'))return;
   await writeSource(async()=>{
-    for(const repository of [repo,workspace]){
-      const saved=await (repository===repo?repo.load():workspace.loadCorpus());
-      if(!saved.corpus.texts.some(item=>item.id===text.id))continue;
-      const next=deleteText(saved.corpus,text.id);
-      if(repository===repo)await repo.save(next,saved.revision);
-      else await workspace.saveCorpus(next,saved.revision);
+    // Verificar ambos repositorios antes de empezar a escribir. Como los datos
+    // viven en dos IndexedDB, se mantienen las validaciones de revisión CAS.
+    const editorial=await repo.load(),working=await workspace.loadCorpus();
+    for(const saved of [editorial,working]){
+      if(saved.corpus.notebooks.some(book=>book.textIds.some(id=>unique.includes(id))))
+        throw Error('Uno de los textos pertenece a un cuaderno antiguo. Operación cancelada.');
     }
+    const selected=new Set(unique);
+    const removeBatch=(source:CorpusV1):CorpusV1=>{
+      const texts=source.texts.filter(text=>!selected.has(text.id));
+      return texts.length===source.texts.length?source:validateCorpus({...source,texts});
+    };
+    const nextEditorial=removeBatch(editorial.corpus);
+    const nextWorking=removeBatch(working.corpus);
+    // Cada repositorio se valida una sola vez, incluso para miles de textos.
+    if(nextEditorial!==editorial.corpus)await repo.save(nextEditorial,editorial.revision);
+    if(nextWorking!==working.corpus)await workspace.saveCorpus(nextWorking,working.revision);
   });
-  await reload();render();M.toast('Texto retirado del banco.');
+  await reload();render();
+  M.toast(count===1?'Texto retirado del banco.':count+' textos retirados del banco.');
+}
+async function removeBankText(text:LatinText):Promise<void>{
+  return removeBankTexts([text.id]);
 }
 function tagBankText(text:LatinText):void{
   const panel=el('div','cuaderno-bank-tag-editor');
@@ -1100,7 +1143,11 @@ async function openGrammarEditor():Promise<void>{
     }
   }
   await update();
-  M.modal('Etiquetas del texto',panel,[{label:'Cerrar'}]);
+  M.modal('Etiquetas del texto',panel,[{label:'Cerrar',onclick:async()=>{
+    // El editor se actualiza internamente al confirmar etiquetas; la cabecera
+    // externa también debe reflejar las etiquetas nuevas al cerrar la revisión.
+    await reload();render();
+  }}]);
 }
 
 async function returnToHome():Promise<void>{
@@ -1175,6 +1222,39 @@ function renderHome():HTMLElement{
   search.placeholder='Buscar por texto, autor u obra';
   search.setAttribute('aria-label','Buscar en banco de textos propios');
   bank.append(search);
+  const protectedIds=protectedBankSourceIds();
+  const selectedForRemoval=new Set<string>();
+  const bulk=el('div','cuaderno-bank-bulk');
+  bulk.setAttribute('aria-label','Selección y borrado de varios textos del banco');
+  const selectionCount=el('span','small muted','Ningún texto seleccionado');
+  const selectedButton=button('Seleccionar resultados',()=>{
+    for(const text of currentResults())if(!protectedIds.has(text.id))
+      selectedForRemoval.add(text.id);
+    updateSelection();
+  },'hbtn');
+  const deselect=button('Desmarcar todos',()=>{
+    selectedForRemoval.clear();updateSelection();
+  },'hbtn');
+  const removeSelected=button('Quitar seleccionados',()=>removeBankTexts([...selectedForRemoval]),'tbtn');
+  function currentResults():LatinText[]{
+    const needle=foldLatin(search.value.trim());
+    return corpus.texts.filter(t=>foldLatin(
+      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+  }
+  function updateSelection():void{
+    selectionCount.textContent=selectedForRemoval.size+
+      (selectedForRemoval.size===1?' texto seleccionado':' textos seleccionados');
+    removeSelected.disabled=selectedForRemoval.size===0;
+    deselect.disabled=selectedForRemoval.size===0;
+    for(const input of Array.from(bank.querySelectorAll<HTMLInputElement>('.cuaderno-bank-select'))){
+      input.checked=selectedForRemoval.has(input.value);
+    }
+  }
+  bulk.append(selectedButton,deselect,removeSelected,selectionCount);
+  bulk.append(el('p','small muted','Selecciona los resultados de la búsqueda o marca textos individuales. '+
+    'Los cuadernos editoriales no se borrarán. Los textos de cuadernos históricos están protegidos.'));
+  bank.append(bulk);
+  updateSelection();
   const catalogue=allGrammarTags(corpus);
   // Los filtros del banco describen la fuente; las etiquetas de una aparición
   // en otro cuaderno no se propagan silenciosamente a la fuente.
@@ -1185,13 +1265,34 @@ function renderHome():HTMLElement{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
     for(const text of texts){
       const row=el('details','cuaderno-home-text');
-      row.append(el('summary','',text.title));
+      // Selección siempre visible aunque los detalles de la fuente estén cerrados.
+      // El título despliega el latín; la casilla solo cambia la selección.
+      const rowSummary=el('summary','cuaderno-home-text-heading');
+      rowSummary.append(el('span','',text.title));
+      const selection=el('label','cuaderno-home-select'),checkbox=el('input','cuaderno-bank-select');
+      checkbox.type='checkbox';checkbox.value=text.id;
+      checkbox.setAttribute('aria-label','Seleccionar para quitar: '+text.title);
+      checkbox.disabled=protectedIds.has(text.id);
+      checkbox.checked=selectedForRemoval.has(text.id);
+      checkbox.addEventListener('change',()=>{
+        if(checkbox.checked)selectedForRemoval.add(text.id);
+        else selectedForRemoval.delete(text.id);
+        updateSelection();
+      });
+      selection.addEventListener('click',event=>event.stopPropagation());
+      selection.append(checkbox,el('span','','Seleccionar'));
+      if(checkbox.disabled)selection.title='Protegido: se utiliza en un cuaderno histórico';
+      rowSummary.append(selection);row.append(rowSummary);
       const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
       if(origin)row.append(el('p','small muted',origin));
       row.append(el('p','cuaderno-home-latin',text.latin));
       const actions=el('div','cuaderno-home-text-actions');
-      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),
-        button('Quitar del banco',()=>removeBankText(text),'tbtn'));
+      const remove=button('Quitar del banco',()=>removeBankText(text),'tbtn');
+      if(protectedIds.has(text.id)){
+        remove.disabled=true;
+        remove.title='Protegido: se utiliza en un cuaderno histórico';
+      }
+      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
       row.append(actions);
       target.append(row);
     }
@@ -1199,8 +1300,10 @@ function renderHome():HTMLElement{
   function populate():void{
     listing.replaceChildren();
     const needle=foldLatin(search.value.trim());
-    const matching=corpus.texts.filter(t=>foldLatin(
-      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+    const matching=currentResults();
+    selectedButton.textContent=needle?'Seleccionar resultados ('+matching.length+')':
+      'Seleccionar todo el banco ('+matching.length+')';
+    updateSelection();
     const addLazyRows=(group:HTMLDetailsElement,texts:typeof corpus.texts):void=>{
       const items=el('div','cuaderno-home-category-items');group.append(items);
       const update=():void=>{
@@ -1208,6 +1311,14 @@ function renderHome():HTMLElement{
         if(group.open)appendTextRows(items,texts);
       };
       group.addEventListener('toggle',update);
+      // Pintar los controles solo en la categoría abierta. De lo contrario
+      // «Todos» y «Sin etiquetar» creaban dos casillas para una misma fuente.
+      // Al abrir con el puntero se cargan antes del toggle diferido de WebKit.
+      const summary=group.querySelector(':scope > summary');
+      summary?.addEventListener('click',()=>{
+        items.replaceChildren();
+        if(!group.open)appendTextRows(items,texts);
+      });
       if(group.open)update();
     };
     const all=el('details','cuaderno-home-category');
@@ -1325,7 +1436,23 @@ function render():void{
       button('Pegar texto',pasteText,'hbtn'),
       button('Importar Word',importWord,'hbtn'));
     summary.append(actions);
-    if(composer.activeEdition()!.placements.length)summary.append(button('Etiquetas gramaticales',openGrammarEditor,'hbtn'));
+    const placement=composer.activePlacement();
+    if(placement){
+      const all=allGrammarTags(corpus),ids=placementGrammarTags(placement);
+      const tagged=el('div','cuaderno-current-tags');
+      tagged.setAttribute('aria-label','Etiquetas del texto en edición');
+      tagged.append(el('strong','','Etiquetas de este texto'));
+      const chips=el('div','grammar-chips');
+      if(!ids.length)chips.append(el('span','small muted','Sin etiquetas gramaticales'));
+      for(const id of ids){
+        const tag=all.find(t=>t.id===id);
+        const chip=el('span','grammar-chip',tag?.label??id);
+        chip.dataset.group=GRAMMAR_GROUP_IDS.find(group=>matchesGrammarTag(id,group,all))??'custom';
+        chips.append(chip);
+      }
+      tagged.append(chips,button('Etiquetas gramaticales',openGrammarEditor,'hbtn'));
+      summary.append(tagged);
+    }
     left.append(summary,composer.element);
     page.textContent='';
   }else{

@@ -17,7 +17,7 @@ test('PR C: cinco menús compactos, controles uniformes y sin desbordes en escri
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
 
   const menus=[['Texto','text'],['Preguntas','questions'],['Vocabulario','vocabulary'],
-    ['Formato','format'],['Cuaderno','notebook']];
+    ['Formato','format'],['Organizar','notebook']];
   for(const size of [
     {width:1280,height:840,profile:'escritorio'},
     {width:820,height:1180,profile:'ipad'},

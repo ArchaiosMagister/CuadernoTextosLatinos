@@ -195,9 +195,9 @@ test('Decisión 1A: títulos por cuaderno, edición propia y sin duplicar tras b
   await choose(1);
   await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 2');
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
-  await tabs.getByRole('button',{name:'Cuaderno'}).click();
+  await tabs.getByRole('button',{name:'Organizar'}).click();
   page.once('dialog',dialog=>dialog.accept());
-  await page.locator('.edition-notebook-row').first().getByRole('button',{name:'Quitar'}).click();
+  await page.locator('.edition-notebook-row').first().getByRole('button',{name:'Quitar del cuaderno'}).click();
   await expect(page.locator('.edition-notebook-row')).toHaveCount(1);
   await choose(2);
   await expect(page.locator('.edition-paper-title').first()).toHaveText('Texto 3');

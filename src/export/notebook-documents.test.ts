@@ -191,3 +191,20 @@ test('La edición Word separa Texto N de autor/obra/capítulo y respeta fuente c
   assert.doesNotMatch(paragraphText(paragraphs[heading+1]!),/Texto 1/);
   assert.match(archive.get('word/styles.xml')!,/w:ascii="Georgia"/);
 });
+
+
+test('Word imprime […] en redonda, conservando cursiva latina y subrayados',()=>{
+  const edition=fixture(),p=edition.placements[0]!;
+  p.text.latin='Rōma […] et Gallia [...] bello [ … ] capta sunt.';
+  // Se mantiene un subrayado de morfología real antes de la omisión.
+  p.text.markup=[{id:'mark.1',kind:'morph-underline',startUtf16:0,endUtf16:4,
+    exact:'Rōma',textFingerprint:fingerprintForMark(p.text.latin,0,4),reviewRequired:false}];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[…]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[\.\.\.\]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[ … \]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:rPr><w:i\/><\/w:rPr><w:t xml:space="preserve"> et Gallia <\/w:t><\/w:r>/);
+  assert.match(xml,/w:u w:val="single"/);
+  assert.equal(JSON.stringify(edition),before);
+});
