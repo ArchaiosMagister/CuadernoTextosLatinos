@@ -589,3 +589,15 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
   #editor .cuaderno-current-tags>.hbtn{min-height:42px;}
   #editor .edition-tags-summary>.btn{min-height:42px;}
 }
+
+
+/* La casilla de selección se ve sin desplegar el texto latino. */
+@media screen{
+  #editor .cuaderno-home-text-heading{display:flex;align-items:center;gap:8px;min-width:0;}
+  #editor .cuaderno-home-text-heading::before{content:'▸';flex:none;}
+  #editor .cuaderno-home-text[open]>.cuaderno-home-text-heading::before{content:'▾';}
+  #editor .cuaderno-home-text-heading>span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}
+  #editor .cuaderno-home-text-heading>.cuaderno-home-select{
+    flex:0 0 auto;cursor:pointer;min-height:34px;display:inline-flex;align-items:center;
+  }
+}
