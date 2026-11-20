@@ -1361,14 +1361,22 @@ function renderHome():HTMLElement{
   return home;
 }
 function render():void{
-  // El control se mueve entre Inicio y la cabecera sin cambiar el manejador.
+  // Un único botón real «Nuevo»: aparece en Inicio o dentro del grupo
+  // Mis cuadernos de la cabecera, conservando su manejador original.
   const originalNew=document.getElementById('btnNew');
   if(originalNew instanceof HTMLButtonElement){
-    const header=document.querySelector('body > header');
-    const brand=header?.querySelector('.brand');
-    if(brand && originalNew.parentElement!==header)brand.after(originalNew);
-    originalNew.textContent='Nuevo';
-    originalNew.className='hbtn';
+    if(active()){
+      const nav=document.getElementById('cuadernoHeaderNavigation');
+      if(nav&&originalNew.parentElement!==nav)nav.append(originalNew);
+      originalNew.textContent='+';
+      originalNew.title='Crear un cuaderno nuevo';
+      originalNew.setAttribute('aria-label','Nuevo cuaderno');
+      originalNew.className='hbtn cuaderno-header-new';
+    }else{
+      originalNew.textContent='Nuevo cuaderno';
+      originalNew.removeAttribute('aria-label');
+      originalNew.className='hbtn primary';
+    }
   }
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
@@ -1417,9 +1425,9 @@ function render():void{
     el('strong','cuaderno-context-current',currentTitle()));
   heading.append(headingText,el('span','cuaderno-context-count',
     count+' '+(count===1?'texto':'textos')));
+  // Volver está ahora en la cabecera. No duplicar su botón en esta tarjeta.
   const links=el('div','cuaderno-context-links');
-  links.append(button('Volver a mis cuadernos',returnToHome,'hbtn'),
-    button('Gestionar cuadernos',openNotebooks,'hbtn'));
+  links.append(button('Gestionar cuadernos',openNotebooks,'hbtn'));
   const top=el('div','cuaderno-context-top');
   top.append(heading,links);summary.append(top);
   const tools=el('div','cuaderno-context-tools');
@@ -1453,11 +1461,25 @@ function render():void{
   if(active()){
     const addPanel=el('div','cuaderno-context-add');
     addPanel.append(el('h4','','Añadir textos'));
-    const actions=el('div','row');
-    actions.append(button('Biblioteca',openLibrary,'hbtn primary'),
-      button('Banco propio',openOwnTexts,'hbtn'),
-      button('Pegar texto',pasteText,'hbtn'),
+    const actions=el('div','cuaderno-add-actions');
+    const primary=el('div','cuaderno-add-primary');
+    const secondary=el('div','cuaderno-add-secondary');
+    // Reubicar los botones de Examinator, no crear dobles manejadores.
+    const libraryButton=document.getElementById('btnLib');
+    const bankButton=document.getElementById('btnLists');
+    if(libraryButton instanceof HTMLButtonElement){
+      libraryButton.textContent='Biblioteca';
+      libraryButton.className='hbtn primary';
+      primary.append(libraryButton);
+    }else primary.append(button('Biblioteca',openLibrary,'hbtn primary'));
+    if(bankButton instanceof HTMLButtonElement){
+      bankButton.textContent='Banco propio';
+      bankButton.className='hbtn';
+      primary.append(bankButton);
+    }else primary.append(button('Banco propio',openOwnTexts,'hbtn'));
+    secondary.append(button('Pegar texto',pasteText,'hbtn'),
       button('Importar Word',importWord,'hbtn'));
+    actions.append(primary,secondary);
     addPanel.append(actions);summary.append(addPanel);
     const placement=composer.activePlacement();
     if(placement){
@@ -1490,33 +1512,87 @@ function wireThemeButton():void{
   type Theme='light'|'dark'|'oled';
   let saved:Theme='light';
   try{
-    const stored=localStorage.getItem(key);
-    if(stored==='dark'||stored==='oled')saved=stored;
+    const value=localStorage.getItem(key);
+    if(value==='dark'||value==='oled')saved=value;
   }catch{/* navegación privada */}
-  // Un solo control para los tres modos: claro → oscuro → OLED → claro.
-  const toggle=button('Modo oscuro',()=>{
-    const current=document.documentElement.dataset.cuadernoTheme;
-    const next:Theme=current==='light'?'dark':current==='dark'?'oled':'light';
-    setTheme(next);
-    try{localStorage.setItem(key,next);}catch{/* se conserva la sesión */}
-  },'hbtn');
-  toggle.id='btnCuadernoTheme';
+  const control=el('select','cuaderno-theme-select');
+  control.id='btnCuadernoTheme';
+  control.setAttribute('aria-label','Apariencia');
+  control.title='Seleccionar apariencia';
+  for(const [value,label] of [['light','Claro'],['dark','Oscuro'],['oled','OLED']] as const){
+    const option=el('option','',label);
+    option.value=value;
+    control.append(option);
+  }
   function setTheme(theme:Theme):void{
     document.documentElement.dataset.cuadernoTheme=theme;
-    const nextLabel=theme==='light'?'Modo oscuro':theme==='dark'?'Modo OLED':'Modo claro';
-    toggle.textContent=nextLabel;
-    toggle.title=theme==='light'?'Activar modo oscuro':
-      theme==='dark'?'Activar negro puro OLED':'Activar modo claro';
-    toggle.setAttribute('aria-label',nextLabel);
-    toggle.setAttribute('aria-pressed',String(theme!=='light'));
+    control.value=theme;
+    control.title='Apariencia: '+(theme==='oled'?'OLED':theme==='dark'?'Oscuro':'Claro');
   }
-  const spacer=document.querySelector('header > .spacer');
-  if(spacer)spacer.before(toggle);
-  else document.querySelector('body > header')?.append(toggle);
+  control.addEventListener('change',()=>{
+    const next=control.value as Theme;
+    setTheme(next);
+    try{localStorage.setItem(key,next);}catch{/* se conserva la sesión */}
+  });
+  document.querySelector('body > header')?.append(control);
   setTheme(saved);
+}
+function wireHeaderLayout():void{
+  const header=document.querySelector('body > header');
+  if(!(header instanceof HTMLElement))throw Error('Falta la cabecera del editor.');
+  const get=(id:string):HTMLButtonElement=>{
+    const button=document.getElementById(id);
+    if(!(button instanceof HTMLButtonElement))throw Error('Falta '+id);
+    return button;
+  };
+  const brand=header.querySelector('.brand');
+  const nav=el('div','cuaderno-header-nav');
+  nav.id='cuadernoHeaderNavigation';
+  const home=get('btnOpen');
+  home.textContent='Mis cuadernos';
+  home.title='Volver al listado de cuadernos';
+  home.setAttribute('aria-label','Mis cuadernos');
+  nav.append(home,get('btnNew'));
+  if(brand)brand.after(nav);else header.prepend(nav);
+  const save=el('div','cuaderno-header-save');
+  const saveButton=get('btnSave');
+  saveButton.title='Guardar los cambios del cuaderno';
+  const status=el('span','cuaderno-header-save-state');
+  status.id='cuadernoHeaderSaveState';
+  status.setAttribute('role','status');
+  status.setAttribute('aria-live','polite');
+  save.append(saveButton,status);
+  const spacer=header.querySelector('.spacer');
+  if(spacer)spacer.before(save);else header.append(save);
+  // El estado procede del editor académico real; no se inventa «guardado».
+  const updateStatus=()=>{
+    const text=composer.element.querySelector<HTMLElement>('.edition-save-state')?.textContent?.trim()??'';
+    status.textContent=active()?text:'';
+    status.title=text;
+  };
+  new MutationObserver(updateStatus).observe(composer.element,{
+    subtree:true,childList:true,characterData:true,
+  });
+  updateStatus();
+  const exports=el('div','cuaderno-header-exports');
+  const word=get('btnDocx'),pdf=get('btnPdf');
+  word.textContent='Word';word.setAttribute('aria-label','Exportar Word');
+  pdf.textContent='PDF';pdf.setAttribute('aria-label','Exportar PDF');
+  exports.append(word,pdf);
+  const appearance=document.getElementById('btnCuadernoTheme');
+  const more=el('details','cuaderno-header-more');
+  const summary=el('summary','','Más');
+  summary.setAttribute('aria-label','Más herramientas');
+  const setting=get('btnSettings');
+  setting.textContent='Formato y ajustes';
+  more.append(summary,setting);
+  header.append(exports);
+  if(appearance)header.append(appearance);
+  header.append(more);
 }
 function wireButtons():void{
   wireThemeButton();
+  wireHeaderLayout();
   const byId=(id:string):HTMLButtonElement=>{
     const node=document.getElementById(id);
     if(!(node instanceof HTMLButtonElement))throw new Error('Falta '+id);
@@ -1530,7 +1606,7 @@ function wireButtons():void{
     catch(error){M.toast(String(error),5000);}
     finally{controls.forEach(control=>{control.disabled=false;});}
   };
-  byId('btnOpen').onclick=openNotebooks;
+  byId('btnOpen').onclick=()=>{void returnToHome().catch(e=>M.toast(String(e),5000));};
   byId('btnSave').onclick=()=>{void saveNotebook().catch(e=>M.toast(String(e),5000));};
   byId('btnLib').onclick=openLibrary;
   byId('btnLists').textContent='Banco de textos';
