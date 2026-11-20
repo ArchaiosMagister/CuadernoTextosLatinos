@@ -3,6 +3,7 @@
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
+import { notebookTexts } from '../core/editor-operations.js';
 import type { NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
 import { createEdition, placementFromCorpus } from '../core/edition-factory.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
@@ -608,10 +609,7 @@ export function createEditionPane(options:{autoApply?:boolean}={}):{
       const source=await legacy.load();
       const book=source.corpus.notebooks.find(item=>item.id===legacyNotebookId);
       if(!book)throw new Error('El cuaderno original ya no existe. Actualiza la biblioteca.');
-      const texts=new Map(source.corpus.texts.map(text=>[text.id,text]));
-      for(const textId of book.textIds){
-        if(!texts.has(textId))throw new Error('Falta un texto del cuaderno original: '+textId);
-      }
+      const texts=new Map(notebookTexts(source.corpus,book).map(text=>[text.id,text]));
       // Refrescar antes de decidir si el cuaderno ya se importó (otra pestaña
       // podría haberlo creado). Nunca generar un duplicado por pulsar dos veces.
       editions=await workspace.listEditions();

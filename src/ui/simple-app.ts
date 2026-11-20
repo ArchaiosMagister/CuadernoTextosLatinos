@@ -617,6 +617,16 @@ export function mountSimpleApp(root:HTMLElement):void{
       b.setAttribute('aria-current',String(stage===key?'page':'false'));
       tabs.append(b);
     }
+    const library=el('a','simple-tab','Biblioteca de textos');
+    library.href='?biblioteca=1';
+    library.addEventListener('click',event=>{
+      if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      event.preventDefault();
+      void composer.flush().then(saved=>{
+        if(saved)window.location.assign(library.href);
+      });
+    });
+    tabs.append(library);
     header.append(heading,tabs);
     surface.append(header);
     if(stage==='texts')surface.append(renderTexts());

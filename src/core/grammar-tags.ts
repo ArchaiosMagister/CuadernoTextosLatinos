@@ -1,3 +1,4 @@
+import { retainNotebookText } from './editor-operations.js';
 import { foldLatin } from './library.js';
 import type { CorpusV1, GrammarTag } from './model.js';
 import { validateCorpus } from './validation.js';
@@ -77,8 +78,11 @@ export function attachGrammarTags(corpus:CorpusV1,textId:string,ids:readonly str
     visiting.delete(id);
   }
   for(const id of selected)include(id);
+  const original=corpus.texts.find(text=>text.id===textId);
+  const preserved=original && JSON.stringify(original.tagIds)!==JSON.stringify(selected)
+    ? retainNotebookText(corpus,original) : corpus;
   return validateCorpus({
-    ...corpus,tags:[...tagMap.values()],
+    ...preserved,tags:[...tagMap.values()],
     texts:corpus.texts.map(text=>text.id===textId?{...text,tagIds:selected}:text),
   });
 }

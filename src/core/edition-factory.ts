@@ -48,9 +48,11 @@ export function createPlacement(seed:PlacementSeedV1,nextId:NextId):TextPlacemen
     questions:templateQuestions(nextId),vocabulary:[],grammaticalTagIds:[...(seed.grammaticalTagIds??[])],reviewFlags:[]};
 }
 export function placementFromCorpus(text:LatinText,id:string,importedAt:string,nextId:NextId):TextPlacementV1 {
-  return createPlacement({id,title:text.title,latin:text.latin,author:text.source.author,
+  const placement = createPlacement({id,title:text.title,latin:text.latin,author:text.source.author,
     work:text.source.work,reference:text.source.reference,grammaticalTagIds:text.tagIds,
     source:{kind:'corpus',sourceId:text.id,urn:null,importedAt}},nextId);
+  placement.vocabulary = (text.vocabulary ?? []).map(entry => ({...structuredClone(entry), id: nextId()}));
+  return placement;
 }
 export interface EditionSeedV1 {
   id:string;
