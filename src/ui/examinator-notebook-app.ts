@@ -55,7 +55,9 @@ const composer=createEditionPane({
   autoVocabulary:false,
   findCorpusSource:async id=>(await loadCombinedCorpus()).texts.find(text=>text.id===id),
   onEditGrammarTags:()=>openGrammarEditor(),
-  tagLabel:id=>allGrammarTags(corpus).find(tag=>tag.id===id)?.label??id,
+  // El editor puede solicitar etiquetas antes de que termine la carga asíncrona
+  // del banco. No interpretar esa condición como datos dañados del usuario.
+  tagLabel:id=>corpus?allGrammarTags(corpus).find(tag=>tag.id===id)?.label??id:id,
   onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
 });
 const works=new Map<string,LibraryWork>();
@@ -1687,8 +1689,11 @@ void (async()=>{
     }
     allEntries=[...entries.values()];
     downloaded.forEach(x=>ownCache.add(x));
-    await composer.open();
+    // Inicializar el banco ANTES de pintar un cuaderno guardado. Al abrir el
+    // editor, menuText() puede resolver etiquetas gramaticales inmediatamente;
+    // en Safari eso provocaba TypeError al acceder a corpus.tags sin cargar.
     await reload();
+    await composer.open();
     wireButtons();
     await script(new URL('./js/library.js',document.baseURI).href);
     if('serviceWorker' in navigator&&window.isSecureContext){
