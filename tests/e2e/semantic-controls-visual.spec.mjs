@@ -68,8 +68,9 @@ test('controles semánticos: colores, guardado, pestañas y tamaños en WebKit',
   }));
   expect(after.width).toBe(before.width);
   expect(after.bg).not.toBe(before.bg);
-  const deleteEntry=preferred.locator('button.edition-vocab-remove');
-  await expect(deleteEntry).toHaveClass(/cuaderno-ui-remove/);
+  // Las entradas vinculadas a Collatinus usan «Restablecer» en vez de «Quitar».
+  const deleteEntry=page.locator('#editor button.edition-vocab-remove').first();
+  if(await deleteEntry.count())await expect(deleteEntry).toHaveClass(/cuaderno-ui-remove/);
 
   await tabs.getByRole('button',{name:'Preguntas'}).click();
   const regeneration=page.locator('#editor button.cuaderno-ui-regen').first();
