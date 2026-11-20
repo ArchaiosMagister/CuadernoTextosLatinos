@@ -1365,9 +1365,11 @@ function render():void{
   // Mis cuadernos de la cabecera, conservando su manejador original.
   const originalNew=document.getElementById('btnNew');
   if(originalNew instanceof HTMLButtonElement){
+    // Sacarlo de la tarjeta anterior ANTES de replaceChildren(), también al
+    // regresar a Inicio; así no se pierde su identidad ni su evento click.
+    const nav=document.getElementById('cuadernoHeaderNavigation');
+    if(nav&&originalNew.parentElement!==nav)nav.append(originalNew);
     if(active()){
-      const nav=document.getElementById('cuadernoHeaderNavigation');
-      if(nav&&originalNew.parentElement!==nav)nav.append(originalNew);
       originalNew.textContent='+';
       originalNew.title='Crear un cuaderno nuevo';
       originalNew.setAttribute('aria-label','Nuevo cuaderno');
