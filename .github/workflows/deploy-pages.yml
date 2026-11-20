@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 74ec3227de1553d771d1953ea2b2527e0ba592af
+          ref: 223274763924b3830671c6db71a9bccab9375a25
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -340,6 +340,13 @@ jobs:
                           'edition-format-group','edition-organize-primary',
                           'edition-organize-review','Título y orden de los textos'):
             assert feature in editor, 'Falta menú de segunda fase: '+feature
+          for feature in ('edition-statement-row','edition-option-advanced',
+                          'edition-question-advanced','edition-qword-row',
+                          'edition-option-rows','editingQuestionStatements',
+                          'editingOptionStatements','expandedAcademicOptions'):
+            assert feature in editor, 'Falta rediseño compacto de preguntas: '+feature
+          assert 'edition-slot-regenerate' in academic, 'Falta regeneración individual compacta'
+          assert 'Proponer solo esta palabra' in academic, 'Falta acción individual accesible'
           bridge=(destination/'examinator-cuadernos/bridge.css').read_text()
           for selector in ('cuaderno-ui-word','cuaderno-ui-pdf',
                            'cuaderno-ui-add','cuaderno-ui-remove',
@@ -351,6 +358,10 @@ jobs:
           assert 'cuaderno-theme-select' in bridge, 'Faltan estilos de apariencia'
           assert 'edition-vocab-analysis' in bridge, 'Falta organización del vocabulario'
           assert 'minmax(84px,1fr)' in bridge, 'Falta navegación táctil de pestañas'
+          for selector in ('edition-statement-edit','edition-qword-row',
+                           'edition-option-advanced','edition-question-advanced',
+                           'edition-academic-morph-row'):
+            assert selector in bridge, 'Falta presentación compacta: '+selector
           for selector in ('edition-bibliography-fields','edition-question-fold',
                            'edition-format-group-fields','edition-organize-review'):
             assert selector in bridge, 'Falta estilo de la segunda fase: '+selector
