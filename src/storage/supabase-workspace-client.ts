@@ -134,10 +134,19 @@ export class SupabaseWorkspaceTransport {
   }
 }
 
+/** JSONB may reorder object keys; sync hashes must be independent of key insertion order. */
+function stableJson(value:unknown):string{
+  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(stableJson).join(',')+']';
+  const record=value as Record<string,unknown>;
+  return '{'+Object.keys(record).sort().filter(k=>record[k]!==undefined)
+    .map(k=>JSON.stringify(k)+':'+stableJson(record[k])).join(',')+'}';
+}
+
 /** Excludes the local-only workspace epoch, which changes on a safe restore. */
 export async function workspaceHash(snapshot:WorkspaceSnapshotV1):Promise<string>{
   const valid=validateWorkspaceSnapshot(snapshot);
-  const canonical=JSON.stringify({...valid,workspaceRevision:0});
+  const canonical=stableJson({...valid,workspaceRevision:0});
   const data=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
   return [...new Uint8Array(data)].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
