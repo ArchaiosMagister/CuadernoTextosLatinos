@@ -5,8 +5,9 @@ import type { LatinText } from '../core/model.js';
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
-import type { GrammarReviewDecisionV1, NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
+import type { GrammarReviewDecisionV1, NotebookEditionV1, NotebookCoverV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
 import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
+import { COVER_PHOTOS, loadCoverPhoto, loadOwnCoverPhoto, prepareWordCoverImage } from '../core/cover-photos.js';
 import type {ParsedTeacherDocx} from '../core/docx-import.js';
 import {applyParsedTeacherDocx} from '../core/docx-import-apply.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
@@ -182,10 +183,38 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   paper.append(footer);
   return paper;
 }
+/** Portada académica del modelo del usuario: marco, fotografía y nombre/grupo. */
+export function renderNotebookCover(cover:NotebookCoverV1):HTMLElement{
+  const paper=node('article','edition-cover');
+  paper.setAttribute('aria-label','Portada del cuaderno');
+  paper.dataset.colorMode=cover.colorMode;
+  const header=node('header','edition-cover-heading');
+  header.append(node('h1','',cover.title));
+  paper.append(header);
+  if(cover.subtitle)paper.append(node('p','edition-cover-subtitle',cover.subtitle));
+  if(cover.course)paper.append(node('p','edition-cover-course',cover.course));
+  const figure=node('figure','edition-cover-figure');
+  const image=node('img','edition-cover-photo');
+  image.src=cover.imageDataUrl;
+  image.alt='Imagen elegida para la portada';
+  figure.append(image);
+  if(cover.reflection){
+    const mirror=node('img','edition-cover-reflection');
+    mirror.src=cover.imageDataUrl;mirror.alt='';
+    mirror.setAttribute('aria-hidden','true');figure.append(mirror);
+  }
+  paper.append(figure);
+  const fields=node('div','edition-cover-fields');
+  fields.append(node('p','',cover.studentLabel),node('p','',cover.groupLabel));
+  paper.append(fields);
+  return paper;
+}
+
 /** Hoja imprimible derivada del mismo modelo que la vista previa, sin datos duplicados. */
 export function renderNotebookPrintPages(edition:NotebookEditionV1):HTMLElement {
   const root=node('main','edition-print-root');
   root.setAttribute('aria-label','Cuaderno A4 para impresión PDF');
+  if(edition.cover)root.append(renderNotebookCover(edition.cover));
   for(const [index,p] of edition.placements.entries()){
     root.append(paperFor(edition,p,index,edition.placements.length));
   }
@@ -900,6 +929,7 @@ export function createEditionPane(options:{
     const placements=session.mode==='whole-notebook'?draft.placements:
       draft.placements.filter(p=>p.id===(selection()?.id??''));
     if(!placements.length){target.append(node('p','hint','Este cuaderno no contiene textos. Añádelos desde «Cuaderno».'));return;}
+    if(session.mode==='whole-notebook'&&draft.cover)target.append(renderNotebookCover(draft.cover));
     for(const p of placements)target.append(paperFor(draft,p,draft.placements.indexOf(p),draft.placements.length));
     target.style.zoom=String(zoom/100);
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
@@ -1676,6 +1706,118 @@ export function createEditionPane(options:{
     },'btn btn-primary'),formatStatus,node('p','hint',
       'Interlineado: espacio adicional al normal de Word (3 pt suele ser suficiente). Los cuadernos anteriores conservan su altura de línea hasta que se ajuste. El zoom de lectura no cambia el tamaño editorial.'));
   }
+  function renderCoverMenu(panel:HTMLElement):void{
+    if(!draft)return;
+    const group=node('details','edition-cover-editor');
+    group.append(node('summary','','Portada del cuaderno (opcional)'));
+    const description=node('p','hint','Modelo clásico: marco, imagen y campos para nombre y grupo. '+
+      'Solo se incluye en Word y PDF cuando eliges una imagen; queda guardada en el cuaderno.');
+    group.append(description);
+    const list=node('div','edition-cover-options');
+    for(const photo of COVER_PHOTOS){
+      const option=node('div','edition-cover-choice');
+      const preview=node('img');
+      preview.src=photo.imageUrl;preview.alt=photo.name;
+      preview.loading='lazy';option.append(preview);
+      const select=action('Elegir '+photo.name,async()=>{
+        select.disabled=true;
+        try{
+          const imageDataUrl=await loadCoverPhoto(photo);
+          apply((edition,at)=>validateEdition({...edition,updatedAt:at,cover:{
+            title:edition.cover?.title??edition.title.toLocaleUpperCase('es'),
+            subtitle:edition.cover?.subtitle??'',course:edition.cover?.course??'',
+            studentLabel:edition.cover?.studentLabel??'NOMBRE Y APELLIDOS:',
+            groupLabel:edition.cover?.groupLabel??'GRUPO:',
+            colorMode:edition.cover?.colorMode??'gray',
+            reflection:edition.cover?.reflection??true,
+            imageDataUrl,imageCredit:photo.name+' · '+photo.author+' · CC0 1.0',
+          }}));
+          paint();setMessage('Imagen de '+photo.name+' incorporada al cuaderno.');
+        }catch(e){
+          setMessage('No se pudo incorporar la imagen: '+String(e instanceof Error?e.message:e),true);
+        }finally{select.disabled=false;}
+      },'btn btn-outline');
+      select.setAttribute('aria-label','Elegir foto '+photo.name);
+      option.append(select);
+      const credit=node('small','',photo.author+' · CC0');
+      option.append(credit);list.append(option);
+    }
+    group.append(list);
+    const own=node('label','edition-field');
+    own.append(node('span','edition-field-label','O utilizar una imagen propia (JPG, PNG o WebP)'));
+    const file=node('input','field-control');
+    file.type='file';file.accept='image/jpeg,image/png,image/webp';
+    file.setAttribute('aria-label','Subir imagen de portada propia');
+    file.addEventListener('change',async()=>{
+      const photo=file.files?.[0];if(!photo)return;
+      try{
+        const imageDataUrl=await loadOwnCoverPhoto(photo);
+        apply((edition,at)=>validateEdition({...edition,updatedAt:at,cover:{
+          title:edition.cover?.title??edition.title.toLocaleUpperCase('es'),
+          subtitle:edition.cover?.subtitle??'',course:edition.cover?.course??'',
+          studentLabel:edition.cover?.studentLabel??'NOMBRE Y APELLIDOS:',
+          groupLabel:edition.cover?.groupLabel??'GRUPO:',
+          colorMode:edition.cover?.colorMode??'gray',
+          reflection:edition.cover?.reflection??true,
+          imageDataUrl,imageCredit:'Imagen propia: '+photo.name.slice(0,100),
+        }}));
+        paint();
+      }catch(e){setMessage('No se pudo utilizar la imagen: '+String(e instanceof Error?e.message:e),true);}
+    });
+    own.append(file);group.append(own);
+    if(draft.cover){
+      const cover=draft.cover;
+      const adjust=(change:(cover:NotebookCoverV1)=>void):void=>{
+        apply((edition,at)=>{
+          if(!edition.cover)return edition;
+          const next=structuredClone(edition);
+          change(next.cover!);next.updatedAt=at;return validateEdition(next);
+        });
+      };
+      for(const [field,label] of [
+        ['title','Título de portada'],['subtitle','Subtítulo'],['course','Curso'],
+        ['studentLabel','Campo de nombre'],['groupLabel','Campo de grupo'],
+      ] as const){
+        group.append(textField(label,cover[field],value=>{
+          if(field==='title'&&!value.trim())return;
+          adjust(c=>{c[field]=value;});
+        }));
+      }
+      const style=node('label','edition-field');
+      style.append(node('span','edition-field-label','Tratamiento de imagen'));
+      const palette=node('select','field-control');
+      palette.setAttribute('aria-label','Color de portada');
+      for(const [mode,label] of [
+        ['gray','Escala de grises'],['mono','Blanco y negro'],['color','Color'],
+      ] as const){
+        const opt=node('option','',label);opt.value=mode;palette.append(opt);
+      }
+      palette.value=cover.colorMode;
+      palette.addEventListener('change',()=>{
+        adjust(c=>{c.colorMode=palette.value as NotebookCoverV1['colorMode'];});
+        paintPreview();
+      });
+      style.append(palette);group.append(style);
+      const reflect=node('label','edition-option-head');
+      const checked=node('input');checked.type='checkbox';checked.checked=cover.reflection;
+      checked.setAttribute('aria-label','Reflejo de fotografía');
+      checked.addEventListener('change',()=>{
+        adjust(c=>{c.reflection=checked.checked;});paintPreview();
+      });
+      reflect.append(checked,node('span','','Mostrar reflejo bajo la fotografía'));
+      group.append(reflect);
+      group.append(node('p','hint','Portada incluida en el Word y en la impresión PDF. '+
+        'Para verla antes de exportar, utiliza «Ver cuaderno completo».'));
+      group.append(action('Quitar portada',()=>{
+        if(!window.confirm('¿Quitar la portada de este cuaderno? Los textos seguirán intactos.'))return;
+        apply((edition,at)=>{
+          const {cover:_unused,...remaining}=edition;
+          return validateEdition({...remaining,updatedAt:at});
+        });paint();
+      },'btn btn-outline'));
+    }
+    panel.append(group);
+  }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
     const e=draft,experimental=Boolean(options.onAnalyzeVocabulary);
@@ -1711,6 +1853,7 @@ export function createEditionPane(options:{
     });
     principal.append(list);
     if(experimental)panel.append(principal);
+    if(experimental)renderCoverMenu(panel);
     const advanced=experimental?node('details','edition-notebook-advanced'):null;
     if(advanced){
       const review=node('section','edition-organize-review');
@@ -1790,7 +1933,10 @@ export function createEditionPane(options:{
       exportReview=null;
       paint(); // El aviso no debe permanecer abierto tras exportar.
       if(kind==='word'){
-        exportBytes(createNotebookDocx(edition),docFilename(edition,warnings.length>0));
+        const portable=edition.cover?{...edition,cover:{
+          ...edition.cover,imageDataUrl:await prepareWordCoverImage(edition.cover),
+        }}:edition;
+        exportBytes(createNotebookDocx(portable),docFilename(edition,warnings.length>0));
         setMessage('DOCX '+(warnings.length?'de borrador ':'')+'preparado. Comprueba su maquetación antes de imprimirlo.');
       }else{
         setMessage('Abriendo impresión A4. Atención: Safari puede omitir 1 | N; para conservarlo, exporta Word y genera el PDF con Pages.');
