@@ -15,7 +15,7 @@ test('etiquetas jerárquicas: función/forma, agente distinto de pasiva y búsqu
   await openGroup(page,'.grammar-editor','Oraciones y construcciones');
   await page.locator('.grammar-editor').getByRole('checkbox',{name:'Oración de infinitivo'}).check();
   await openGroup(page,'.grammar-editor','Formas verbales y voz');
-  await page.locator('.grammar-editor').getByRole('checkbox',{name:'Infinitivo de perfecto'}).check();
+  await page.locator('.grammar-editor').getByRole('checkbox',{name:'Infinitivo de perfecto',exact:true}).check();
   await page.locator('.grammar-editor').getByRole('checkbox',{name:'Infinitivo activo'}).check();
   await openGroup(page,'.grammar-editor','Funciones sintácticas');
   await page.locator('.grammar-editor').getByRole('checkbox',{name:'Complemento agente'}).check();
@@ -49,7 +49,7 @@ test('etiquetas jerárquicas: función/forma, agente distinto de pasiva y búsqu
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(1);
   await expect(page.locator('.lib-sidebar .work-row').first()).toContainText('César con AcI');
   await openGroup(page,'.grammar-filter','Formas verbales y voz');
-  await page.locator('.grammar-filter').getByRole('checkbox',{name:'Infinitivo de perfecto'}).check();
+  await page.locator('.grammar-filter').getByRole('checkbox',{name:'Infinitivo de perfecto',exact:true}).check();
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(1);
   await page.locator('.grammar-filter').getByRole('checkbox',{name:'Infinitivo pasivo'}).check();
   await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(0);
