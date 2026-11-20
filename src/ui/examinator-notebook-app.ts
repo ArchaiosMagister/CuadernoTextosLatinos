@@ -3,7 +3,7 @@ import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
 import {fingerprintForMark} from '../core/edition-validation.js';
 import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarCandidate,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
-import type {CorpusV1,LatinText} from '../core/model.js';
+import type {CorpusV1,GrammarTag,LatinText} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
