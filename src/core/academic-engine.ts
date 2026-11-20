@@ -117,8 +117,13 @@ function existingValues(q: Extract<QuestionV1,{kind:'choice'}>, exclusion: reado
 }
 /** La unicidad del cuaderno se calcula por valor, no por ID de ficha ni por texto. */
 function notebookUsage(edition:NotebookEditionV1):ReadonlySet<string> {
+  // Solo las preguntas visibles consumen repertorio. Un término descartado
+  // en un apartado o pregunta desactivados sigue disponible para los ejercicios.
   return new Set(edition.placements.flatMap(p=>p.questions.flatMap(q=>
-    q.kind==='choice'?q.options.flatMap(o=>o.slots.map(s=>normalizeAcademicExercise(s.value))):[])));
+    q.enabled&&q.kind==='choice'
+      ?q.options.filter(o=>o.enabled).flatMap(o=>o.slots
+        .map(s=>normalizeAcademicExercise(s.value)).filter(Boolean))
+      :[])));
 }
 /** Solo se reutiliza una palabra ya usada si no queda ninguna candidata nueva y válida. */
 function teacherProtected(slot:QuestionWordSlotV1):boolean {
