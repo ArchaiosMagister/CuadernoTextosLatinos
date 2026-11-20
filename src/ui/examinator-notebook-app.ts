@@ -16,6 +16,7 @@ import {WorkspaceRepository,WorkspaceConflictError,type EditionSnapshotV1} from 
 import {combineNotebookCorpora,createNotebookBackup,createWorkspaceBackup,importNotebookDependencies,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {deleteText,upsertText,type TextDraft} from '../core/editor-operations.js';
+import {findPossibleDuplicates} from '../core/text-duplicates.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
 import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
@@ -405,6 +406,21 @@ function addText(input:TextDraft):Promise<void>{
     await addSourceText(input);
   });
 }
+/** Advierte sin bloquear ni fusionar automáticamente las fuentes coincidentes. */
+function confirmPossibleDuplicates(current:CorpusV1,input:TextDraft,excludeId?:string):boolean{
+  const matches=findPossibleDuplicates(current.texts,{
+    latin:input.latin,author:input.author,work:input.work,reference:input.reference,
+  },excludeId,3);
+  if(!matches.length)return true;
+  const summary=matches.map(match=>{
+    const label=match.kind==='identical'?'Texto idéntico'
+      :match.kind==='overlap'?'Fragmento compartido ('+match.sharedWords+' palabras)'
+      :'Misma referencia bibliográfica';
+    return '• '+label+': '+match.title+'\n  '+match.excerpt;
+  }).join('\n\n');
+  return window.confirm('Posibles textos repetidos en el banco:\n\n'+summary+
+    '\n\n¿Quieres continuar? Puedes reutilizar el pasaje intencionadamente.');
+}
 async function addSourceText(input:TextDraft):Promise<void>{
   if(!active())throw new Error('Primero abre o crea un cuaderno.');
   if(!input.title.trim()||!input.latin.trim())throw new Error('El fragmento y el título no pueden estar vacíos.');
@@ -413,6 +429,7 @@ async function addSourceText(input:TextDraft):Promise<void>{
     &&t.source.author===(input.author.trim()||null)
     &&t.source.work===(input.work.trim()||null)
     &&t.source.reference===(input.reference.trim()||null));
+  if(!match&&!confirmPossibleDuplicates(before.corpus,input))return;
   const id=match?.id??'doc.'+crypto.randomUUID();
   if(!match){
     await repo.save(upsertText(before.corpus,input,id,new Date().toISOString()),before.revision);
@@ -672,6 +689,8 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Pro
     &&t.source.author===(clean.author.trim()||null)
     &&t.source.work===(clean.work.trim()||null)
     &&t.source.reference===(clean.reference.trim()||null));
+  if(!confirmPossibleDuplicates(saved.corpus,clean,match?.id))
+    throw Error('Guardado cancelado: no se ha modificado el banco.');
   const id=match?.id??'doc.'+crypto.randomUUID(),at=new Date().toISOString();
   const updated=upsertText(saved.corpus,{...clean,id},id,at);
   const normalized=documentData?{...documentData,title:clean.title,latin:clean.latin,
