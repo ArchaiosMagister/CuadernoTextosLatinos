@@ -1605,7 +1605,8 @@ export function createEditionPane(options:{
     const principal=experimental?node('section','edition-organize-primary'):panel;
     if(experimental){
       panel.append(node('h3','edition-organize-heading','Organizar el cuaderno'));
-      principal.append(node('h3','','Título y orden de los textos'));
+      principal.append(node('h3','','Organizar el cuaderno'));
+      principal.append(node('h4','','Título y orden de los textos'));
       principal.append(node('p','hint','Ordena con ↑ y ↓, o quita una aparición. Los textos originales y los demás cuadernos permanecen intactos.'));
     }else panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
     principal.append(textField('Título del cuaderno',e.title,value=>{
