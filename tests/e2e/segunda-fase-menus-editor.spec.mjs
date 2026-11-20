@@ -61,8 +61,9 @@ test('fase 2: Texto, Preguntas, Formato y Organizar conservan funciones y estado
 
   await tabs.getByRole('button',{name:'Organizar'}).click();
   const organizer=page.locator('.edition-menu-notebook');
-  await expect(organizer.locator('.edition-organize-primary h3')).toHaveText('Organizar el cuaderno');
-  await expect(organizer.locator('.edition-organize-primary h4').first()).toHaveText('Título y orden de los textos');
+  await expect(organizer.locator('.edition-organize-heading')).toHaveText('Organizar el cuaderno');
+  await expect(organizer.locator('.edition-organize-primary h3')).toHaveText('Título y orden de los textos');
+  await expect(organizer.locator('.edition-organize-primary h4').first()).toContainText('Orden de los textos');
   await expect(organizer.getByRole('textbox',{name:'Título del cuaderno'})).toBeVisible();
   await expect(organizer.locator('.edition-organize-primary .edition-notebook-row')).toHaveCount(1);
   await expect(organizer.locator('.edition-organize-review h3')).toHaveText('Revisión del cuaderno');
