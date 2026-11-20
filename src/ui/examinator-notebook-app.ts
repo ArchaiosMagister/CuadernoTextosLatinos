@@ -750,7 +750,7 @@ function openBankTextEditor(source:LatinText):void{
 
 /** Guardado de fuentes autónomas. Un DOCX conserva los datos de preguntas,
  * subrayados y glosario; añadirlo a un cuaderno no modifica esta fuente. */
-async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Promise<void>{
+async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx,reviewedBatch=false):Promise<void>{
   const clean={...input,title:input.title.trim(),latin:input.latin.trim()};
   if(!clean.title||!clean.latin)throw Error('El título y el pasaje latino son obligatorios.');
   const saved=await repo.load();
@@ -758,7 +758,7 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx):Pro
     &&t.source.author===(clean.author.trim()||null)
     &&t.source.work===(clean.work.trim()||null)
     &&t.source.reference===(clean.reference.trim()||null));
-  if(!confirmPossibleDuplicates(saved.corpus,clean,match?.id))
+  if(!reviewedBatch&&!confirmPossibleDuplicates(saved.corpus,clean,match?.id))
     throw Error('Guardado cancelado: no se ha modificado el banco.');
   const id=match?.id??'doc.'+crypto.randomUUID(),at=new Date().toISOString();
   const updated=upsertText(saved.corpus,{...clean,id},id,at);
@@ -1029,7 +1029,8 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
   for(const problem of failures)failuresList.append(el('li','',problem));
   if(failures.length)panel.append(failuresList);
   const cards=new Map<ParsedTeacherDocx,HTMLElement>();
-  for(const {file,data} of documents){
+  const toBank=editionId===null;
+  for(const [position,{file,data}] of documents.entries()){
     const card=el('details','word-review-item');
     card.open=documents.length===1;
     const heading=el('summary','','');
@@ -1056,6 +1057,21 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     preview.setAttribute('aria-label','Texto latino');
     card.append(preview,el('p','small muted',data.underlines.length+' subrayados · '+
       data.vocabulary.length+' entradas reales de vocabulario.'));
+    if(toBank){
+      // La confirmación del lote es deliberada. Mostrar posibles coincidencias
+      // antes de pulsarla evita diálogos repetidos que interrumpen varios Word.
+      const earlier=documents.slice(0,position).map(({file:previousFile,data:previous},index)=>({
+        id:'import.preview.'+index,title:previous.title||previousFile,latin:previous.latin,
+        source:{author:previous.author,work:previous.work,reference:previous.reference},
+      }));
+      const matches=findPossibleDuplicates([...corpus.texts,...earlier],{
+        latin:data.latin,author:data.author,work:data.work,reference:data.reference,
+      },undefined,3);
+      if(matches.length)card.append(el('p','small muted',
+        'Posibles repeticiones: '+matches.map(m=>m.title+' ('+
+          (m.kind==='citation'?'misma referencia':'fragmento coincidente')+')').join('; ')+
+        '. Revisa los textos antes de confirmar el lote.'));
+    }
     if(data.warnings.length){
       const warnings=el('details');warnings.append(el('summary','','Avisos ('+data.warnings.length+')'));
       const list=el('ul');for(const warning of data.warnings)list.append(el('li','',warning));
@@ -1063,7 +1079,6 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     }
     cards.set(data,card);panel.append(card);
   }
-  const toBank=editionId===null;
   const importLabel=toBank
     ?(documents.length===1?'Guardar en el banco':'Guardar '+documents.length+' textos en el banco')
     :(documents.length===1?'Incorporar al cuaderno':'Incorporar '+documents.length+' textos');
@@ -1078,7 +1093,7 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
         const {data,file}=pending[0]!;
         if(toBank){
           await writeSource(()=>saveBankText({title:data.title,latin:data.latin,
-            author:data.author??'',work:data.work??'',reference:data.reference??''},data));
+            author:data.author??'',work:data.work??'',reference:data.reference??''},data,true));
         }else{
           const placement=await writeSource(async()=>{
             if(currentId!==editionId)throw Error('Vuelve al cuaderno donde elegiste los archivos.');
