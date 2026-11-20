@@ -1423,3 +1423,14 @@ html[data-cuaderno-theme='oled']{
     print-color-adjust:exact;-webkit-print-color-adjust:exact;
   }
 }
+
+/* Controles táctiles de portada y menús existentes sin zoom involuntario iOS. */
+@media screen and (max-width:760px){
+  #editor .edition-menu-text input.field-control,
+  #editor .edition-menu-format input.field-control,
+  #editor .edition-menu-format select.field-control,
+  #editor .edition-cover-editor input.field-control,
+  #editor .edition-cover-editor select.field-control{
+    font-size:16px!important;
+  }
+}
