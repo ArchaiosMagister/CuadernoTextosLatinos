@@ -1709,6 +1709,7 @@ export function createEditionPane(options:{
   function renderCoverMenu(panel:HTMLElement):void{
     if(!draft)return;
     const group=node('details','edition-cover-editor');
+    group.open=Boolean(draft.cover);
     group.append(node('summary','','Portada del cuaderno (opcional)'));
     const description=node('p','hint','Modelo clásico: marco, imagen y campos para nombre y grupo. '+
       'Solo se incluye en Word y PDF cuando eliges una imagen; queda guardada en el cuaderno.');
