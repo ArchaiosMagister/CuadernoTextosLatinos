@@ -1,6 +1,7 @@
+import { conflictsWithGrammarForm } from '../core/grammar-tags.js';
 import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
 import {fingerprintForMark} from '../core/edition-validation.js';
-import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
+import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarCandidate,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
 import type {CorpusV1,LatinText} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
@@ -242,26 +243,76 @@ host.api={
  * Se carga de forma diferida y NO se reutiliza la base de Examinator2 original.
  * Su análisis no sustituye una verificación individual ni una decisión docente.
  */
-type LatinToken={w:string;sel?:{lid:number};proper?:boolean;amb?:boolean;lplain?:string;lemma?:string;
-  cands?:Array<{lid:number;trad?:string}>};
+function proposalContext(latin: string, proposal: CollatinusGrammarProposal): HTMLElement {
+  const context = el('p', 'cuaderno-proposal-context');
+  const start = Math.max(0, proposal.start - 65);
+  const end = Math.min(latin.length, proposal.end + 65);
+  context.append((start ? '…' : '') + latin.slice(start, proposal.start),
+    el('mark', '', latin.slice(proposal.start, proposal.end)),
+    latin.slice(proposal.end, end) + (end < latin.length ? '…' : ''));
+  return context;
+}
 type LatinLemma={lid:number;head:string;trad:string;note:string;proper:boolean};
-type CollatinusApi={call:(method:string,args?:Record<string,unknown>)=>Promise<unknown>};
-let collatinusPromise:Promise<CollatinusApi>|null=null;
-async function collatinus():Promise<CollatinusApi>{
-  if(!collatinusPromise)collatinusPromise=(async()=>{
-    const adaptedApi=host.api;
-    try{
-      for(const name of ['datos.js','incluidos.js','shim.js']){
-        await script(new URL('./collatinus/'+name,document.baseURI).href);
-      }
-      const originalApi=host.api as unknown as CollatinusApi;
-      host.api=adaptedApi;
-      await script(new URL('./collatinus/motor.js',document.baseURI).href);
-      await originalApi.call('warm');
-      return originalApi;
-    }finally{host.api=adaptedApi;}
-  })().catch(e=>{collatinusPromise=null;throw e;});
-  return collatinusPromise;
+type CollatinusMethod = 'analyze' | 'vocabEntries';
+let collatinusWorker: Worker | null = null;
+let requestId = 0;
+const requests = new Map<number, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
+
+function callCollatinus(method: CollatinusMethod, args: Record<string, unknown>): Promise<unknown> {
+  if (!collatinusWorker) {
+    const worker = new Worker(new URL('./collatinus/worker.js', document.baseURI));
+    collatinusWorker = worker;
+    worker.addEventListener('message', ({ data }) => {
+      const pending = requests.get(data.id);
+      if (!pending) return;
+      requests.delete(data.id);
+      if (data.error) pending.reject(new Error(data.error));
+      else pending.resolve(data.result);
+    });
+    worker.addEventListener('error', event => {
+      worker.terminate();
+      collatinusWorker = null;
+      for (const request of requests.values()) request.reject(new Error(event.message || 'Collatinus no se pudo iniciar.'));
+      requests.clear();
+    });
+  }
+  const worker = collatinusWorker;
+  return new Promise((resolve, reject) => {
+    const id = ++requestId;
+    requests.set(id, { resolve, reject });
+    try {
+      worker.postMessage({ id, method, args });
+    } catch (error) {
+      requests.delete(id);
+      reject(error);
+    }
+  });
+}
+
+interface AnalysisToken extends CollatinusGrammarToken {
+  lplain?: string;
+  lemma?: string;
+  cands?: (CollatinusGrammarCandidate & { trad?: string })[];
+}
+const analyses = new Map<string, Promise<AnalysisToken[]>>();
+const maxCachedAnalyses = 6;
+async function analyzeLatin(latin: string): Promise<AnalysisToken[]> {
+  const cached = analyses.get(latin);
+  if (cached) {
+    analyses.delete(latin);
+    analyses.set(latin, cached);
+    return cached;
+  }
+  const pending = callCollatinus('analyze', { text: latin }).then(raw => {
+    if (!Array.isArray(raw)) throw new Error('Collatinus devolvió un análisis inesperado.');
+    return raw as AnalysisToken[];
+  }).catch(error => {
+    if (analyses.get(latin) === pending) analyses.delete(latin);
+    throw error;
+  });
+  analyses.set(latin, pending);
+  if (analyses.size > maxCachedAnalyses) analyses.delete(analyses.keys().next().value!);
+  return pending;
 }
 /** No se infiere un gentilicio por su sufijo: lista editorial de gentilicios
  * latinos ya presentes en el repertorio docente/Collatinus. */
@@ -276,12 +327,10 @@ const GENTILICS=new Set([
  */
 async function collatinusVocabulary(latin:string,quantity:VocabularyQuantityMode):
   Promise<CollatinusVocabularyCandidate[]>{
-  const engine=await collatinus();
-  const tokens=await engine.call('analyze',{text:latin}) as LatinToken[];
-  if(!Array.isArray(tokens))throw new Error('Collatinus devolvió un análisis inesperado.');
+  const tokens=await analyzeLatin(latin);
   const ids=[...new Set(tokens.filter(t=>t.sel).map(t=>t.sel!.lid))];
   if(!ids.length)return [];
-  const entries=await engine.call('vocabEntries',{lids:ids,mode:quantity}) as LatinLemma[];
+  const entries=await callCollatinus('vocabEntries',{lids:ids,mode:quantity}) as LatinLemma[];
   if(!Array.isArray(entries))throw new Error('Collatinus no devolvió enunciados.');
   const tokenGlosses=new Map<number,string>(),tokenLemmas=new Map<number,string>();
   const forms=new Map<number,Set<string>>();
@@ -717,6 +766,8 @@ function tagBankText(text:LatinText):void{
   const status=el('p','small muted');
   status.setAttribute('role','status');
   const rejected=new Set<string>();
+  const corrected=new Map<string,string>();
+  let reviewKey: string | undefined;
   const selections=new Map<string,string>();
   let pending:CollatinusGrammarProposal[]=[];
   const proposalKey=(p:CollatinusGrammarProposal)=>[p.start,p.end,p.tagId].join(':');
@@ -727,19 +778,21 @@ function tagBankText(text:LatinText):void{
     toolbar.append(el('p','small muted',
       pending.length+' candidaturas · '+rejected.size+' descartadas'));
     const acceptMultiple=button('Aceptar seleccionadas',()=>{
-      for(const tagId of selections.values())setTag(tagId,true);
+      for(const [key, tagId] of selections) confirmProposal(key, tagId);
       selections.clear();renderProposals();
     },'hbtn');
     acceptMultiple.disabled=!selections.size;
     toolbar.append(acceptMultiple);result.append(toolbar);
     for(const proposal of pending){
       const key=proposalKey(proposal);
-      const discarded=rejected.has(key),accepted=selected.has(proposal.tagId);
+      const acceptedTag=corrected.get(key) ?? proposal.tagId;
+      const discarded=rejected.has(key),accepted=selected.has(acceptedTag);
       const row=el('details','grammar-proposal-card');
       row.dataset.state=discarded?'dismissed':accepted?'confirmed':'pending';
       const phrase=text.latin.slice(proposal.start,proposal.end);
       const label=discarded?'Descartada':accepted?'Confirmada':'Pendiente';
-      row.append(el('summary','',phrase+' · '+nameOf(proposal.tagId)+' · '+label));
+      row.append(el('summary','',phrase+' · '+nameOf(accepted ? acceptedTag : proposal.tagId)+' · '+label));
+      row.append(proposalContext(text.latin, proposal));
       if(proposal.syntaxReview)row.append(el('p','hint','Requiere revisión sintáctica.'));
       const evidence=el('details','cuaderno-bank-evidence');
       evidence.append(el('summary','','Ver análisis y evidencia'));
@@ -766,18 +819,34 @@ function tagBankText(text:LatinText):void{
         box.addEventListener('change',changeSelection);
         choose.addEventListener('change',changeSelection);
         controls.append(choose,selectedLabel,
-          button('Aceptar',()=>{setTag(choose.value,true);selections.delete(key);renderProposals();},'hbtn'),
-          button('Descartar',()=>{rejected.add(key);selections.delete(key);renderProposals();},'tbtn'));
+          button('Aceptar',()=>{confirmProposal(key,choose.value);selections.delete(key);renderProposals();},'hbtn'),
+          button('Descartar',()=>{rejected.add(key);corrected.delete(key);selections.delete(key);renderProposals();},'tbtn'));
         row.append(controls);
       }
       result.append(row);
     }
   }
+  function confirmProposal(key: string, tagId: string): void {
+    rejected.delete(key);
+    corrected.set(key, tagId);
+    setTag(tagId, true);
+  }
   const analyze=button('Analizar con Collatinus',async()=>{
     analyze.disabled=true;status.textContent='Analizando el pasaje…';
     try{
-      const engine=await collatinus();
-      const tokens=await engine.call('analyze',{text:text.latin}) as CollatinusGrammarToken[];
+      if (!reviewKey) {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text.latin));
+        const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,'0')).join('');
+        reviewKey = 'cuaderno-banco-review-v1:' + text.id + ':' + hash;
+        try {
+          const saved = JSON.parse(localStorage.getItem(reviewKey) ?? 'null');
+          for (const key of saved?.rejected ?? []) if (typeof key === 'string') rejected.add(key);
+          for (const [key, value] of saved?.corrected ?? []) {
+            if (typeof key === 'string' && selected.has(value)) corrected.set(key, value);
+          }
+        } catch { /* La revisión manual sigue disponible. */ }
+      }
+      const tokens=await analyzeLatin(text.latin);
       pending=proposeCollatinusGrammar(text.latin,tokens);
       status.textContent=pending.length+' propuestas obtenidas; ninguna se añade automáticamente.';
       renderProposals();
@@ -785,7 +854,10 @@ function tagBankText(text:LatinText):void{
       status.textContent='No se pudo analizar el texto: '+String(error);
     }finally{analyze.disabled=false;}
   },'hbtn');
-  review.append(analyze,status,result);panel.append(review);
+  const passage=el('details','cuaderno-review-passage');
+  passage.open=true;
+  passage.append(el('summary','','Texto latino'),el('p','',text.latin));
+  review.append(passage,analyze,status,result);panel.append(review);
   M.modal('Etiquetas de «'+text.title+'»',panel,[{label:'Cancelar'},
     {label:'Guardar etiquetas',primary:true,onclick:async()=>{
       await writeSource(async()=>{
@@ -800,6 +872,14 @@ function tagBankText(text:LatinText):void{
         }
         if(!found)throw Error('La fuente ya no está en el banco editable.');
       });
+      if (reviewKey) {
+        try {
+          localStorage.setItem(reviewKey, JSON.stringify({ rejected: [...rejected], corrected: [...corrected] }));
+        } catch {
+          M.toast('Se guardaron las etiquetas. No se pudo guardar el historial de propuestas.');
+          await reload();render();return;
+        }
+      }
       await reload();render();M.toast('Etiquetas de la fuente guardadas.');
     }}]);
 }
@@ -972,8 +1052,7 @@ async function openGrammarEditor():Promise<void>{
       if(!latest||latest.id!==placement!.id)return;
       const latin=latest.text.latin;
       suggestions.replaceChildren(el('p','','Analizando el pasaje…'));
-      const engine=await collatinus();
-      const tokens=await engine.call('analyze',{text:latin}) as CollatinusGrammarToken[];
+      const tokens=await analyzeLatin(latin);
       const rejected=new Set<string>();
       const corrections=new Map<number,{lid:number;morpho:string}>();
       const retired=(latest.grammarReview??[]).filter(item=>item.reviewRequired);
@@ -1063,6 +1142,10 @@ async function openGrammarEditor():Promise<void>{
           }
           suggestions.append(ambiguity);
         }
+        const passage=el('details','cuaderno-review-passage');
+        passage.open=true;
+        passage.append(el('summary','','Texto latino'),el('p','',latin));
+        suggestions.append(passage);
         const selectedProposals=new Map<CollatinusGrammarProposal,string>();
         async function accept(selections:Map<CollatinusGrammarProposal,string>):Promise<void>{
           if(!verifyText())throw Error('El pasaje cambió. Vuelve a analizarlo.');
@@ -1085,9 +1168,13 @@ async function openGrammarEditor():Promise<void>{
           const accepted=confirmed.some(span=>span.startUtf16===proposal.start&&span.endUtf16===proposal.end
             &&span.tagIds.includes(proposal.tagId));
           const discarded=rejected.has(id);
+          const conflicts=confirmed.some(span=>span.startUtf16===proposal.start&&span.endUtf16===proposal.end
+            &&conflictsWithGrammarForm(span.tagIds, proposal.tagId));
+          if(conflicts&&!accepted)continue;
           row.dataset.state=accepted?'confirmed':discarded?'dismissed':'pending';
           row.append(el('summary','',latin.slice(proposal.start,proposal.end)+' · '+label(proposal.tagId)+
             (accepted?' · Confirmada':discarded?' · Descartada':' · Pendiente')));
+          row.append(proposalContext(latin, proposal));
           row.append(el('p','',proposal.evidence.join(' / ')));
           if(proposal.alternatives.length)row.append(el('p','','Lecturas alternativas: '+proposal.alternatives.join(' / ')));
           if(proposal.syntaxReview)row.append(el('p','hint','Requiere revisión sintáctica.'));

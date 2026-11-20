@@ -1331,3 +1331,20 @@ html[data-cuaderno-theme='oled']{
   }
 }
 
+
+.cuaderno-review-passage {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  max-height: 9rem;
+  overflow: auto;
+  padding: .4rem .6rem;
+  background: var(--paper, Canvas);
+  color: var(--ink, CanvasText);
+}
+
+.cuaderno-review-passage p,
+.cuaderno-proposal-context {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

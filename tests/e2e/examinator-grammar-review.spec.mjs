@@ -115,3 +115,36 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
   }
   await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true}).locator('option')).toHaveCount(2);
 });
+
+test('la revisión reutiliza un análisis y mantiene el pasaje junto a la propuesta', async ({page}) => {
+  let analyses = 0;
+  await page.exposeFunction('countCollatinusAnalysis', () => { analyses++; });
+  await page.addInitScript(() => {
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function(message, ...args) {
+      if (message?.method === 'analyze') window.countCollatinusAnalysis();
+      return post.call(this, message, ...args);
+    };
+  });
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Prueba de análisis'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
+  const modal=page.locator('.modal').last();
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Amavisse dicit.');
+  await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await page.getByRole('button',{name:'Etiquetas gramaticales',exact:true}).click();
+  const analyze=modal.getByRole('button',{name:'Analizar etiquetas con Collatinus'});
+  for (let i = 0; i < 2; i++) {
+    await analyze.click();
+    const proposal=modal.getByText('Amavisse · Infinitivo de perfecto activo · Pendiente',{exact:true});
+    await expect(proposal).toBeVisible();
+    await expect(analyze).toBeEnabled();
+  }
+  await modal.getByText('Amavisse · Infinitivo de perfecto activo · Pendiente',{exact:true}).click();
+  await expect(modal.locator('.cuaderno-proposal-context mark')).toHaveText('Amavisse');
+  await expect(modal.locator('.cuaderno-review-passage')).toContainText('Amavisse dicit.');
+  expect(analyses).toBe(1);
+});

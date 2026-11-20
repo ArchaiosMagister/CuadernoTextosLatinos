@@ -54,3 +54,33 @@ test('gerundivo y gerundio se mantienen manuales y un cum sin oración no recibe
     assert.deepEqual(proposeCollatinusGrammar(latin,[t]),[]);
   }
 });
+
+test('un infinitivo deponente emite una forma combinada y excluye la voz pasiva',()=>{
+  const latin='loqui';
+  const t=token(latin,latin,[
+    candidate(1,'loquor','v','locutus sum','infinitivo de presente pasivo'),
+    candidate(2,'loquo','v','','infinitivo de presente activo'),
+  ]);
+  const tags=proposeCollatinusGrammar(latin,[t]).map(item=>item.tagId);
+  assert.deepEqual(tags.filter(tag=>tag.startsWith('gram.inf.')),['gram.inf.presente.deponente']);
+  assert.ok(!tags.includes('gram.voz.pasiva'));
+});
+
+test('una perífrasis deponente con esse da una sola etiqueta de infinitivo',()=>{
+  const latin='Locutus esse';
+  const tokens=[
+    token(latin,'Locutus',[candidate(1,'loquor','v','locutus sum',
+      'participio de perfecto pasivo: nominativo masculino singular')],[0,1]),
+    token(latin,'esse',[candidate(2,'sum','v','','infinitivo de presente activo')],[0,1]),
+  ];
+  const proposals=proposeCollatinusGrammar(latin,tokens).filter(item=>item.tagId.startsWith('gram.inf.'));
+  assert.deepEqual(proposals.map(({start,end,tagId})=>[latin.slice(start,end),tagId]),
+    [[latin,'gram.inf.perfecto.deponente']]);
+});
+
+test('una etiqueta confirmada excluye una forma rival en la misma ocurrencia',async()=>{
+  const {conflictsWithGrammarForm}=await import('./grammar-tags.js');
+  assert.equal(conflictsWithGrammarForm(['gram.inf.presente.activo'],'gram.inf.perfecto.activo'),true);
+  assert.equal(conflictsWithGrammarForm(['gram.deponente'],'gram.voz.pasiva'),true);
+  assert.equal(conflictsWithGrammarForm(['gram.inf.perfecto.deponente'],'gram.infinitivo'),false);
+});

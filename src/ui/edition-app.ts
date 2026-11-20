@@ -1,3 +1,4 @@
+import { conflictsWithGrammarForm } from '../core/grammar-tags.js';
 import type { LatinText } from '../core/model.js';
 /**
  * Primera interfaz de composición editorial.
@@ -531,6 +532,10 @@ export function createEditionPane(options:{
       const index=spans.findIndex(span=>!span.reviewRequired&&span.startUtf16===start&&span.endUtf16===end);
       const existing=spans[index];
       if(existing?.tagIds.includes(tagId))continue;
+      if(existing && conflictsWithGrammarForm(existing.tagIds, tagId)){
+        setMessage('Ese fragmento ya tiene una forma incompatible. Revísala antes de añadir otra.', true);
+        return false;
+      }
       const span={id:existing?.id??freshId('span'),startUtf16:start,endUtf16:end,
         exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
         tagIds:[...(existing?.tagIds??[]),tagId],reviewRequired:false,

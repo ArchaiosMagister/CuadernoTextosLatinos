@@ -8,6 +8,20 @@ import { validateCorpus } from './validation.js';
  * Forma y función se clasifican por separado para permitir búsquedas
  * combinadas (p. ej. oración de infinitivo + perfecto + pasiva).
  */
+const infinitiveTenses = ['presente', 'perfecto', 'futuro'] as const;
+const infinitiveVoices = ['activo', 'pasivo', 'deponente'] as const;
+
+const infinitiveForms = infinitiveTenses.flatMap(tense =>
+  infinitiveVoices.map(voice => ({
+    id: 'gram.inf.' + tense + '.' + voice,
+    label: 'Infinitivo de ' + tense + ' ' + voice,
+    kind: 'catalogue' as const,
+    parentId: 'gram.inf.' + tense,
+    voiceId: 'gram.inf.' + voice,
+  })),
+);
+const infinitiveVoiceByForm = new Map(infinitiveForms.map(({id, voiceId}) => [id, voiceId]));
+
 export const GRAMMAR_CATALOGUE: readonly GrammarTag[] = [
   {id:'gram.oracion',label:'Oraciones y construcciones',kind:'catalogue',parentId:null},
   {id:'gram.relativo',label:'Oración de relativo',kind:'catalogue',parentId:'gram.oracion'},
@@ -31,6 +45,7 @@ export const GRAMMAR_CATALOGUE: readonly GrammarTag[] = [
   {id:'gram.inf.futuro',label:'Infinitivo de futuro',kind:'catalogue',parentId:'gram.inf.forma'},
   {id:'gram.inf.activo',label:'Infinitivo activo',kind:'catalogue',parentId:'gram.inf.forma'},
   {id:'gram.inf.pasivo',label:'Infinitivo pasivo',kind:'catalogue',parentId:'gram.inf.forma'},
+  ...infinitiveForms.map(({id, label, kind, parentId}) => ({id, label, kind, parentId})),
   {id:'gram.voz.pasiva',label:'Voz pasiva',kind:'catalogue',parentId:'gram.formas'},
   {id:'gram.deponente',label:'Verbo deponente',kind:'catalogue',parentId:'gram.formas'},
   {id:'gram.gerundio',label:'Gerundio',kind:'catalogue',parentId:'gram.formas'},
@@ -92,9 +107,23 @@ export function attachGrammarTags(corpus:CorpusV1,textId:string,ids:readonly str
   });
 }
 
+/** Solo se compara el conjunto de etiquetas de una misma ocurrencia. */
+export function conflictsWithGrammarForm(existing: readonly string[], incoming: string): boolean {
+  const incomingVoice = infinitiveVoiceByForm.get(incoming);
+  const passive = (id: string) => id === 'gram.voz.pasiva' || id === 'gram.inf.pasivo'
+    || id === 'gram.part.perfecto.pasivo' || infinitiveVoiceByForm.get(id) === 'gram.inf.pasivo';
+  const deponent = (id: string) => id === 'gram.deponente' || id === 'gram.part.perfecto.deponente'
+    || infinitiveVoiceByForm.get(id) === 'gram.inf.deponente';
+  return existing.some(id => id !== incoming && (
+    (incomingVoice && infinitiveVoiceByForm.has(id))
+    || (passive(id) && deponent(incoming)) || (deponent(id) && passive(incoming))
+  ));
+}
+
 /** Buscar etiqueta padre incluye subetiquetas (sin borrar la distinción). */
 export function matchesGrammarTag(tagId:string,filterId:string,tags:readonly GrammarTag[]):boolean{
   const byId=new Map(tags.map(tag=>[tag.id,tag]));
+  if(infinitiveVoiceByForm.get(tagId)===filterId)return true;
   let current:string|null=tagId;
   const seen=new Set<string>();
   while(current&&!seen.has(current)){

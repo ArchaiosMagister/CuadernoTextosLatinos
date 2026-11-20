@@ -37,6 +37,7 @@ await copyFile('reference/examinator2/js/library.js','dist/examinator-cuadernos/
 // El módulo de referencia NO se modifica; una copia del shim utiliza una
 // base y claves propias para que el motor original no toque datos de Examinator2.
 await mkdir('dist/examinator-cuadernos/collatinus',{recursive:true});
+await copyFile('static/collatinus-worker.js','dist/examinator-cuadernos/collatinus/worker.js');
 await copyFile('reference/examinator2/js/motor.js',
   'dist/examinator-cuadernos/collatinus/motor.js');
 const originalShim=await readFile('reference/examinator2/js/shim.js','utf8');
