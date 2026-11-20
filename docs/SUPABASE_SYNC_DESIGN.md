@@ -34,44 +34,44 @@ servidor mantiene su propia revisión para detectar escrituras concurrentes.
 Los checkpoints por usuario/dispositivo representan el último contenido confirmado en ambos
 extremos y se anotarán localmente solo tras finalizar la transferencia segura.
 
-## Esquema SQL propuesto (NO EJECUTADO, no es una migración)
+## Esquema de la primera conexión (NO EJECUTADO)
 
-Antes de adoptarlo, generar un archivo de migración mediante la CLI de Supabase y
-revisarlo con sus asesores de seguridad. Este bloque es únicamente para auditoría:
+El transporte inicial usa una copia atómica del workspace completo, con revision
+CAS en la base de datos. La granularidad por cuaderno está diseñada en
+supabase-sync-plan.ts, pero todavía no es el transporte activo.
 
-\`\`\`sql
-create table public.cuaderno_sync_documents (
-  owner_id uuid not null references auth.users(id) on delete cascade,
-  kind text not null check (kind in ('corpus','edition','history')),
-  document_id text not null check (length(document_id) between 1 and 120),
-  revision bigint not null default 1 check (revision >= 1),
-  payload jsonb not null,
-  updated_at timestamptz not null default now(),
-  primary key(owner_id,kind,document_id),
-  constraint cuaderno_payload_limit check (octet_length(payload::text) <= 12000000)
-);
+Este SQL corresponde al cliente y **no se ha aplicado en ningún proyecto**:
 
-alter table public.cuaderno_sync_documents enable row level security;
-revoke all on public.cuaderno_sync_documents from anon;
-grant select, insert, update on public.cuaderno_sync_documents to authenticated;
+    create table public.cuaderno_sync_workspaces (
+      owner_id uuid primary key references auth.users(id) on delete cascade,
+      revision bigint not null default 1 check (revision >= 1),
+      payload jsonb not null check (jsonb_typeof(payload) = 'object'),
+      updated_at timestamptz not null default now(),
+      constraint workspace_payload_limit check (octet_length(payload::text) <= 12000000)
+    );
+    alter table public.cuaderno_sync_workspaces enable row level security;
+    revoke all on public.cuaderno_sync_workspaces from anon;
+    grant select, insert, update on public.cuaderno_sync_workspaces to authenticated;
+    create policy cuaderno_workspace_select on public.cuaderno_sync_workspaces
+      for select to authenticated using (owner_id = (select auth.uid()));
+    create policy cuaderno_workspace_insert on public.cuaderno_sync_workspaces
+      for insert to authenticated with check (owner_id = (select auth.uid()));
+    create policy cuaderno_workspace_update on public.cuaderno_sync_workspaces
+      for update to authenticated
+      using (owner_id = (select auth.uid()))
+      with check (owner_id = (select auth.uid()));
 
-create policy cuaderno_read_own on public.cuaderno_sync_documents
-  for select to authenticated using (owner_id = (select auth.uid()));
+La inserción usa la clave única owner_id. Las actualizaciones usan comparación
+de owner_id y revision: cero filas modificadas significa conflicto, nunca éxito.
+No se concede DELETE. Clave publicable y usuario autenticado con RLS; jamás
+service_role o contraseña en el código.
 
-create policy cuaderno_insert_own on public.cuaderno_sync_documents
-  for insert to authenticated with check (owner_id = (select auth.uid()));
-
-create policy cuaderno_update_own on public.cuaderno_sync_documents
-  for update to authenticated
-  using (owner_id = (select auth.uid()))
-  with check (owner_id = (select auth.uid()));
-\`\`\`
-
-*No se concede DELETE.* En una fase posterior, las escrituras de actualización usarán
-comparación explícita de \`revision\` y exigirán que se haya actualizado exactamente una
-fila; la inserción requiere clave única. Un resultado vacío de actualización nunca se
-considerará éxito. Los fallos de concurrencia se convierten en conflictos visibles.
-Para la primera prueba se usará un usuario exclusivo y datos ficticios.
+La primera versión es manual: iniciar sesión, revisar los cambios, descargar
+copia JSON, autorizar subir o descargar. Los conflictos se detienen sin
+sobrescribir. IndexedDB conserva la operación sin conexión. La sesión y sus
+tokens viven solo en memoria; la URL, clave publicable y hash de la última
+sincronización se guardan localmente. No hay aún sincronización automática,
+cola persistente ni resolución granular automática de conflictos.
 
 ## Etapas siguientes, con puertas de aprobación
 
