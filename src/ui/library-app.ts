@@ -110,7 +110,7 @@ function grammarPicker(tags:readonly GrammarTag[],selected:ReadonlySet<string>,
   return root;
 }
 
-export function mountLibraryApp(root: HTMLElement): void {
+export function mountLibraryApp(root: HTMLElement, { independent = false } = {}): void {
   let snapshot: CorpusSnapshot | null = null;
   let catalogue: LibraryEntry[] = [];
   const cachedWorks = new Map<string,LibraryWork>();
@@ -118,11 +118,12 @@ export function mountLibraryApp(root: HTMLElement): void {
   let activeWork: LibraryWork | null = null;
   let selectedFragment: ReaderFragment | null = null;
   let preservingSelection = false;
-  let tab: Tab = 'library';
+  let tab: Tab = independent ? 'texts' : 'library';
   let authorFilter = 'all';
   let genreFilter = 'all';
   let query = '';
   let ownQuery = '';
+  const sourceFilters = { author: '', work: '', reference: '' };
   const tagFilters=new Set<string>();
   const selectedTagIds=new Set<string>();
   let pendingCustomTags:GrammarTag[]=[];
@@ -453,6 +454,8 @@ export function mountLibraryApp(root: HTMLElement): void {
       const needle=foldLatin(ownQuery);
       const matches=corpus.texts.filter(t=>
         (!needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle))
+        && Object.entries(sourceFilters).every(([key, value]) =>
+          foldLatin(t.source[key as keyof typeof sourceFilters] ?? '').includes(foldLatin(value)))
         && matchesGrammarFilters(t.tagIds,[...tagFilters],tags)
       ).sort((a,b)=>cmp.compare(a.title,b.title));
       for(const entry of matches){
@@ -470,7 +473,16 @@ export function mountLibraryApp(root: HTMLElement): void {
       if(!matches.length)list.append(el('p','hint','Todavía no hay textos con ese filtro.'));
     };
     find.addEventListener('input',()=>{ownQuery=find.value;draw();});
-    sidebar.append(newBtn,find,tagFilterDetails,list);draw();
+    const bibliography = el('details','grammar-filter');
+    bibliography.append(el('summary','','Filtrar por referencia bibliográfica'));
+    for (const [key,label] of [['author','Autor'],['work','Obra'],['reference','Libro, capítulo o pasaje']] as const) {
+      bibliography.append(field('Filtrar por '+label,sourceFilters[key],value=>{
+        sourceFilters[key]=value;
+        draw();
+      }));
+    }
+    bibliography.open = Object.values(sourceFilters).some(Boolean);
+    sidebar.append(newBtn,find,bibliography,tagFilterDetails,list);draw();
     const editor=el('section','editor-pane');
     editor.append(el('h2','',editingId?'Editar texto':'Nuevo texto'));
     const form=el('form','editor-form');
@@ -666,6 +678,19 @@ export function mountLibraryApp(root: HTMLElement): void {
       const b=button(title,()=>setTab(key),'workspace-tab'+(tab===key?' current':''));
       b.setAttribute('aria-current',tab===key?'page':'false');
       tabs.append(b);
+    }
+    if(independent){
+      const home=el('a','workspace-tab','Volver al inicio');
+      home.href='?';
+      home.addEventListener('click',event=>{
+        if(event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+        event.preventDefault();
+        if(!confirmDiscard())return;
+        void (async()=>{
+          if(tab!=='compose'||await composer.flush())window.location.assign(home.href);
+        })();
+      });
+      tabs.append(home);
     }
     const state=el('p','workspace-status','');
     state.id='phase2-status';

@@ -186,3 +186,41 @@ test('la selección fuera del lector no activa el botón de incorporación', asy
   });
   await expect(add).toBeDisabled();
 });
+
+test('la portada abre la biblioteca independiente y filtra los textos guardados por referencia', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', {name:'Biblioteca de textos'}).click();
+  await expect(page).toHaveURL(/biblioteca=1/);
+  const status = page.locator('#phase2-status');
+  await expect(status).toContainText('Biblioteca cargada');
+
+  const editor = page.locator('.editor-form');
+  for (const [title, author, work, reference] of [
+    ['Primer pasaje', 'Julio César', 'De bello Gallico', '1.1'],
+    ['Segundo pasaje', 'Cornelio Nepote', 'Miltiades', '2.1'],
+  ]) {
+    await page.getByRole('button', {name:'Nuevo texto', exact:true}).click();
+    await editor.getByLabel('Título', {exact:true}).fill(title);
+    await editor.getByLabel('Autor', {exact:true}).fill(author);
+    await editor.getByLabel('Obra', {exact:true}).fill(work);
+    await editor.getByLabel('Libro, capítulo o pasaje', {exact:true}).fill(reference);
+    await editor.getByLabel('Texto latino', {exact:true}).fill('Gallia est omnis divisa.');
+    await editor.getByRole('button', {name:'Guardar texto'}).click();
+    await expect(status).toContainText('Cambios guardados');
+  }
+
+  await page.reload();
+  await expect(status).toContainText('Biblioteca cargada');
+  const rows = page.locator('.lib-sidebar .work-row');
+  await expect(rows).toHaveCount(2);
+  await page.getByText('Filtrar por referencia bibliográfica', {exact:true}).click();
+  await page.getByRole('textbox', {name:'Filtrar por Autor', exact:true}).fill('cesar');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Primer pasaje');
+  await page.getByRole('textbox', {name:'Filtrar por Obra', exact:true}).fill('Miltiades');
+  await expect(rows).toHaveCount(0);
+  await page.getByRole('textbox', {name:'Filtrar por Autor', exact:true}).clear();
+  await page.getByRole('textbox', {name:'Filtrar por Libro, capítulo o pasaje', exact:true}).fill('2.1');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Segundo pasaje');
+});

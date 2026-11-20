@@ -270,7 +270,9 @@ void (async () => {
 
 /** El banco y el editor comparten la misma persistencia de la fase 1. */
 const route=new URLSearchParams(window.location.search);
-if(route.get('classic')==='1'){
+if(route.get('biblioteca')==='1'){
+  mountLibraryApp(required<HTMLElement>('phase2'), { independent: true });
+}else if(route.get('classic')==='1'){
   mountLibraryApp(required<HTMLElement>('phase2'));
 }else if(route.get('nuevo')==='1'){
   mountNotebookApp(required<HTMLElement>('phase2'));
