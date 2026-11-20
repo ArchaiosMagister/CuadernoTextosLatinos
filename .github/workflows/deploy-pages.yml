@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 1d83b77c3a9b1a1888611fc90ffe5cb4bd9fe12c
+          ref: 3c4ab83449ba72e4e6a8d14ef2b21000fc19c92e
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -323,8 +323,16 @@ jobs:
           editor=(destination/'ui/edition-app.js').read_text()
           assert 'Organizar el cuaderno' in editor
           assert 'Etiquetas gramaticales de este texto' in editor
+          assert '✓ Guardado' in editor, 'Falta el nuevo estado del vocabulario'
+          assert 'cuaderno-ui-save' in editor, 'Faltan estilos semánticos en el editor'
           academic=(destination/'ui/academic-controls.js').read_text()
           assert 'morphologyOccurrencesFreshFirst' in academic
+          assert 'cuaderno-ui-regen' in academic, 'Falta color de regeneración'
+          bridge=(destination/'examinator-cuadernos/bridge.css').read_text()
+          for selector in ('cuaderno-ui-word','cuaderno-ui-pdf',
+                           'cuaderno-ui-add','cuaderno-ui-remove',
+                           "edition-menu-nav .btn[aria-current='page']"):
+            assert selector in bridge, 'Falta diseño experimental: '+selector
           assert (destination/'core/academic-repetition.js').is_file()
 
           def replace(rel,before,after):
