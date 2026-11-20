@@ -49,13 +49,13 @@ function node<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',value=''):HTML
 function action(label:string,callback:()=>void|Promise<void>,cls='btn btn-outline'):HTMLButtonElement {
   const e=node('button',cls,label);e.type='button';
   // Identificadores solo visuales: nunca modifican los manejadores ni sus datos.
-  if(/\\bWord\\b/.test(label))e.classList.add('cuaderno-ui-word');
-  if(/\\bPDF\\b/.test(label))e.classList.add('cuaderno-ui-pdf');
-  if(/^(?:Exportar|PDF \\/ Imprimir|Imprimir borrador)/.test(label))e.classList.add('cuaderno-ui-export');
-  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\\b/.test(label))e.classList.add('cuaderno-ui-regen');
-  if(/^\\+?\\s*(?:Añadir|Agregar)\\b|^\\+ Cuaderno\\b/.test(label))e.classList.add('cuaderno-ui-add');
-  if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\\b))\\b/.test(label)||label==='×')e.classList.add('cuaderno-ui-remove');
-  if(/^Guardar\\b/.test(label))e.classList.add('cuaderno-ui-save');
+  if(/\bWord\b/.test(label))e.classList.add('cuaderno-ui-word');
+  if(/\bPDF\b/.test(label))e.classList.add('cuaderno-ui-pdf');
+  if(/^(?:Exportar|PDF \/ Imprimir|Imprimir borrador)/.test(label))e.classList.add('cuaderno-ui-export');
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\b/.test(label))e.classList.add('cuaderno-ui-regen');
+  if(/^\+?\s*(?:Añadir|Agregar)\b|^\+ Cuaderno\b/.test(label))e.classList.add('cuaderno-ui-add');
+  if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\b))\b/.test(label)||label==='×')e.classList.add('cuaderno-ui-remove');
+  if(/^Guardar\b/.test(label))e.classList.add('cuaderno-ui-save');
   e.addEventListener('click',()=>{void callback();});return e;
 }
 function textField(label:string,value:string,change:(value:string)=>void,multiline=false):HTMLElement {
