@@ -64,7 +64,10 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   await (await chooser).setFiles({name:'eutropio.docx',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(documentXml())});
-  await expect(page.getByRole('button',{name:'Incorporar al cuaderno'})).toBeVisible();
+  // Parsear DOCX en Safari puede tardar más de los 5 s del timeout global
+  // en CI; seguimos exigiendo que el botón aparezca y el archivo sea válido.
+  await expect(page.getByRole('button',{name:'Incorporar al cuaderno'}))
+    .toBeVisible({timeout:15000});
   await expect(page.getByText('4 subrayados · 4 entradas reales de vocabulario.')).toBeVisible();
   await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
   await expect(page.locator('.edition-paper-title')).toHaveText(
