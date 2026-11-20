@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 17ea540e09634ff8fb98cdf02e263d83c9707add
+          ref: 2ccf1362dc6870462bbf91d3a4186128acfe4591
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -323,6 +323,11 @@ jobs:
           assert 'Auditar textos repetidos' in app, 'Falta acceso a la auditoría global'
           assert 'auditLibraryDuplicates' in (destination/'core/text-duplicates.js').read_text(), 'Falta motor de auditoría'
           assert 'cuaderno-duplicate-audit' in (destination/'examinator-cuadernos/bridge.css').read_text(), 'Falta estilo móvil de auditoría'
+          assert (destination/'core/cover-photos.js').is_file(), 'Falta catálogo de portadas'
+          assert 'renderNotebookCover' in (destination/'ui/edition-app.js').read_text(), 'Falta vista de portada'
+          assert 'prepareWordCoverImage' in (destination/'ui/edition-app.js').read_text(), 'Falta preparación de Word'
+          assert 'wordCover' in (destination/'export/notebook-documents.js').read_text(), 'Falta portada DOCX'
+          assert 'edition-cover-photo' in (destination/'examinator-cuadernos/bridge.css').read_text(), 'Falta estilo de portada'
           for feature in ('Mis cuadernos', 'Banco de textos propios',
                           'Pegar en el banco', 'Importar Word al banco',
                           'Analizar con Collatinus', 'Quitar filtros de etiquetas',
