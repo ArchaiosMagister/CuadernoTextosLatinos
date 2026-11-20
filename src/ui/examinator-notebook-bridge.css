@@ -601,3 +601,93 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
     flex:0 0 auto;cursor:pointer;min-height:34px;display:inline-flex;align-items:center;
   }
 }
+
+/* Ajustes cromáticos de los controles: sin cambios en la hoja imprimible. */
+:root{
+  --cuaderno-ui-word:#245bb0;--cuaderno-ui-word-soft:#eaf2ff;
+  --cuaderno-ui-pdf:#b52638;--cuaderno-ui-pdf-soft:#fff0f1;
+  --cuaderno-ui-save:#245bb0;--cuaderno-ui-save-soft:#eaf2ff;
+  --cuaderno-ui-add:#176a48;--cuaderno-ui-add-soft:#e9f6ee;
+  --cuaderno-ui-regen:#925c0a;--cuaderno-ui-regen-soft:#fff4dc;
+  --cuaderno-ui-remove:#b52638;
+  --cuaderno-ui-current:#e7f1f7;--cuaderno-ui-current-ink:#145676;
+}
+html[data-cuaderno-theme='dark']{
+  --cuaderno-ui-word:#9cc4ff;--cuaderno-ui-word-soft:#1b3555;
+  --cuaderno-ui-pdf:#ffadb6;--cuaderno-ui-pdf-soft:#49262e;
+  --cuaderno-ui-save:#9cc4ff;--cuaderno-ui-save-soft:#1b3555;
+  --cuaderno-ui-add:#9de5bd;--cuaderno-ui-add-soft:#1d4132;
+  --cuaderno-ui-regen:#ffd38c;--cuaderno-ui-regen-soft:#49391f;
+  --cuaderno-ui-remove:#ffadb6;
+  --cuaderno-ui-current:#244251;--cuaderno-ui-current-ink:#b6eaff;
+}
+@media screen{
+  /* Las clases semánticas no modifican el comportamiento de los botones. */
+  :is(#editor,.modal,body>header) button.cuaderno-ui-word{
+    background:var(--cuaderno-ui-word-soft);border:1px solid var(--cuaderno-ui-word);
+    color:var(--cuaderno-ui-word);
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-pdf{
+    background:var(--cuaderno-ui-pdf-soft);border:1px solid var(--cuaderno-ui-pdf);
+    color:var(--cuaderno-ui-pdf);
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-save{
+    background:var(--cuaderno-ui-save-soft);border:1px solid var(--cuaderno-ui-save);
+    color:var(--cuaderno-ui-save);
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-regen,
+  #editor button.edition-vocab-reset{
+    background:var(--cuaderno-ui-regen-soft);border:1px solid var(--cuaderno-ui-regen);
+    color:var(--cuaderno-ui-regen);
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-remove{
+    background:transparent;border:1px solid var(--cuaderno-ui-remove);
+    color:var(--cuaderno-ui-remove);
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-add{
+    background:var(--cuaderno-ui-add-soft);border:1px solid var(--cuaderno-ui-add);
+    color:var(--cuaderno-ui-add);
+  }
+  /* Solo la exportación (no la importación) es sólida. */
+  :is(#editor,.modal,body>header) button.cuaderno-ui-export.cuaderno-ui-word,
+  body[data-has-editor='true']>header #btnDocx{
+    background:#245bb0;border-color:#245bb0;color:#fff;
+  }
+  :is(#editor,.modal,body>header) button.cuaderno-ui-export.cuaderno-ui-pdf,
+  body[data-has-editor='true']>header #btnPdf{
+    background:#b52638;border-color:#b52638;color:#fff;
+  }
+  /* Guardar cambia a Guardado sin desplazar ningún campo. */
+  #editor .edition-vocab-row .edition-vocab-save{
+    display:inline-flex;align-items:center;justify-content:center;
+    box-sizing:border-box;flex:0 0 94px;width:94px;min-width:94px;max-width:94px;
+    height:30px;min-height:30px;padding:3px 4px;white-space:nowrap;
+    font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;
+  }
+  #editor .edition-vocab-row .edition-vocab-save.is-saved{
+    background:var(--cuaderno-ui-add-soft);color:var(--cuaderno-ui-add);
+    border-color:var(--cuaderno-ui-add);
+  }
+  #editor .edition-menu-nav .btn[aria-current='page']{
+    background:var(--cuaderno-ui-current);color:var(--cuaderno-ui-current-ink);
+    border-color:var(--cuaderno-ui-current-ink);font-weight:700;
+    box-shadow:inset 3px 0 0 var(--cuaderno-ui-current-ink);
+  }
+  /* Misma altura y esquinas en cada grupo, sin alterar la distribución. */
+  #editor .cuaderno-home :is(button.hbtn,button.tbtn),
+  #editor .edition-menu-content button.btn,
+  body[data-has-editor='true']>header :is(button.hbtn,button.tbtn){
+    box-sizing:border-box;border-radius:6px;
+    font-family:var(--ui-font);font-weight:600;line-height:1.35;
+  }
+  #editor .cuaderno-home :is(button.hbtn,button.tbtn){min-height:34px;}
+  :is(#editor,.modal,body>header) button:is(.cuaderno-ui-word,.cuaderno-ui-pdf,.cuaderno-ui-save,.cuaderno-ui-regen,.cuaderno-ui-remove,.cuaderno-ui-add):focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;
+  }
+  :is(#editor,.modal,body>header) button:is(.cuaderno-ui-word,.cuaderno-ui-pdf,.cuaderno-ui-save,.cuaderno-ui-regen,.cuaderno-ui-remove,.cuaderno-ui-add):disabled{
+    opacity:.55;cursor:not-allowed;
+  }
+}
+@media screen and (max-width:760px){
+  #editor .cuaderno-home :is(button.hbtn,button.tbtn){min-height:42px;}
+}
