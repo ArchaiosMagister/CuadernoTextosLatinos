@@ -16,7 +16,7 @@ import {WorkspaceRepository,WorkspaceConflictError,type EditionSnapshotV1} from 
 import {combineNotebookCorpora,createNotebookBackup,createWorkspaceBackup,importNotebookDependencies,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {deleteText,upsertText,type TextDraft} from '../core/editor-operations.js';
-import {findPossibleDuplicates} from '../core/text-duplicates.js';
+import {auditLibraryDuplicates,findPossibleDuplicates,type LibraryDuplicatePair} from '../core/text-duplicates.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
 import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
 import {parseExaminatorCatalogue,originalWorkUrl,convertPerseusXml,
@@ -1371,6 +1371,115 @@ async function returnToHome():Promise<void>{
   composer.closeEdition();currentId=null;rememberNotebook();
   await reload();render();
 }
+/** Informe global de solo lectura: nunca descarta ni fusiona fuentes automáticamente. */
+function openDuplicateAudit():void{
+  const all=corpus.texts;
+  const pairs=auditLibraryDuplicates(all);
+  const sources=new Map(all.map(text=>[text.id,text]));
+  const panel=el('div','cuaderno-duplicate-audit');
+  panel.append(el('p','small muted',all.length+' textos revisados · '+pairs.length+
+    (pairs.length===1?' pareja posiblemente repetida.':' parejas posiblemente repetidas.')+
+    ' No se cambia ni se borra ningún texto. Comprueba los pasajes antes de editar.'));
+  const stats=el('p','small muted',
+    'Textos idénticos: '+pairs.filter(pair=>pair.kind==='identical').length+
+    ' · Fragmentos compartidos: '+pairs.filter(pair=>pair.kind==='overlap').length+
+    ' · Misma referencia: '+pairs.filter(pair=>pair.kind==='citation').length);
+  panel.append(stats);
+  const controls=el('div','cuaderno-duplicate-controls');
+  const filterLabel=el('label','field'),filter=el('select');
+  filter.setAttribute('aria-label','Tipo de coincidencia');
+  for(const [value,label] of [
+    ['all','Todas las coincidencias'],['identical','Textos idénticos'],
+    ['overlap','Fragmentos compartidos'],['citation','Misma referencia bibliográfica'],
+  ]){
+    const option=el('option');option.value=value;option.textContent=label;filter.append(option);
+  }
+  filterLabel.append(el('span','','Tipo de coincidencia'),filter);
+  const findLabel=el('label','field'),search=el('input');
+  search.type='search';search.placeholder='Buscar título, autor u obra';
+  search.setAttribute('aria-label','Buscar en coincidencias');
+  findLabel.append(el('span','','Buscar'),search);
+  controls.append(filterLabel,findLabel);panel.append(controls);
+  const count=el('p','small muted'),results=el('div','cuaderno-duplicate-results');
+  panel.append(count,results);
+  const kindLabel:Record<LibraryDuplicatePair['kind'],string>={
+    identical:'Texto idéntico',overlap:'Fragmento compartido',
+    citation:'Misma referencia bibliográfica',
+  };
+  const sourceReference=(text:LatinText):string=>
+    [text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ')
+      || 'Sin referencia bibliográfica';
+  const referencedIn=(id:string):string=>{
+    const names=new Set<string>();
+    for(const book of corpus.notebooks)if(book.textIds.includes(id))names.add(book.title);
+    for(const record of notebooks)if(record.edition.placements.some(p=>p.source.sourceId===id))
+      names.add(record.edition.title);
+    return names.size?[...names].join('; '):'Sin vinculación directa identificada';
+  };
+  const passage=(text:LatinText,excerpt:string,showMatch:boolean):HTMLElement=>{
+    const line=el('p','cuaderno-duplicate-latin');
+    // Nunca se interpreta el texto latino del usuario como HTML.
+    const at=showMatch&&excerpt?text.latin.indexOf(excerpt):-1;
+    if(at===-1){line.textContent=text.latin.slice(0,650)+(text.latin.length>650?'…':'');return line;}
+    const start=Math.max(0,at-65),end=Math.min(text.latin.length,at+excerpt.length+65);
+    if(start)line.append(document.createTextNode('…'));
+    line.append(document.createTextNode(text.latin.slice(start,at)));
+    line.append(el('mark','',excerpt));
+    line.append(document.createTextNode(text.latin.slice(at+excerpt.length,end)));
+    if(end<text.latin.length)line.append(document.createTextNode('…'));
+    return line;
+  };
+  let close=()=>{},visible=30;
+  const renderResults=():void=>{
+    results.replaceChildren();
+    const query=foldLatin(search.value.trim());
+    const chosen=pairs.filter(pair=>{
+      if(filter.value!=='all'&&pair.kind!==filter.value)return false;
+      if(!query)return true;
+      return [pair.firstTitle,pair.secondTitle].some(title=>foldLatin(title).includes(query))
+        || [pair.firstId,pair.secondId].some(id=>{
+          const text=sources.get(id);
+          return Boolean(text&&foldLatin(sourceReference(text)).includes(query));
+        });
+    });
+    count.textContent=chosen.length+' coincidencia'+(chosen.length===1?'':'s')+' con el filtro actual';
+    if(!chosen.length)results.append(el('p','muted',
+      pairs.length?'No hay coincidencias para este filtro.':'No se han detectado textos repetidos.'));
+    for(const pair of chosen.slice(0,visible)){
+      const first=sources.get(pair.firstId),second=sources.get(pair.secondId);
+      if(!first||!second)continue;
+      const card=el('details','cuaderno-duplicate-result');
+      const summary=el('summary','',kindLabel[pair.kind]+' · '+pair.firstTitle+' / '+pair.secondTitle);
+      card.append(summary);
+      const quality=pair.kind==='citation'?'Coincidencia bibliográfica: comprueba los límites del fragmento':
+        pair.sharedWords+' palabras compartidas';
+      card.append(el('p','small muted',quality));
+      for(const [order,text] of [['Primera ficha',first],['Segunda ficha',second]] as const){
+        const group=el('div','cuaderno-duplicate-source');
+        group.append(el('strong','',order+': '+text.title),
+          el('p','small muted',sourceReference(text)),
+          el('p','small muted','Cuadernos: '+referencedIn(text.id)),
+          passage(text,pair.excerpt,pair.kind!=='citation'));
+        group.append(button('Editar '+order.toLowerCase(),()=>{
+          close();openBankTextEditor(text);
+        },'tbtn'));
+        card.append(group);
+      }
+      results.append(card);
+    }
+    if(chosen.length>visible)results.append(button(
+      'Mostrar más coincidencias ('+(chosen.length-visible)+')',()=>{
+        visible+=30;renderResults();
+      },'tbtn'));
+  };
+  filter.addEventListener('change',()=>{visible=30;renderResults();});
+  search.addEventListener('input',()=>{visible=30;renderResults();});
+  renderResults();
+  const modal=M.modal('Auditoría de textos repetidos',panel,[{label:'Cerrar'}],
+    {width:'min(900px, 96vw)',noFocus:true});
+  close=modal.close;
+}
+
 /** Pantalla de entrada, independiente de la hoja A4 y de cualquier cuaderno activo. */
 function renderHome():HTMLElement{
   const home=el('section','card cuaderno-home');
@@ -1432,7 +1541,8 @@ function renderHome():HTMLElement{
   bank.append(bankHeading);
   const bankActions=el('div','cuaderno-home-actions');
   bankActions.append(button('Pegar en el banco',()=>pasteText('bank'),'hbtn primary'),
-    button('Importar Word al banco',()=>importWord('bank'),'hbtn'));
+    button('Importar Word al banco',()=>importWord('bank'),'hbtn'),
+    button('Auditar textos repetidos',openDuplicateAudit,'hbtn'));
   bank.append(bankActions);
   const search=el('input');search.type='search';
   search.placeholder='Buscar por texto, autor u obra';
