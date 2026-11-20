@@ -18,7 +18,7 @@ async function prepare(page){
   await page.getByRole('button',{name:'Organizar',exact:true}).click();
   const details=page.locator('.edition-cover-editor');
   await details.locator('summary').click();
-  await expect(details.getByRole('button',{name:'Elegir Panteón de Roma'})).toBeVisible();
+  await expect(details.getByRole('button',{name:'Elegir foto Panteón de Roma'})).toBeVisible();
   return details;
 }
 
