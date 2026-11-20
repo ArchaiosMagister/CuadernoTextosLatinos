@@ -243,6 +243,18 @@ host.api={
  * Se carga de forma diferida y NO se reutiliza la base de Examinator2 original.
  * Su análisis no sustituye una verificación individual ni una decisión docente.
  */
+function isRejectedProposal(proposal: CollatinusGrammarProposal, rejected: ReadonlySet<string>,
+  tags: readonly GrammarTag[]): boolean {
+  const key = proposal.start + ':' + proposal.end + ':';
+  if (rejected.has(key + proposal.tagId)) return true;
+  if (!/^gram\.inf\.(?:presente|perfecto|futuro)\.(?:activo|pasivo|deponente)$/u.test(proposal.tagId)) return false;
+  return [...rejected].some(entry => {
+    if (!entry.startsWith(key)) return false;
+    const tag = entry.slice(key.length);
+    return /^gram\.inf\.(?:presente|perfecto|futuro|activo|pasivo)$/u.test(tag)
+      && matchesGrammarTag(proposal.tagId, tag, tags);
+  });
+}
 function proposalContext(latin: string, proposal: CollatinusGrammarProposal): HTMLElement {
   const context = el('p', 'cuaderno-proposal-context');
   const start = Math.max(0, proposal.start - 65);
@@ -790,7 +802,7 @@ function tagBankText(text:LatinText):void{
     for(const proposal of pending){
       const key=proposalKey(proposal);
       const acceptedTag=corrected.get(key) ?? proposal.tagId;
-      const discarded=rejected.has(key),accepted=selected.has(acceptedTag);
+      const discarded=isRejectedProposal(proposal,rejected,all),accepted=selected.has(acceptedTag);
       const row=el('details','grammar-proposal-card');
       row.dataset.state=discarded?'dismissed':accepted?'confirmed':'pending';
       const phrase=text.latin.slice(proposal.start,proposal.end);
@@ -1171,7 +1183,7 @@ async function openGrammarEditor():Promise<void>{
           const row=el('details','grammar-proposal-card');
           const accepted=confirmed.some(span=>span.startUtf16===proposal.start&&span.endUtf16===proposal.end
             &&span.tagIds.includes(proposal.tagId));
-          const discarded=rejected.has(id);
+          const discarded=isRejectedProposal(proposal,rejected,tags);
           const conflicts=confirmed.some(span=>span.startUtf16===proposal.start&&span.endUtf16===proposal.end
             &&conflictsWithGrammarForm(span.tagIds, proposal.tagId));
           if(conflicts&&!accepted)continue;

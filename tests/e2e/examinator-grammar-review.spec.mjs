@@ -147,4 +147,15 @@ test('la revisión reutiliza un análisis y mantiene el pasaje junto a la propue
   await expect(modal.locator('.cuaderno-proposal-context mark')).toHaveText('Amavisse');
   await expect(modal.locator('.cuaderno-review-passage')).toContainText('Amavisse dicit.');
   expect(analyses).toBe(1);
+  const cached = await page.evaluate(async () => {
+    const cache = await caches.open('cuaderno-collatinus-analysis-v2');
+    const keys = await cache.keys();
+    return Promise.all(keys.map(async key => ({
+      key: new URL(key.url).pathname, forms: (await (await cache.match(key)).json()).map(token => token.w),
+    })));
+  });
+  expect(cached).toContainEqual({
+    key: expect.stringMatching(/analysis-[a-f0-9]{24}-[a-f0-9]{64}$/),
+    forms: ['Amavisse', 'dicit'],
+  });
 });

@@ -1,5 +1,5 @@
 /* Adapter for the browser build of Examinator2's Collatinus engine. */
-const cacheName = 'cuaderno-collatinus-analysis-v1';
+const cacheName = 'cuaderno-collatinus-analysis-v2';
 const engineVersion = '__COLLATINUS_VERSION__';
 const capacity = 8;
 
@@ -15,6 +15,49 @@ async function engine() {
   }
   await ready;
   return self.api;
+}
+
+const sentenceAnalyses = new Map();
+function sentenceRanges(text) {
+  // These boundaries mirror the pinned engine. Keep the parity test in sync
+  // when updating the engine, including omission brackets and UTF-16 offsets.
+  const masked = text.replace(/\[[^\]]*\]/g, match => ' '.repeat(match.length));
+  const ranges = [];
+  let start, last;
+  for (const match of masked.matchAll(/[A-Za-zÀ-ÖØ-öø-ÿĀ-ſ]+/gu)) {
+    if (start === undefined) start = match.index;
+    else if (/[.;:?!]/.test(masked.slice(last, match.index))) {
+      ranges.push([start, last]);
+      start = match.index;
+    }
+    last = match.index + match[0].length;
+  }
+  if (start !== undefined) ranges.push([start, last]);
+  return ranges;
+}
+
+async function analyzeSentences(text) {
+  const ranges = sentenceRanges(text);
+  if (!ranges.length) return [];
+  const output = [];
+  for (const [sentence, [start, end]] of ranges.entries()) {
+    const fragment = text.slice(start, end);
+    let tokens = sentenceAnalyses.get(fragment);
+    if (!tokens) {
+      tokens = await (await engine()).call('analyze', { text: fragment });
+      if (fragment.length <= 4000) {
+        sentenceAnalyses.set(fragment, tokens);
+        if (sentenceAnalyses.size > 48) sentenceAnalyses.delete(sentenceAnalyses.keys().next().value);
+      }
+    }
+    const first = output.length;
+    for (const token of tokens) {
+      const shifted = { ...token, i: first + token.i, s: start + token.s, e: start + token.e, sent: sentence };
+      if (token.group) shifted.group = token.group.map(index => first + index);
+      output.push(shifted);
+    }
+  }
+  return output;
 }
 
 async function analyze(args) {
@@ -33,7 +76,7 @@ async function analyze(args) {
   } catch {
     // Sin almacenamiento disponible se usa el motor directamente.
   }
-  const result = await (await engine()).call('analyze', args);
+  const result = await analyzeSentences(args.text);
   if (cache && key && Array.isArray(result)) {
     try {
       const json = JSON.stringify(result);
