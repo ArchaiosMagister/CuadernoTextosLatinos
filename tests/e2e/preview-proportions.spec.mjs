@@ -24,12 +24,16 @@ test('editor de cuadernos: menús 40 % y vista previa 60 % en iPad y escritorio'
   }
 });
 
-test('modo claro y oscuro persistentes; controles del zoom con + a la izquierda',async({page})=>{
+test('modo claro, oscuro y OLED persistentes; controles del zoom con + a la izquierda',async({page})=>{
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo oscuro');
   await page.locator('#btnCuadernoTheme').click();
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','dark');
-  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo claro');
+  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo OLED');
+  await page.reload();
+  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo OLED');
+  await page.locator('#btnCuadernoTheme').click();
+  await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','oled');
   await page.reload();
   await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo claro');
   await page.locator('#btnCuadernoTheme').click();
