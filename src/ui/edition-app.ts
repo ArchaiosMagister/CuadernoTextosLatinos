@@ -901,6 +901,10 @@ export function createEditionPane(options:{
     if(review)review.textContent='Word numera las páginas físicas. En Safari, el PDF por impresión puede salir sin numeración 1 | N: si la necesitas, abre el DOCX en Pages y expórtalo como PDF. Comprueba los saltos en textos largos.';
   }
   let vocabularyAnalysisTimer:number|undefined;
+  // Preferencias de despliegue solo de interfaz, no se guardan en el cuaderno.
+  let bibliographyExpanded=true;
+  const foldedQuestions=new Set<string>();
+  const formatExpanded={typography:true,spacing:true,margins:false};
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
     if(options.onEditGrammarTags){
     const tags=placementGrammarTags(p);
@@ -931,13 +935,22 @@ export function createEditionPane(options:{
       }
     };
     const latin=textField('Texto latino',p.text.latin,mutate('latin'),true);
-    panel.append(textField('Título del texto',p.text.title,mutate('title')),
-      textField('Autor',p.text.author??'',mutate('author')),
-      textField('Obra',p.text.work??'',mutate('work')),
-      textField('Libro, capítulo o referencia',p.text.reference??'',mutate('reference')),
-      latin);
+    // Título y latín siempre a la vista; no se ocultan al contraer la ficha.
+    panel.append(textField('Título del texto',p.text.title,mutate('title')),latin);
     const textArea=latin.querySelector('textarea');
     if(textArea)panel.append(academics.renderTextSelect(p,textArea));
+    const bibliography=node('details','edition-bibliography');
+    bibliography.open=bibliographyExpanded;
+    bibliography.append(node('summary','','Datos bibliográficos'));
+    const fields=node('div','edition-bibliography-fields');
+    fields.append(textField('Autor',p.text.author??'',mutate('author')),
+      textField('Obra',p.text.work??'',mutate('work')),
+      textField('Libro, capítulo o referencia',p.text.reference??'',mutate('reference')));
+    bibliography.append(fields);
+    bibliography.addEventListener('toggle',()=>{
+      if(bibliography.isConnected)bibliographyExpanded=bibliography.open;
+    });
+    panel.append(bibliography);
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
@@ -951,10 +964,19 @@ export function createEditionPane(options:{
     overview.append(node('strong','','Preguntas del texto'));
     const shortcuts=node('div','edition-question-shortcuts');
     for(const [index,q] of p.questions.entries()){
-      const jump=action(String(index+1)+'. '+(names[q.kind]??q.kind),()=>{
-        panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
-          ?.scrollIntoView({block:'nearest',behavior:'auto'});
+      const key=p.id+':'+q.id;
+      const caption=(names[q.kind]??q.kind);
+      const jump=action(String(index+1)+'. '+caption,()=>{
+        if(foldedQuestions.delete(key)){
+          paint();
+          element.querySelectorAll<HTMLElement>('.edition-menu-questions .edition-question-panel')[index]
+            ?.scrollIntoView({block:'nearest',behavior:'auto'});
+        }else{
+          panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
+            ?.scrollIntoView({block:'nearest',behavior:'auto'});
+        }
       },'btn btn-outline edition-question-jump');
+      jump.setAttribute('aria-label','Ir a pregunta '+(index+1)+': '+caption);
       if(!q.enabled)jump.classList.add('is-inactive');
       shortcuts.append(jump);
     }
@@ -974,9 +996,19 @@ export function createEditionPane(options:{
         translation:'1. Traducción',syntax:'2. Sintaxis',
         morphology:'3. Morfología',choice:'4. Elección',
       } as Record<string,string>)[q.kind]??q.kind;
+      const foldKey=p.id+':'+q.id;
+      const folded=foldedQuestions.has(foldKey);
+      const toggle=action(folded?'Desplegar':'Plegar',()=>{
+        if(folded)foldedQuestions.delete(foldKey);
+        else foldedQuestions.add(foldKey);
+        paint();
+      },'btn btn-outline edition-question-fold');
+      toggle.setAttribute('aria-expanded',String(!folded));
+      toggle.setAttribute('aria-label',(folded?'Desplegar ':'Plegar ')+heading);
       top.append(check,node('h3','',heading),
-        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'));
+        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'),toggle);
       section.append(top);
+      if(folded){section.classList.add('is-folded');panel.append(section);continue;}
       section.append(textField('Enunciado',q.statement.value,value=>{
         apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
       }));
@@ -1508,16 +1540,25 @@ export function createEditionPane(options:{
     const update=(fn:(d:NotebookEditionV1)=>void)=>apply((e,at)=>{
       const next=structuredClone(e);fn(next);next.updatedAt=at;return validateEdition(next);
     });
-    panel.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
+    const formatGroup=(key:keyof typeof formatExpanded,label:string)=>{
+      const group=node('details','edition-format-group edition-format-'+key);
+      group.open=formatExpanded[key];
+      group.append(node('summary','',label));
+      const body=node('div','edition-format-group-fields');
+      group.append(body);
+      group.addEventListener('toggle',()=>{
+        if(group.isConnected)formatExpanded[key]=group.open;
+      });
+      panel.append(group);
+      return body;
+    };
+    const typography=formatGroup('typography','Tipografía');
+    typography.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
       update(x=>{
         const extra=extraLatinSpacingPt(x.format.fontSizePt,x.format.lineSpacingPt);
         x.format.fontSizePt=n;
         x.format.lineSpacingPt=exactLatinLineHeightPt(n,extra);
       });paint();
-    }),numberField('Espacio adicional entre líneas (pt)',extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,'any',n=>{
-      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});
-    },true),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
-      update(x=>{x.format.questionGapPt=n;});paint();
     }));
     const family=node('select','field-control');family.setAttribute('aria-label','Tipografía');
     for(const value of ['Palatino Linotype','Palatino','Georgia','Times New Roman']){
@@ -1526,14 +1567,26 @@ export function createEditionPane(options:{
     family.value=f.fontFamily;family.addEventListener('change',()=>{
       update(x=>{x.format.fontFamily=family.value;});paint();
     });
-    panel.append(family);
+    const familyField=node('label','edition-field edition-font-family');
+    familyField.append(node('span','edition-field-label','Fuente'),family);
+    typography.append(familyField);
+
+    const spacing=formatGroup('spacing','Espaciado');
+    spacing.append(numberField('Espacio adicional entre líneas (pt)',
+      extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,'any',n=>{
+      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});
+    },true),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
+      update(x=>{x.format.questionGapPt=n;});paint();
+    }));
+    const marginsBody=formatGroup('margins','Márgenes');
     const margins=node('div','edition-margin-grid');
     for(const [key,label] of [['top','Superior'],['right','Derecho'],['bottom','Inferior'],['left','Izquierdo']] as const){
-      margins.append(numberField('Margen '+label+' (cm)',Number((f.marginsPt[key]/28.3464567).toFixed(2)),0,5,.1,n=>{
+      margins.append(numberField('Margen '+label+' (cm)',
+        Number((f.marginsPt[key]/28.3464567).toFixed(2)),0,5,.1,n=>{
         update(x=>{x.format.marginsPt[key]=Number((n*28.3464567).toFixed(2));});paint();
       }));
     }
-    panel.append(margins);
+    marginsBody.append(margins);
     const points=node('label','edition-option-head');
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
@@ -1543,17 +1596,18 @@ export function createEditionPane(options:{
     panel.append(action('Aplicar a todos los textos',async()=>{
       formatStatus.textContent=await flush()?'Formato guardado para todos los textos del cuaderno.':
         'No se ha podido guardar el formato.';
-    },'btn btn-primary'),formatStatus,node('p','hint','El interlineado se expresa como espacio adicional al interlineado normal, al estilo de Word: 3 pt suele ser suficiente. Los cuadernos anteriores conservan su altura de línea hasta que se ajuste este valor. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
+    },'btn btn-primary'),formatStatus,node('p','hint',
+      'Interlineado: espacio adicional al normal de Word (3 pt suele ser suficiente). Los cuadernos anteriores conservan su altura de línea hasta que se ajuste. El zoom de lectura no cambia el tamaño editorial.'));
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
     const e=draft,experimental=Boolean(options.onAnalyzeVocabulary);
+    const principal=experimental?node('section','edition-organize-primary'):panel;
     if(experimental){
-      panel.append(node('h3','','Organizar el cuaderno'));
-      panel.append(node('p','hint','Aquí puedes cambiar el título, ordenar los textos con ↑ y ↓ '+
-        'o quitar una aparición. Quitar no elimina la fuente del banco ni modifica otros cuadernos.'));
+      principal.append(node('h3','','Título y orden de los textos'));
+      principal.append(node('p','hint','Ordena con ↑ y ↓, o quita una aparición. Los textos originales y los demás cuadernos permanecen intactos.'));
     }else panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
-    panel.append(textField('Título del cuaderno',e.title,value=>{
+    principal.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
     if(experimental)panel.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
@@ -1577,14 +1631,16 @@ export function createEditionPane(options:{
       });
       li.append(prev,next,remove);list.append(li);
     });
-    panel.append(list);
+    principal.append(list);
+    if(experimental)panel.append(principal);
     const advanced=experimental?node('details','edition-notebook-advanced'):null;
     if(advanced){
-      panel.append(node('p','hint','Auditoría de repeticiones: abre «Revisar cuaderno» para '+
-        'verificar palabras repetidas y posibles alternativas.'));
-      // El botón de auditoría debe estar siempre a la vista. Anidarlo en
-      // otro <details> impedía acceder a él en iPad.
-      panel.append(academics.renderNotebookAudit());
+      const review=node('section','edition-organize-review');
+      review.append(node('h3','','Revisión del cuaderno'));
+      review.append(node('p','hint','Comprueba palabras repetidas y posibles alternativas sin modificar las decisiones docentes.'));
+      // La auditoría permanece visible, fuera de las opciones avanzadas.
+      review.append(academics.renderNotebookAudit());
+      panel.append(review);
       advanced.append(node('summary','','Opciones avanzadas: importar desde cuadernos antiguos'));
       advanced.append(node('p','hint','Las opciones siguientes corresponden a cuadernos de una versión anterior. '+
         'Para añadir textos del banco actual, utiliza «Banco propio» encima del editor.'));
