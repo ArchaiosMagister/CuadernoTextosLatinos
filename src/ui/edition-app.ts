@@ -1610,7 +1610,7 @@ export function createEditionPane(options:{
     principal.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
-    if(experimental)panel.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
+    if(experimental)principal.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
     const list=node('ol','edition-notebook-list');
     e.placements.forEach((p,index)=>{
       const li=node('li','edition-notebook-row');
