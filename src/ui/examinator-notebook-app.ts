@@ -736,7 +736,7 @@ function openBankTextEditor(source:LatinText):void{
           ?{...t,teacherDocx:doc}:t)});
       }
       await repo.save(next,loaded.revision);
-      await reload();close();
+      await reload();close();render();
       M.toast(saveCopy?'Versión nueva guardada; el original está protegido.':
         'Ficha del banco actualizada.');
     }finally{save.disabled=false;}
