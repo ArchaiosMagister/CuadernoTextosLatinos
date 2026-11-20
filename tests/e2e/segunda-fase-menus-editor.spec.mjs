@@ -61,7 +61,8 @@ test('fase 2: Texto, Preguntas, Formato y Organizar conservan funciones y estado
 
   await tabs.getByRole('button',{name:'Organizar'}).click();
   const organizer=page.locator('.edition-menu-notebook');
-  await expect(organizer.locator('.edition-organize-primary h3')).toHaveText('Título y orden de los textos');
+  await expect(organizer.locator('.edition-organize-primary h3')).toHaveText('Organizar el cuaderno');
+  await expect(organizer.locator('.edition-organize-primary h4').first()).toHaveText('Título y orden de los textos');
   await expect(organizer.getByRole('textbox',{name:'Título del cuaderno'})).toBeVisible();
   await expect(organizer.locator('.edition-organize-primary .edition-notebook-row')).toHaveCount(1);
   await expect(organizer.locator('.edition-organize-review h3')).toHaveText('Revisión del cuaderno');
@@ -105,16 +106,21 @@ test('fase 2: el índice de preguntas no altera las preguntas, el vocabulario ni
   await dialog.getByRole('textbox',{name:'Título'}).fill('Texto editorial');
   await dialog.getByRole('textbox',{name:'Texto latino'}).fill('Puer in horto ambulat.');
   await dialog.getByRole('button',{name:'Añadir al cuaderno'}).click();
-  const before=await page.locator('.edition-paper').first().innerText();
   const tabs=page.getByRole('navigation',{name:'Secciones del cuaderno'});
   await tabs.getByRole('button',{name:'Preguntas'}).click();
-  await page.locator('.edition-question-fold').first().click();
-  await page.locator('.edition-question-fold').first().click();
+  const first=page.locator('.edition-question-panel').first();
+  const originalStatement=await first.getByRole('textbox',{name:'Enunciado'}).inputValue();
+  const originalLatin=await page.locator('.edition-latin').first().innerText();
+  const originalPoints=await first.getByRole('spinbutton',{name:'Puntos'}).inputValue();
+  await first.locator('.edition-question-fold').click();
+  await expect(first).toHaveClass(/is-folded/);
+  await first.locator('.edition-question-fold').click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.locator('.edition-vocab-section')).toHaveCount(3);
   await tabs.getByRole('button',{name:'Preguntas'}).click();
-  const after=await page.locator('.edition-paper').first().innerText();
-  expect(after).toBe(before);
+  await expect(first.getByRole('textbox',{name:'Enunciado'})).toHaveValue(originalStatement);
+  await expect(first.getByRole('spinbutton',{name:'Puntos'})).toHaveValue(originalPoints);
+  await expect(page.locator('.edition-latin').first()).toHaveText(originalLatin);
   await expect(page.locator('#btnDocx')).toBeVisible();
   await expect(page.locator('#btnPdf')).toBeVisible();
 });
