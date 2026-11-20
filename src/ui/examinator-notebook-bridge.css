@@ -660,7 +660,7 @@ html[data-cuaderno-theme='dark']{
   /* Guardar cambia a Guardado sin desplazar ningún campo. */
   #editor .edition-vocab-row .edition-vocab-save{
     display:inline-flex;align-items:center;justify-content:center;
-    box-sizing:border-box;flex:0 0 94px;width:94px;min-width:94px;max-width:94px;
+    box-sizing:border-box;flex:0 0 84px;width:84px;min-width:84px;max-width:84px;
     height:30px;min-height:30px;padding:3px 4px;white-space:nowrap;
     font-size:11px;font-weight:650;font-variant-numeric:tabular-nums;
   }
