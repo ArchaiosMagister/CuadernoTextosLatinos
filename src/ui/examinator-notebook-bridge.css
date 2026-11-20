@@ -975,3 +975,102 @@ html[data-cuaderno-theme='oled']{
   #editor .cuaderno-add-secondary>.hbtn{flex:1 1 0;}
 }
 
+/* Fase 2: organización visual de Texto, Preguntas, Formato y Organizar.
+   Estilos de pantalla; la edición A4 y @media print no se alteran. */
+@media screen{
+  #editor .edition-menu-text>.edition-bibliography,
+  #editor .edition-menu-format>.edition-format-group{
+    grid-column:1/-1;min-width:0;
+    border:1px solid var(--rule-2);
+    border-radius:8px;background:var(--panel);
+    margin:0;padding:0;
+  }
+  #editor .edition-bibliography>summary,
+  #editor .edition-format-group>summary{
+    display:flex;align-items:center;justify-content:space-between;
+    cursor:pointer;min-height:34px;padding:7px 9px;
+    color:var(--ink-2);font:650 12px/1.3 var(--ui-font);
+  }
+  #editor .edition-bibliography>summary:focus-visible,
+  #editor .edition-format-group>summary:focus-visible{
+    outline:2px solid var(--accent);outline-offset:-2px;
+  }
+  #editor .edition-bibliography-fields,
+  #editor .edition-format-group-fields{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;min-width:0;padding:8px;
+    border-top:1px solid var(--rule-2);
+  }
+  #editor .edition-bibliography-fields>.edition-field:last-child{
+    grid-column:1/-1;
+  }
+  #editor .edition-format-group-fields .edition-field{
+    min-width:0;margin:0;
+  }
+  #editor .edition-format-group-fields .edition-font-family{
+    min-width:0;display:grid;gap:3px;
+  }
+  #editor .edition-format-group-fields .edition-margin-grid{
+    grid-column:1/-1;min-width:0;
+  }
+  #editor .edition-question-shortcuts{
+    display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:5px;min-width:0;
+  }
+  #editor .edition-menu-content .edition-question-jump{
+    min-width:0;min-height:30px;
+    padding:4px 5px;text-align:center;
+    white-space:normal;font:600 11px/1.2 var(--ui-font);
+  }
+  #editor .edition-question-top{display:flex;align-items:center;flex-wrap:wrap;}
+  #editor .edition-menu-content .edition-question-fold{
+    margin-left:auto;min-height:28px;padding:3px 7px;
+    font-size:11px;font-weight:600;
+  }
+  #editor .edition-question-panel.is-folded{
+    gap:0;padding-block:6px;
+  }
+  #editor .edition-question-panel.is-folded .edition-question-top{
+    min-height:31px;
+  }
+  #editor .edition-menu-notebook>.edition-organize-primary,
+  #editor .edition-menu-notebook>.edition-organize-review{
+    min-width:0;display:grid;gap:7px;padding:9px;
+    border:1px solid var(--rule-2);border-radius:8px;
+    background:var(--panel);
+  }
+  #editor .edition-organize-primary>h3,
+  #editor .edition-organize-review>h3{
+    margin:0;color:var(--accent);
+    font:700 12.5px/1.3 var(--ui-font);
+  }
+  #editor .edition-organize-primary>.hint,
+  #editor .edition-organize-review>.hint{
+    margin:0;font-size:11.5px;
+  }
+  #editor .edition-organize-primary .edition-notebook-list{margin:0;}
+  #editor .edition-organize-review .edition-notebook-review{
+    margin:0;
+  }
+  #editor .edition-menu-format>.edition-option-head,
+  #editor .edition-menu-format>.btn,
+  #editor .edition-menu-format>.hint{
+    grid-column:1/-1;
+  }
+}
+@media screen and (max-width:760px){
+  #editor .edition-bibliography-fields,
+  #editor .edition-format-group-fields{grid-template-columns:minmax(0,1fr);}
+  #editor .edition-bibliography-fields>.edition-field:last-child{
+    grid-column:1/-1;
+  }
+  #editor .edition-question-shortcuts{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  #editor .edition-menu-content .edition-question-jump{
+    font-size:12px;min-height:38px;
+  }
+  #editor .edition-bibliography>summary,
+  #editor .edition-format-group>summary{min-height:38px;}
+  #editor .edition-menu-content .edition-question-fold{min-height:36px;}
+}
