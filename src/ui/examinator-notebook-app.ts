@@ -1508,7 +1508,8 @@ function renderHome():HTMLElement{
         remove.disabled=true;
         remove.title='Protegido: se utiliza en un cuaderno histórico';
       }
-      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
+      actions.append(button('Editar ficha',()=>openBankTextEditor(text),'hbtn'),
+        button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
       row.append(actions);
       target.append(row);
     }
