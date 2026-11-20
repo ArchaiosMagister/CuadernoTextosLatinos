@@ -65,7 +65,11 @@ function romanValue(value: string): number | null {
 }
 
 function citation(value: string | null | undefined): string {
-  const parts = bibliographyPart(value).split(' ').filter(Boolean)
+  // Las cifras romanas conservan v (IV, VII), aunque en el latín del texto
+  // normalicemos u/v para comparar grafías ortográficas.
+  const parts = (value ?? '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ')
+    .trim().split(' ').filter(Boolean)
     .filter(part => !['libro', 'liber', 'cap', 'capitulo', 'caput'].includes(part));
   return parts.map(part => {
     const roman = romanValue(part);
