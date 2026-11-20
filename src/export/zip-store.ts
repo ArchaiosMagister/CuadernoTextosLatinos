@@ -12,12 +12,13 @@ function crc32(bytes:Uint8Array):number {
 }
 function u16(view:DataView,pos:number,n:number){view.setUint16(pos,n,true);}
 function u32(view:DataView,pos:number,n:number){view.setUint32(pos,n,true);}
-export function zipStore(entries:readonly {path:string;content:string}[]):Uint8Array{
+export function zipStore(entries:readonly {path:string;content:string|Uint8Array}[]):Uint8Array{
   if(entries.length===0||entries.length>100)throw new Error('Número de ficheros DOCX inválido.');
   const files=entries.map(item=>{
     if(!item.path||item.path.startsWith('/')||item.path.includes('..')||item.path.includes('\\'))
       throw new Error('Ruta ZIP inválida.');
-    const path=encoder.encode(item.path),data=encoder.encode(item.content);
+    const path=encoder.encode(item.path),data=typeof item.content==='string'
+      ?encoder.encode(item.content):item.content;
     if(path.length>65535||data.length>0xffffffff)throw new Error('Entrada ZIP demasiado grande.');
     return {path,data,crc:crc32(data),offset:0};
   });
