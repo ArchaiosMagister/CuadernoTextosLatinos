@@ -121,6 +121,10 @@ function notebookUsage(edition:NotebookEditionV1):ReadonlySet<string> {
     q.kind==='choice'?q.options.flatMap(o=>o.slots.map(s=>normalizeAcademicExercise(s.value))):[])));
 }
 /** Solo se reutiliza una palabra ya usada si no queda ninguna candidata nueva y válida. */
+function teacherProtected(slot:QuestionWordSlotV1):boolean {
+  // El origen manual tiene prioridad aunque una importación antigua no marcara "locked".
+  return slot.locked||slot.origin==='manual';
+}
 function preferNew<T extends {value:string}>(rows:readonly T[],used:ReadonlySet<string>):readonly T[] {
   const fresh=rows.filter(row=>!used.has(normalizeAcademicExercise(row.value)));
   return fresh.length?fresh:rows;
@@ -150,7 +154,7 @@ export class AcademicQuestionEngineV1 {
       option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalizeAcademicExercise(row.value)));
     const usage=notebookUsage(valid);
     const rows=onlyUnused?eligible.filter(row=>!usage.has(normalizeAcademicExercise(row.value))):preferNew(eligible,usage);
-    return {status:slot.locked?'locked':rows.length?'ready':'no-candidates',
+    return {status:teacherProtected(slot)?'locked':rows.length?'ready':'no-candidates',
       candidates:rows.map(r=>({id:r.id,value:generatedAcademicValue(option.kind,r.value),
         lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts(option.kind).needsReview};
@@ -161,7 +165,7 @@ export class AcademicQuestionEngineV1 {
     const q=getChoice(getPlacement(edition,target.placementId),target.questionId);
     const option=getOption(q,target.optionId);
     const slot=option.slots.find(x=>x.id===target.slotId)??fail('Palabra inexistente');
-    if(slot.locked&&!replaceLocked)fail('Palabra manual bloqueada; requiere autorización expresa');
+    if(teacherProtected(slot)&&!replaceLocked)fail('Palabra manual protegida; requiere autorización expresa');
     const preview=this.previewSlot(edition,target);
     const chosen=candidateId?preview.candidates.find(x=>x.id===candidateId):choose(preview.candidates,seed);
     if(!chosen)fail('No hay alternativas académicas verificadas para esta palabra');
@@ -177,7 +181,7 @@ export class AcademicQuestionEngineV1 {
     const rows=this.bank.verified('morphology',word.surface);
     // Distintos análisis de una misma superficie son distintos candidatos; no elegirlos al azar.
     const ambiguous=new Set(rows.map(x=>`${x.lemmaId}\0${x.analysis}`)).size>1;
-    return {status:word.locked?'locked':rows.length===0?'no-candidates':ambiguous?'ambiguous':'ready',
+    return {status:word.locked||word.reviewState==='manual'?'locked':rows.length===0?'no-candidates':ambiguous?'ambiguous':'ready',
       candidates:rows.map(r=>({id:r.id,value:r.value,lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts('morphology').needsReview};
   }
@@ -186,7 +190,7 @@ export class AcademicQuestionEngineV1 {
     const q=getQuestion(getPlacement(edition,target.placementId),target.questionId);
     if(q.kind!=='morphology')fail('La pregunta no es morfológica');
     const current=q.words.find(x=>x.id===target.wordId)??fail('Forma inexistente');
-    if(current.locked&&!replaceLocked)fail('Análisis manual protegido');
+    if((current.locked||current.reviewState==='manual')&&!replaceLocked)fail('Análisis manual protegido');
     const preview=this.previewMorph(edition,target);
     if(preview.status==='ambiguous'&&!candidateId)fail('La forma es ambigua: exige elección filológica explícita');
     const candidate=candidateId?preview.candidates.find(x=>x.id===candidateId):preview.candidates[0];
@@ -200,7 +204,7 @@ export class AcademicQuestionEngineV1 {
     usedInNotebook:ReadonlySet<string>,selectedPhoneticRules?:readonly string[]):AcademicAssignmentV1[] {
     if(!Number.isSafeInteger(count)||count<0||count>30)fail('Cantidad solicitada inválida (0–30)');
     const slots=option.slots;
-    if(!allowManualReplacement && slots.some((s,i)=>s.locked&&i>=count)){
+    if(!allowManualReplacement && slots.some((s,i)=>teacherProtected(s)&&i>=count)){
       fail('El nuevo tamaño eliminaría una palabra manual protegida');
     }
     if(option.kind==='preverb'&&(!sourceForms||sourceForms.length!==count||sourceForms.some(v=>!v.trim()))) {
@@ -211,14 +215,15 @@ export class AcademicQuestionEngineV1 {
     const allocated=new Set<string>(),items:AcademicAssignmentV1[]=[];
     const excludedOthers=existingValues(q,slots.map(s=>s.id));
     for(const v of excluded)excludedOthers.add(v);
-    slots.filter(s=>s.locked&&!allowManualReplacement).forEach(s=>excludedOthers.add(normalizeAcademicExercise(s.value)));
+    slots.filter(s=>teacherProtected(s)&&!allowManualReplacement)
+      .forEach(s=>excludedOthers.add(normalizeAcademicExercise(s.value)));
     for(let i=0;i<count;i++){
       const existing=slots[i];
       const id=existing?.id??newIds?.[i-slots.length];
       if(!id||allocated.has(id))fail('ID de nueva casilla inexistente o duplicado');
       allocated.add(id);
       const sourceForm=option.kind==='preverb'?(sourceForms?.[i]??null):null;
-      if(existing?.locked&&!allowManualReplacement){
+      if(existing&&teacherProtected(existing)&&!allowManualReplacement){
         items.push({slotId:id,candidateId:null,sourceForm});
         continue;
       }
@@ -283,6 +288,8 @@ export class AcademicQuestionEngineV1 {
     if(plan.kind==='morph'){
       if(q.kind!=='morphology'||!plan.wordId||!plan.morphCandidateId)fail('Plan morfológico inválido');
       const word=q.words.find(x=>x.id===plan.wordId)??fail('Forma inexistente');
+      if((word.locked||word.reviewState==='manual')&&!plan.replaceLocked)
+        fail('La decisión morfológica manual debe conservarse');
       const row=this.bank.findVerified(plan.morphCandidateId);
       if(!row||row.kind!=='morphology'||row.surface!==word.surface||!row.analysis||!row.lemmaId)fail('Análisis fuera del banco verificado');
       return regenerateMorph(edition,p.id,q.id,word.id,{lemmaId:row.lemmaId,analysis:row.analysis,
@@ -298,7 +305,7 @@ export class AcademicQuestionEngineV1 {
       if(plan.kind==='slot'){
         const candidate=a.items[0]!;
         const slot=original.slots.find(s=>s.id===candidate.slotId)??fail('Casilla inexistente');
-        if(slot.locked&&!plan.replaceLocked)fail('Casilla protegida manualmente');
+        if(teacherProtected(slot)&&!plan.replaceLocked)fail('Casilla protegida manualmente');
         if(candidate.candidateId===null)fail('Falta propuesta de palabra individual');
         const row=this.bank.findVerified(candidate.candidateId);
         if(!row||!validSlotRecord(row,option.kind,candidate.sourceForm,plan.target.phoneticRules))fail('Propuesta académica no válida');
@@ -313,10 +320,10 @@ export class AcademicQuestionEngineV1 {
       for(const entry of a.items){
         const old=original.slots.find(s=>s.id===entry.slotId);
         if(entry.candidateId===null){
-          if(!old?.locked||plan.replaceLocked)fail('No se puede conservar una casilla no protegida sin candidato');
+          if(!old||!teacherProtected(old)||plan.replaceLocked)fail('No se puede conservar una casilla no protegida sin candidato');
           slots.push(old);continue;
         }
-        if(old?.locked&&!plan.replaceLocked)fail('No se puede sustituir una palabra protegida');
+        if(old&&teacherProtected(old)&&!plan.replaceLocked)fail('No se puede sustituir una palabra protegida');
         const row=this.bank.findVerified(entry.candidateId);
         if(!row||!validSlotRecord(row,option.kind,entry.sourceForm,plan.target.phoneticRules))fail('Propuesta fuera de banco/curso/fuente');
         const valueKey=normalizeAcademicExercise(row.value);
