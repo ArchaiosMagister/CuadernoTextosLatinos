@@ -112,8 +112,8 @@ export function openSupabaseSyncModal(deps:Dependencies):void{
       render();
     }));
     if(!examined)return;
-    const {client,user}=ensure();
-    const last=checkpoint(toKey(client.config,user));
+    const {client,user:cloudUser}=ensure();
+    const last=checkpoint(toKey(client.config,cloudUser));
     const decision=compareWorkspaceHashes(examined.localHash,examined.remoteHash,last?.hash??null);
     const counts=(data:WorkspaceSnapshotV1)=>data.editions.length+' cuadernos y '+
       (data.corpus?.corpus.texts.length??0)+' textos';
@@ -128,9 +128,9 @@ export function openSupabaseSyncModal(deps:Dependencies):void{
     }
     if(decision==='equal'&&examined.remote&&examined.localHash){
       controls.append(action('Confirmar coincidencia',async()=>{
-        const l=await snapshot(deps),r=await client.read(user);
+        const l=await snapshot(deps),r=await client.read(cloudUser);
         const h=r?await workspaceHash(r.snapshot):null;
-        if(!r||l.hash!==h||h!==examined?.localHash)
+        if(!r||!h||l.hash!==h||h!==examined?.localHash)
           throw Error('Los datos han cambiado. Comprueba nuevamente.');
         await ack(r,h);note('Copias coincidentes y verificadas.');examined=null;render();
       }));
@@ -138,14 +138,14 @@ export function openSupabaseSyncModal(deps:Dependencies):void{
     if(decision==='upload'){
       controls.append(action('Guardar copia y subir',async()=>{
         if(!examined)throw Error('Comprueba los datos nuevamente.');
-        const current=examined,l=await snapshot(deps),r=await client.read(user);
+        const current=examined,l=await snapshot(deps),r=await client.read(cloudUser);
         if(l.hash!==current.localHash||(r?.revision??0)!==(current.remote?.revision??0))
           throw Error('Un dispositivo cambió los datos. Comprueba nuevamente.');
         if(!confirm('Se descargará una copia JSON de seguridad y se enviarán '+
           'los cuadernos actuales a Supabase. ¿Confirmas?'))return;
         deps.download(await createWorkspaceBackup(deps.workspace,new Date(),
           (await deps.historical.load()).corpus),'seguridad-previa-supabase');
-        const saved=await client.write(user,l.value,r?.revision??0);
+        const saved=await client.write(cloudUser,l.value,r?.revision??0);
         const hash=await workspaceHash(saved.snapshot);
         if(hash!==l.hash)throw Error('La copia remota no coincide con la enviada.');
         await ack(saved,hash);note('Subida confirmada. Revisión '+saved.revision+'.');
@@ -155,7 +155,7 @@ export function openSupabaseSyncModal(deps:Dependencies):void{
     if(decision==='download'){
       controls.append(action('Guardar copia y descargar',async()=>{
         if(!examined)throw Error('Comprueba los datos nuevamente.');
-        const current=examined,l=await snapshot(deps),r=await client.read(user);
+        const current=examined,l=await snapshot(deps),r=await client.read(cloudUser);
         const h=r?await workspaceHash(r.snapshot):null;
         if(l.hash!==current.localHash||!r||h!==current.remoteHash||
           r.revision!==current.remote?.revision)
