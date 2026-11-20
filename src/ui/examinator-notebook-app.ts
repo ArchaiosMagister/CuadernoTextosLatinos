@@ -1311,14 +1311,15 @@ function renderHome():HTMLElement{
         if(group.open)appendTextRows(items,texts);
       };
       group.addEventListener('toggle',update);
-      // En WebKit el evento toggle puede retrasarse. Los grupos pequeños se
-      // preparan de inmediato; en grupos grandes se carga al abrir.
-      if(texts.length<=100)appendTextRows(items,texts);
-      else{
-        const summary=group.querySelector(':scope > summary');
-        summary?.addEventListener('click',()=>window.setTimeout(update,0));
-        if(group.open)update();
-      }
+      // Pintar los controles solo en la categoría abierta. De lo contrario
+      // «Todos» y «Sin etiquetar» creaban dos casillas para una misma fuente.
+      // Al abrir con el puntero se cargan antes del toggle diferido de WebKit.
+      const summary=group.querySelector(':scope > summary');
+      summary?.addEventListener('click',()=>{
+        items.replaceChildren();
+        if(!group.open)appendTextRows(items,texts);
+      });
+      if(group.open)update();
     };
     const all=el('details','cuaderno-home-category');
     if(needle)all.open=true;
