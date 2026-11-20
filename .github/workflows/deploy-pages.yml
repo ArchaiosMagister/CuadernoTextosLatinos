@@ -284,11 +284,11 @@ jobs:
           print('OK: referencia Examinator2 100% original:',len(every),'archivos.')
           print('OK: '+str(len(original_hashes))+' archivos del cuaderno y pruebas byte a byte idénticos.')
           ORIGINAL
-      - name: Obtener las fases 1-4 verificadas del cuaderno sin alterar la versión estable
+      - name: Obtener las fases 1-5 verificadas del cuaderno sin alterar la versión estable
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 27f00473f8e2c081242fadc7618e2e9318db15ee
+          ref: 1d83b77c3a9b1a1888611fc90ffe5cb4bd9fe12c
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -317,8 +317,15 @@ jobs:
           app=(destination/'ui/examinator-notebook-app.js').read_text()
           for feature in ('Mis cuadernos', 'Banco de textos propios',
                           'Pegar en el banco', 'Importar Word al banco',
-                          'Analizar con Collatinus', 'Quitar filtros de etiquetas'):
+                          'Analizar con Collatinus', 'Quitar filtros de etiquetas',
+                          'Quitar seleccionados', 'Etiquetas de este texto'):
             assert feature in app, 'Falta una función del rediseño experimental: '+feature
+          editor=(destination/'ui/edition-app.js').read_text()
+          assert 'Organizar el cuaderno' in editor
+          assert 'Etiquetas gramaticales de este texto' in editor
+          academic=(destination/'ui/academic-controls.js').read_text()
+          assert 'morphologyOccurrencesFreshFirst' in academic
+          assert (destination/'core/academic-repetition.js').is_file()
 
           def replace(rel,before,after):
             target=destination/rel
