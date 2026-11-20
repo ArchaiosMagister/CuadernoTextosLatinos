@@ -962,7 +962,7 @@ html[data-cuaderno-theme='oled']{
   body>header .brand{font-size:15px;}
   body>header .cuaderno-header-nav #btnOpen{font-size:11.5px;}
   body>header .cuaderno-header-save{padding-inline-start:3px;}
-  #editor .edition-menu-nav{
+  #editor .edition-settings>.edition-menu-nav{
     grid-template-columns:repeat(5,minmax(84px,1fr));
     overflow-x:auto;overscroll-behavior-inline:contain;
     scroll-snap-type:x proximity;scrollbar-width:thin;
