@@ -16,6 +16,7 @@ import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/a
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
 import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
 import {validateEdition} from '../core/edition-validation.js';
+import {morphologyOccurrencesFreshFirst} from '../core/academic-repetition.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -687,8 +688,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         return records.length&&unambiguous
           ?[{surface,start:t.index!,end:t.index!+surface.length,key}]:[];
       });
-      const unique=possible.filter(t=>!already.has(t.key));
-      const pool=unique.length>=2?unique:possible;
+      // Si solo queda una forma inédita, utilizarla primero y completar
+      // únicamente lo que falte con formas previamente usadas.
+      const pool=morphologyOccurrencesFreshFirst(possible,already);
       const taken=new Set<string>();
       for(const token of pool){
         if(taken.size>=2)break;
@@ -714,9 +716,21 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function inspectRepetitions(state:EditionSnapshotV1){
     const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
       target:AcademicSlotTargetV1;protected:boolean}[]>();
+    const morphology=new Map<string,{title:string;surface:string;protected:boolean}[]>();
     const baseCounts=new Map<string,string[]>();
     for(const placement of state.edition.placements)for(const question of placement.questions){
-      if(!question.enabled||question.kind!=='choice')continue;
+      if(!question.enabled)continue;
+      if(question.kind==='morphology'){
+        for(const word of question.words){
+          const key=normalizeAcademicExercise(word.surface);
+          const uses=morphology.get(key)??[];
+          uses.push({title:placement.text.title,surface:word.surface,
+            protected:word.locked||word.reviewState==='manual'});
+          morphology.set(key,uses);
+        }
+        continue;
+      }
+      if(question.kind!=='choice')continue;
       for(const option of question.options){
         if(!option.enabled)continue;
         if(option.kind==='preverb'){
@@ -727,7 +741,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           continue;
         }
         for(const slot of option.slots){
-          const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
+          // Evitar repetir la misma palabra incluso entre tipos distintos de ejercicio.
+          const key=normalizeAcademicExercise(slot.value);
           const uses=groups.get(key)??[];
           uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
             protected:slot.locked||slot.origin==='manual',
@@ -738,16 +753,19 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         }
       }
     }
-    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),baseCounts};
+    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),
+      morphologyDuplicates:[...morphology.values()].filter(uses=>uses.length>1),
+      baseCounts};
   }
   function repetitionNotice():HTMLElement|null{
     const state=bind.snapshot();
     if(!state)return null;
-    const {duplicates,baseCounts}=inspectRepetitions(state);
+    const {duplicates,morphologyDuplicates,baseCounts}=inspectRepetitions(state);
     const repeatedBases=[...baseCounts.values()].filter(uses=>uses.length>1).length;
-    if(!duplicates.length&&!repeatedBases)return null;
+    if(!duplicates.length&&!repeatedBases&&!morphologyDuplicates.length)return null;
     const notice=el('p','hint edition-repetition-notice',
       'Repeticiones: '+duplicates.length+(duplicates.length===1?' palabra':' palabras')+
+      ', '+morphologyDuplicates.length+(morphologyDuplicates.length===1?' forma morfológica':' formas morfológicas')+
       ' y '+repeatedBases+(repeatedBases===1?' base preverbial':' bases preverbiales')+
       (autoApply?'. Organizar → Revisar cuaderno.':'. Cuaderno → Revisar cuaderno.'));
     notice.setAttribute('role','status');
@@ -809,23 +827,28 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const result=el('div');details.append(result);
     async function inspect():Promise<void>{
       await withSaved(state=>{
-        const {duplicates,baseCounts}=inspectRepetitions(state);
+        const {duplicates,morphologyDuplicates,baseCounts}=inspectRepetitions(state);
         result.replaceChildren(el('p','',state.edition.placements.length+' textos revisados · '+
           baseCounts.size+' bases preverbiales distintas'));
+        result.append(el('p','hint','Las palabras se comparan en todo el cuaderno, '+
+          'también entre apartados distintos. Las decisiones manuales están protegidas; '+
+          'si el banco verificado no ofrece alternativas nuevas, la repetición es inevitable.'));
         for(const kind of ['phonetics','prefix','latinism'] as const){
           const rows=duplicates.filter(uses=>uses[0]?.kind===kind);
           result.append(el('h4','',optionName(kind)+' · '+rows.length+' palabras repetidas'));
           for(const uses of rows){
             const first=uses[0]!;
             result.append(el('p','',first.word+' · '+uses.map(use=>
-              use.title+(use.protected?' (protegida)':'')).join(', ')));
+              use.title+(use.protected?' (protegida)':'')+
+                (use.kind!==first.kind?' ['+optionName(use.kind)+']':'')).join(', ')));
             const preserved=uses.find(use=>use.protected)??first;
             for(const use of uses.filter(use=>use!==preserved&&!use.protected)){
               const engine=service().engine;
               const choices=engine.previewSlot(state.edition,use.target,true).candidates;
               const candidate=choices[0];
               if(!candidate){
-                result.append(el('p','',use.title+' · Sin alternativa verificada libre'));
+                result.append(el('p','',use.title+
+                  ' · Repetición inevitable: no quedan alternativas nuevas verificadas con los filtros actuales'));
                 continue;
               }
               result.append(button(use.title+' · Sustituir por '+candidate.value+' ('+
@@ -841,6 +864,13 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
               }));
             }
           }
+        }
+        result.append(el('h4','','Morfología · '+morphologyDuplicates.length+
+          (morphologyDuplicates.length===1?' forma repetida':' formas repetidas')));
+        for(const uses of morphologyDuplicates){
+          result.append(el('p','',uses[0]!.surface+' · '+uses.map(use=>use.title+
+            (use.protected?' (manual protegida)':'')).join(', ')+
+            ' · La forma se conserva; comprueba si hay otra forma verificable en el pasaje.'));
         }
         reviewPreverbBases(result,state,baseCounts);
       });
