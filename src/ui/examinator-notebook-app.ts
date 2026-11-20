@@ -650,6 +650,7 @@ function openOwnTexts():void{
         add.setAttribute('aria-label','Añadir «'+t.title+'» al cuaderno');
         row.append(add);
       }
+      row.append(button('Editar ficha',()=>{close();openBankTextEditor(t);},'tbtn'));
       const remove=button('Quitar del banco',async()=>{
         if(!window.confirm('¿Quitar «'+t.title+'» del banco? Los cuadernos conservarán sus textos.'))return;
         await writeSource(async()=>{
@@ -677,6 +678,74 @@ function openOwnTexts():void{
   if(active())panel.append(button('Pegar texto propio',()=>{close();pasteText();},'tbtn'));
   const modal=M.modal('Banco de textos',panel,[{label:'Cerrar'}],
     {width:'min(760px, 96vw)'});close=modal.close;
+}
+
+/** Edición autónoma del banco. No altera las copias editoriales de los cuadernos. */
+function openBankTextEditor(source:LatinText):void{
+  const form=el('form','original-paste');
+  const inputs=new Map<string,HTMLInputElement|HTMLTextAreaElement>();
+  const original={
+    title:source.title,author:source.source.author??'',work:source.source.work??'',
+    reference:source.source.reference??'',latin:source.latin,
+  };
+  for(const [key,label] of [
+    ['title','Título didáctico'],['author','Autor'],['work','Obra'],
+    ['reference','Referencia'],['latin','Texto latino'],
+  ] as const){
+    const wrapper=el('label','field');
+    const field=key==='latin'?el('textarea'):el('input');
+    if(key==='latin')(field as HTMLTextAreaElement).rows=12;
+    field.value=original[key];field.setAttribute('aria-label',label);
+    inputs.set(key,field);wrapper.append(el('span','',label),field);form.append(wrapper);
+  }
+  if(source.teacherDocx)form.append(el('p','small muted',
+    'Este texto conserva subrayados, vocabulario y apartados importados de Word. '+
+    'Si cambias el pasaje latino, se guardará una copia independiente; la fuente '+
+    'original y sus anotaciones permanecerán intactas.'));
+  let close=()=>{};
+  const save=button('Guardar cambios',async()=>{
+    const value=(key:string)=>inputs.get(key)?.value.trim()??'';
+    const data:TextDraft={title:value('title'),author:value('author'),work:value('work'),
+      reference:value('reference'),latin:value('latin')};
+    if(!data.title||!data.latin)throw Error('El título y el texto latino son obligatorios.');
+    save.disabled=true;
+    try{
+      const loaded=await repo.load();
+      const current=loaded.corpus.texts.find(t=>t.id===source.id);
+      if(!current)throw Error('La fuente ya no está en el banco propio. Recarga la biblioteca.');
+      if(current.updatedAt!==source.updatedAt)
+        throw Error('La fuente se modificó en otra pestaña. Recarga antes de guardar.');
+      const same=data.title===current.title&&data.latin===current.latin&&
+        data.author===(current.source.author??'')&&
+        data.work===(current.source.work??'')&&
+        data.reference===(current.source.reference??'');
+      if(same){close();return;}
+      const changedLatin=data.latin!==current.latin;
+      const linked=loaded.corpus.notebooks.some(book=>book.textIds.includes(current.id));
+      const saveCopy=linked||(changedLatin&&Boolean(current.teacherDocx));
+      if(saveCopy&&!window.confirm('Esta fuente está vinculada a un cuaderno histórico '+
+        'o contiene marcas importadas de Word. Para conservarlas, los cambios se '+
+        'guardarán como una ficha nueva, sin sobrescribir la original. ¿Continuar?'))return;
+      if(!confirmPossibleDuplicates(loaded.corpus,data,current.id))return;
+      const id=saveCopy?'doc.'+crypto.randomUUID():current.id;
+      let next=upsertText(loaded.corpus,{...data,id},id,new Date().toISOString());
+      if(!saveCopy&&current.teacherDocx){
+        const doc={...current.teacherDocx,title:data.title,
+          author:data.author||null,work:data.work||null,reference:data.reference||null};
+        next=validateCorpus({...next,texts:next.texts.map(t=>t.id===id
+          ?{...t,teacherDocx:doc}:t)});
+      }
+      await repo.save(next,loaded.revision);
+      await reload();close();
+      M.toast(saveCopy?'Versión nueva guardada; el original está protegido.':
+        'Ficha del banco actualizada.');
+    }finally{save.disabled=false;}
+  },'hbtn primary');
+  form.append(save);
+  form.addEventListener('submit',event=>{event.preventDefault();save.click();});
+  const modal=M.modal('Editar texto del banco',form,[{label:'Cancelar'}],
+    {width:'min(760px, 96vw)',noFocus:true});
+  close=modal.close;
 }
 
 /** Guardado de fuentes autónomas. Un DOCX conserva los datos de preguntas,
