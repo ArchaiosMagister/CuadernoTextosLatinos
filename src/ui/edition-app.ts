@@ -989,13 +989,18 @@ export function createEditionPane(options:{
     const statement=(container:HTMLElement,key:string,value:string,label:string,
       onChange:(value:string)=>void,editing:Set<string>,isOption=false):void=>{
       const view=node('div','edition-statement-row'+(isOption?' edition-option-statement':''));
-      if(editing.has(key)){
+      // La vista clásica no se rediseña: sus campos siguen abiertos y
+      // localizables, evitando regresiones en otras vistas de la plataforma.
+      const classic=!options.onAnalyzeVocabulary;
+      if(classic||editing.has(key)){
         const field=textField(label,value,onChange);
         view.append(field);
-        const finish=action('Terminar edición',()=>{editing.delete(key);paint();},
-          'btn btn-outline edition-statement-finish');
-        finish.setAttribute('aria-label','Terminar edición de '+label.toLowerCase());
-        view.append(finish);
+        if(!classic){
+          const finish=action('Terminar edición',()=>{editing.delete(key);paint();},
+            'btn btn-outline edition-statement-finish');
+          finish.setAttribute('aria-label','Terminar edición de '+label.toLowerCase());
+          view.append(finish);
+        }
       }else{
         const text=node('span','edition-statement-text',value||'Sin enunciado');
         if(!value)text.classList.add('hint');
@@ -1058,7 +1063,7 @@ export function createEditionPane(options:{
           head.append(checkOption,optionTitle);
           const optionKey=p.id+':'+o.id;
           const advanced=node('details','edition-option-advanced');
-          advanced.open=expandedAcademicOptions.has(optionKey);
+          advanced.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(optionKey);
           advanced.append(node('summary','','Opciones del apartado'));
           const advancedBody=node('div','edition-option-advanced-body');
           academics.renderOption(advancedBody,p,q,o);
@@ -1117,7 +1122,7 @@ export function createEditionPane(options:{
         }
         const wholeKey=p.id+':'+q.id+':advanced';
         const whole=node('details','edition-question-advanced');
-        whole.open=expandedAcademicOptions.has(wholeKey);
+        whole.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(wholeKey);
         whole.append(node('summary','','Configuración avanzada de la pregunta'));
         const wholeBody=node('div','edition-question-advanced-body');
         academics.renderQuestion(wholeBody,p,q);
