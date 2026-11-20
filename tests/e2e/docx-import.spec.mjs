@@ -60,7 +60,7 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   page.once('dialog',dialog=>dialog.accept('Cuaderno de importación'));
   await page.locator('#btnNew').click();
   const chooser=page.waitForEvent('filechooser');
-  await page.getByRole('button',{name:'Importar Word'}).click();
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
   await (await chooser).setFiles({name:'eutropio.docx',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(documentXml())});
@@ -111,7 +111,7 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
     p(['Análisis morfológico de las palabras subrayadas. (1p.)'])+
     '</w:body></w:document>';
   const choose=page.waitForEvent('filechooser');
-  await page.getByRole('button',{name:'Importar Word'}).click();
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
   await (await choose).setFiles({name:'salustio.docx',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(xml)});
