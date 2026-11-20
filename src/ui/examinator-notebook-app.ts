@@ -13,7 +13,6 @@ import {validateCorpus} from '../core/validation.js';
 import {createEditionPane,WORKING_EDITION_ID} from './edition-app.js';
 import {IndexedDbCorpusRepository} from '../storage/indexeddb-corpus-repository.js';
 import {WorkspaceRepository,WorkspaceConflictError,type EditionSnapshotV1} from '../storage/workspace-repository.js';
-import {openSupabaseSyncModal} from './supabase-sync-modal.js';
 import {combineNotebookCorpora,createNotebookBackup,createWorkspaceBackup,importNotebookDependencies,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
 import {deleteText,upsertText,type TextDraft} from '../core/editor-operations.js';
@@ -1534,16 +1533,7 @@ function renderHome():HTMLElement{
     downloadBackup(await createWorkspaceBackup(workspace,new Date(),(await repo.load()).corpus),'copia-editorial');
   },'hbtn'));
   home.append(backups);
-  const sync=el('details','cuaderno-home-sync');
-  sync.append(el('summary','','Sincronización privada con Supabase'));
-  sync.append(el('p','small muted','La biblioteca y los cuadernos permanecen locales hasta que confirmes cada transferencia.'));
-  sync.append(button('Configurar sincronización',()=>openSupabaseSyncModal({
-    workspace,historical:repo,flush:()=>composer.flush(),
-    refreshed:async()=>{currentId=null;rememberNotebook();await reload();render();},
-    modal:(title,body,actions,options)=>M.modal(title,body,actions,options),
-    download:downloadBackup,
-  }),'hbtn'));
-  home.append(sync);
+  // Sincronización Supabase aplazada: coste cero. Sin controles de nube ni envíos.
 
   const bank=el('section','cuaderno-home-bank');
   const bankHeading=el('div','cuaderno-home-bank-heading');
