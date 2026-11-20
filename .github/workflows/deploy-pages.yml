@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 9e1f30436c36f62ca0ee38efc4eb51f34adfaf27
+          ref: 74ec3227de1553d771d1953ea2b2527e0ba592af
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -336,6 +336,10 @@ jobs:
           assert 'cuaderno-add-primary' in app, 'Falta agrupación de Añadir textos'
           assert 'cuaderno-add-secondary' in app, 'Faltan acciones secundarias'
           assert 'edition-vocab-section' in editor, 'Faltan los tres bloques de vocabulario'
+          for feature in ('edition-bibliography','edition-question-fold',
+                          'edition-format-group','edition-organize-primary',
+                          'edition-organize-review','Título y orden de los textos'):
+            assert feature in editor, 'Falta menú de segunda fase: '+feature
           bridge=(destination/'examinator-cuadernos/bridge.css').read_text()
           for selector in ('cuaderno-ui-word','cuaderno-ui-pdf',
                            'cuaderno-ui-add','cuaderno-ui-remove',
@@ -347,6 +351,9 @@ jobs:
           assert 'cuaderno-theme-select' in bridge, 'Faltan estilos de apariencia'
           assert 'edition-vocab-analysis' in bridge, 'Falta organización del vocabulario'
           assert 'minmax(84px,1fr)' in bridge, 'Falta navegación táctil de pestañas'
+          for selector in ('edition-bibliography-fields','edition-question-fold',
+                           'edition-format-group-fields','edition-organize-review'):
+            assert selector in bridge, 'Falta estilo de la segunda fase: '+selector
           assert (destination/'core/academic-repetition.js').is_file()
 
           def replace(rel,before,after):
