@@ -172,3 +172,21 @@ test('dos migraciones concurrentes del mismo plan son idempotentes',async()=>{
   assert.deepEqual(results.map(r=>r.status).sort(),['already-present','created']);
   assert.equal((await ws.snapshot()).editions.length,2);
 });
+
+test('el pasaje retirado del banco sigue disponible al preparar y exportar un cuaderno', async () => {
+  const { createNotebookDocx } = await import('../export/notebook-documents.js');
+  const { deleteText, upsertText } = await import('../core/editor-operations.js');
+  const { old, ws, c } = await fixture();
+  const enriched = upsertText(c, {
+    id: 'text.1', title: 'Gallia', latin: c.texts[0]!.latin, author: 'César',
+    work: 'De bello Gallico', reference: '1.1',
+  }, 'text.1', AT);
+  await old.save(deleteText(enriched, 'text.1'), 1);
+  const plan = await prepareLegacyMigration(old, fixed);
+  await executeLegacyMigration(ws, plan, yes, old);
+  const snapshot = (await ws.listEditions()).find(entry => entry.edition.legacyNotebookId === 'legacy.notebook.2');
+  assert.equal(snapshot?.edition.placements[0]?.source.sourceId, 'text.1');
+  assert.equal(snapshot?.edition.placements[0]?.text.latin, c.texts[0]?.latin);
+  const docx = new TextDecoder().decode(createNotebookDocx(snapshot!.edition));
+  assert.ok(docx.includes('Galliā est omnis divisa.'));
+});

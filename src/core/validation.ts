@@ -1,3 +1,4 @@
+import { validateVocabularyEntry } from './edition-validation.js';
 import { InvalidCorpusError } from './errors.js';
 import {
   CURRENT_SCHEMA_VERSION,
@@ -14,13 +15,13 @@ function invalid(path: string, detail: string): never {
   throw new InvalidCorpusError(`${path}: ${detail}`);
 }
 
-function record(value: unknown, path: string, keys: readonly string[]): RecordValue {
+function record(value: unknown, path: string, keys: readonly string[], optional: readonly string[] = []): RecordValue {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return invalid(path, 'se esperaba un objeto');
   }
   const item = value as RecordValue;
   for (const key of Object.keys(item)) {
-    if (!keys.includes(key)) invalid(`${path}.${key}`, 'campo desconocido');
+    if (!keys.includes(key) && !optional.includes(key)) invalid(`${path}.${key}`, 'campo desconocido');
   }
   for (const key of keys) {
     if (!Object.hasOwn(item, key)) invalid(`${path}.${key}`, 'campo obligatorio ausente');
@@ -78,10 +79,22 @@ function source(value: unknown, path: string): TextSource {
 function text(value: unknown, path: string): LatinText {
   const data = record(value, path, [
     'id', 'title', 'latin', 'source', 'tagIds', 'createdAt', 'updatedAt',
-  ]);
+  ], ['notes', 'vocabulary', 'reviewed']);
   const createdAt = timestamp(data.createdAt, `${path}.createdAt`);
   const updatedAt = timestamp(data.updatedAt, `${path}.updatedAt`);
   if (updatedAt < createdAt) invalid(path, 'updatedAt es anterior a createdAt');
+  if (Object.hasOwn(data, 'reviewed') && typeof data.reviewed !== 'boolean') {
+    invalid(`${path}.reviewed`, 'se esperaba un estado de revisión');
+  }
+  const vocabulary = Object.hasOwn(data, 'vocabulary')
+    ? entries(data.vocabulary, `${path}.vocabulary`, validateVocabularyEntry) : undefined;
+  if (vocabulary) {
+    if (vocabulary.length > 4000) invalid(path, 'demasiadas entradas de vocabulario');
+    uniqueIds(vocabulary, `${path}.vocabulary`);
+    if (new Set(vocabulary.map(entry => entry.order)).size !== vocabulary.length) {
+      invalid(`${path}.vocabulary`, 'orden repetido');
+    }
+  }
   return {
     id: identifier(data.id, `${path}.id`),
     title: nonBlank(data.title, `${path}.title`, 250),
@@ -90,6 +103,9 @@ function text(value: unknown, path: string): LatinText {
     tagIds: stringIds(data.tagIds, `${path}.tagIds`),
     createdAt,
     updatedAt,
+    ...(Object.hasOwn(data, 'notes') && { notes: nonBlank(data.notes, `${path}.notes`, 20_000) }),
+    ...(vocabulary && { vocabulary }),
+    ...(typeof data.reviewed === 'boolean' && { reviewed: data.reviewed }),
   };
 }
 
@@ -107,12 +123,23 @@ function tag(value: unknown, path: string): GrammarTag {
 }
 
 function notebook(value: unknown, path: string): Notebook {
-  const data = record(value, path, ['id', 'title', 'textIds']);
+  const data = record(value, path, ['id', 'title', 'textIds'], ['retainedTexts']);
   return {
     id: identifier(data.id, `${path}.id`),
     title: nonBlank(data.title, `${path}.title`, 250),
     textIds: stringIds(data.textIds, `${path}.textIds`),
+    ...(Object.hasOwn(data, 'retainedTexts') && {
+      retainedTexts: entries(data.retainedTexts, `${path}.retainedTexts`, (value, itemPath) => {
+        const item = record(value, itemPath, ['textId', 'revisionId']);
+        return { textId: identifier(item.textId, itemPath), revisionId: identifier(item.revisionId, itemPath) };
+      }),
+    }),
   };
+}
+
+function entries<T>(value: unknown, path: string, parse: (item: unknown, itemPath: string) => T): T[] {
+  if (!Array.isArray(value)) invalid(path, 'se esperaba una lista');
+  return value.map((item, index) => parse(item, `${path}[${index}]`));
 }
 
 function uniqueIds(items: readonly { id: string }[], path: string): void {
@@ -126,14 +153,22 @@ function uniqueIds(items: readonly { id: string }[], path: string): void {
 function references(corpus: CorpusV1): void {
   const textIds = new Set(corpus.texts.map(({ id }) => id));
   const tagIds = new Set(corpus.tags.map(({ id }) => id));
-  for (const entry of corpus.texts) {
+  const revisions = new Map(corpus.textRevisions?.map(item => [item.id, item.text]));
+  for (const entry of [...corpus.texts, ...revisions.values()]) {
     for (const id of entry.tagIds) {
       if (!tagIds.has(id)) invalid(`texts.${entry.id}.tagIds`, `etiqueta inexistente: ${id}`);
     }
   }
   for (const book of corpus.notebooks) {
+    const retained = new Map(book.retainedTexts?.map(item => [item.textId, item.revisionId]));
+    if (retained.size !== (book.retainedTexts?.length ?? 0)) invalid('retainedTexts', 'texto repetido');
+    for (const [id, revisionId] of retained) {
+      if (!book.textIds.includes(id) || revisions.get(revisionId)?.id !== id) {
+        invalid(`notebooks.${book.id}.retainedTexts`, `versión incompatible: ${revisionId}`);
+      }
+    }
     for (const id of book.textIds) {
-      if (!textIds.has(id)) invalid(`notebooks.${book.id}.textIds`, `texto inexistente: ${id}`);
+      if (!retained.has(id) && !textIds.has(id)) invalid(`notebooks.${book.id}.textIds`, `texto inexistente: ${id}`);
     }
   }
   const parents = new Map(corpus.tags.map(({ id, parentId }) => [id, parentId]));
@@ -154,7 +189,7 @@ function references(corpus: CorpusV1): void {
 
 /** Rechaza los datos inválidos antes de guardarlos o de importarlos. */
 export function validateCorpus(input: unknown): CorpusV1 {
-  const data = record(input, 'corpus', ['schemaVersion', 'texts', 'tags', 'notebooks']);
+  const data = record(input, 'corpus', ['schemaVersion', 'texts', 'tags', 'notebooks'], ['textRevisions']);
   if (data.schemaVersion !== CURRENT_SCHEMA_VERSION) {
     invalid('corpus.schemaVersion', 'versión de esquema incompatible');
   }
@@ -167,6 +202,13 @@ export function validateCorpus(input: unknown): CorpusV1 {
     tags: (data.tags as unknown[]).map((entry, index) => tag(entry, `tags[${index}]`)),
     notebooks: (data.notebooks as unknown[]).map((entry, index) => notebook(entry, `notebooks[${index}]`)),
   };
+  if (Object.hasOwn(data, 'textRevisions')) {
+    corpus.textRevisions = entries(data.textRevisions, 'textRevisions', (value, path) => {
+      const item = record(value, path, ['id', 'text']);
+      return { id: identifier(item.id, path), text: text(item.text, `${path}.text`) };
+    });
+    uniqueIds(corpus.textRevisions, 'textRevisions');
+  }
   uniqueIds(corpus.texts, 'texts');
   uniqueIds(corpus.tags, 'tags');
   uniqueIds(corpus.notebooks, 'notebooks');

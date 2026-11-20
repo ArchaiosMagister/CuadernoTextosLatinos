@@ -2,6 +2,7 @@ import { mountLibraryApp } from './ui/library-app.js';
 import { mountSimpleApp } from './ui/simple-app.js';
 import { mountNotebookApp } from './ui/notebook-app.js';
 import { createBackup, MAX_BACKUP_CHARACTERS, readBackup } from './core/backup.js';
+import { retainNotebookText } from './core/editor-operations.js';
 import { serializeCorpus } from './core/archive.js';
 import type { LatinText } from './core/model.js';
 import type { CorpusSnapshot } from './ports/corpus-repository.js';
@@ -131,7 +132,7 @@ async function saveVerificationText(): Promise<void> {
         updatedAt: now,
       };
     const updated = {
-      ...original,
+      ...(existing && existing.latin !== latin ? retainNotebookText(original,existing) : original),
       texts: existing
         ? original.texts.map((entry) => entry.id === TEST_ID ? nextText : entry)
         : [...original.texts, nextText],

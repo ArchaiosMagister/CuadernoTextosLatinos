@@ -1,3 +1,4 @@
+import { notebookTexts } from '../core/editor-operations.js';
 import { createBackup, readBackup } from '../core/backup.js';
 import { serializeCorpus } from '../core/archive.js';
 import { validateCorpus } from '../core/validation.js';
@@ -79,7 +80,6 @@ export async function prepareLegacyBackupImport(json: string, at = new Date()):
 
 async function convert(corpus: CorpusV1, plan: LegacyMigrationPlanV1):
   Promise<{editions: NotebookEditionV1[]; marker: MigrationRecordV1}> {
-  const texts = new Map(corpus.texts.map(t => [t.id,t]));
   const idMap: Record<string,string> = Object.create(null) as Record<string,string>;
   const editions: NotebookEditionV1[] = [];
   for (const notebook of corpus.notebooks) {
@@ -88,11 +88,8 @@ async function convert(corpus: CorpusV1, plan: LegacyMigrationPlanV1):
     idMap[notebook.id] = newId;
     let localId = 0;
     const nextId = () => 'item.' + notebookHash + '.' + (++localId);
-    const placements = notebook.textIds.map((textId,index) => {
-      const item = texts.get(textId);
-      if (!item) throw new WorkspaceMigrationConflictError('Cuaderno con texto ausente: ' + textId);
-      return placementFromCorpus(item, 'place.' + notebookHash + '.' + (index+1),plan.preparedAt,nextId);
-    });
+    const placements = notebookTexts(corpus, notebook).map((item,index) =>
+      placementFromCorpus(item, 'place.' + notebookHash + '.' + (index+1),plan.preparedAt,nextId));
     editions.push(createEdition({
       id:newId,legacyNotebookId:notebook.id,title:notebook.title,
       timestamp:plan.preparedAt,placements,

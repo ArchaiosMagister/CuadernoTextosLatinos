@@ -171,7 +171,7 @@ function question(input: unknown,path: string):QuestionV1 {
   return {...base,kind:'choice',requiredCount:integer(d.requiredCount,`${path}.requiredCount`,1,4),
     options:array(d.options,`${path}.options`,4).map((v,i)=>option(v,`${path}.options[${i}]`))};
 }
-function vocabulary(input: unknown,path: string):VocabularyEntryV1 {
+export function validateVocabularyEntry(input: unknown,path: string):VocabularyEntryV1 {
   const d=object(input,path,['id','lemma','headword','meaning','note','included','order','provenance','reviewState','origin','locked']);
   const provenance=evidence(d.provenance,`${path}.provenance`);
   const reviewState=choice(d.reviewState,`${path}.reviewState`,['verified','needs-review','manual']);
@@ -221,7 +221,7 @@ function placement(input:unknown,path:string):TextPlacementV1 {
   const sourceText=text(d.text,`${path}.text`);
   return {id:id(d.id,`${path}.id`),source:source(d.source,`${path}.source`),text:sourceText,
     questions:array(d.questions,`${path}.questions`,20).map((v,i)=>question(v,`${path}.questions[${i}]`)),
-    vocabulary:array(d.vocabulary,`${path}.vocabulary`,4000).map((v,i)=>vocabulary(v,`${path}.vocabulary[${i}]`)),
+    vocabulary:array(d.vocabulary,`${path}.vocabulary`,4000).map((v,i)=>validateVocabularyEntry(v,`${path}.vocabulary[${i}]`)),
     grammaticalTagIds:array(d.grammaticalTagIds,`${path}.grammaticalTagIds`,2000).map((v,i)=>id(v,`${path}.grammaticalTagIds[${i}]`)),
     ...(Object.hasOwn(d,'grammaticalSpans')?{grammaticalSpans:array(d.grammaticalSpans,
       `${path}.grammaticalSpans`,1000).map((v,i)=>grammarSpan(v,`${path}.grammaticalSpans[${i}]`,sourceText.latin))}:{}),

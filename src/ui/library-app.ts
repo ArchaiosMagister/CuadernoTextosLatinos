@@ -3,7 +3,7 @@ import {
   type LibraryEntry, type LibraryWork,
 } from '../core/library.js';
 import {
-  upsertText, deleteText, upsertNotebook, removeNotebook, renameNotebook,
+  upsertText, deleteText, notebookTexts, upsertNotebook, removeNotebook, renameNotebook,
   addTextToNotebook, removeTextFromNotebook, moveTextInNotebook, type TextDraft,
 } from '../core/editor-operations.js';
 import type { CorpusSnapshot } from '../ports/corpus-repository.js';
@@ -123,6 +123,7 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
   let genreFilter = 'all';
   let query = '';
   let ownQuery = '';
+  let reviewFilter = 'all';
   const sourceFilters = { author: '', work: '', reference: '' };
   const tagFilters=new Set<string>();
   const selectedTagIds=new Set<string>();
@@ -188,6 +189,7 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
     draft={
       id:text.id,title:text.title,latin:text.latin,
       author:text.source.author??'',work:text.source.work??'',reference:text.source.reference??'',
+      notes:text.notes??'',...(text.reviewed !== undefined && { reviewed:text.reviewed }),vocabulary:structuredClone(text.vocabulary??[]),
     };
     editingId=text.id;
     selectedTagIds.clear();
@@ -456,6 +458,7 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
         (!needle||foldLatin([t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle))
         && Object.entries(sourceFilters).every(([key, value]) =>
           foldLatin(t.source[key as keyof typeof sourceFilters] ?? '').includes(foldLatin(value)))
+        && (reviewFilter==='all' || (reviewFilter==='reviewed')===Boolean(t.reviewed))
         && matchesGrammarFilters(t.tagIds,[...tagFilters],tags)
       ).sort((a,b)=>cmp.compare(a.title,b.title));
       for(const entry of matches){
@@ -473,7 +476,7 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
       if(!matches.length)list.append(el('p','hint','Todavía no hay textos con ese filtro.'));
     };
     find.addEventListener('input',()=>{ownQuery=find.value;draw();});
-    const bibliography = el('details','grammar-filter');
+    const bibliography = el('details','grammar-group');
     bibliography.append(el('summary','','Filtrar por referencia bibliográfica'));
     for (const [key,label] of [['author','Autor'],['work','Obra'],['reference','Libro, capítulo o pasaje']] as const) {
       bibliography.append(field('Filtrar por '+label,sourceFilters[key],value=>{
@@ -481,12 +484,61 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
         draw();
       }));
     }
+    if (independent) {
+      const review = el('select','field-control');
+      review.setAttribute('aria-label','Filtrar por estado de revisión');
+      for (const [value,label] of [['all','Todos los estados'],['reviewed','Revisados'],['pending','Pendientes de revisión']] as const) {
+        const option = el('option','',label);
+        option.value = value;
+        review.append(option);
+      }
+      review.value = reviewFilter;
+      review.addEventListener('change', () => { reviewFilter = review.value; draw(); });
+      sidebar.append(review);
+    }
     bibliography.open = Object.values(sourceFilters).some(Boolean);
-    sidebar.append(newBtn,find,bibliography,tagFilterDetails,list);draw();
+    sidebar.append(newBtn);
+    if (independent) {
+      const importText = el('input');
+      importText.type = 'file';
+      importText.accept = '.txt,text/plain';
+      importText.hidden = true;
+      const importButton = button('Importar texto (.txt)', () => importText.click(), 'btn btn-outline');
+      importText.addEventListener('change', () => {
+        const file = importText.files?.[0];
+        importText.value = '';
+        if (!file || !confirmDiscard()) return;
+        if (file.size > 800_000) {
+          message('El archivo supera el tamaño admitido para un texto.', true);
+          return;
+        }
+        const previousDraft = draft;
+        void file.arrayBuffer().then(bytes => {
+          if (!importText.isConnected || draft !== previousDraft) return;
+          const latin = new TextDecoder('utf-8', { fatal: true }).decode(bytes).trim();
+          if (!latin || latin.length > 200_000 || latin.includes(String.fromCharCode(0))) {
+            throw new Error('Elige un archivo de texto UTF-8 de entre 1 y 200 000 caracteres.');
+          }
+          editingId = null;
+          draft = { ...emptyDraft(), title: file.name.replace(/\.txt$/iu, '').slice(0, 250), latin };
+          selectedTagIds.clear();
+          pendingCustomTags = [];
+          dirty = true;
+          render();
+          message('Texto importado al borrador. Revisa la ficha y pulsa «Guardar texto».');
+        }).catch(() => {
+          if (importText.isConnected && draft === previousDraft) {
+            message('No se pudo importar el archivo. Elige un texto válido en UTF-8.', true);
+          }
+        });
+      });
+      sidebar.append(importButton, importText);
+    }
+    sidebar.append(find,bibliography,tagFilterDetails,list);draw();
     const editor=el('section','editor-pane');
     editor.append(el('h2','',editingId?'Editar texto':'Nuevo texto'));
     const form=el('form','editor-form');
-    const bind=(k:keyof Omit<TextDraft,'id'>)=>(value:string)=>{draft={...draft,[k]:value};dirty=true;};
+    const bind=(k:keyof Omit<TextDraft,'id'|'vocabulary'|'reviewed'>)=>(value:string)=>{draft={...draft,[k]:value};dirty=true;};
     form.append(
       field('Título',draft.title,bind('title')),
       field('Autor',draft.author,bind('author')),
@@ -494,6 +546,45 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
       field('Libro, capítulo o pasaje',draft.reference,bind('reference')),
       field('Texto latino',draft.latin,bind('latin'),true),
     );
+    if (independent) {
+      form.append(field('Notas del texto', draft.notes ?? '', bind('notes'), true));
+      const vocabulary = el('details','grammar-group');
+      vocabulary.append(el('summary','','Vocabulario del texto'));
+      const entries = el('div','editor-form');
+      function drawVocabulary(): void {
+        entries.replaceChildren();
+        for (const [index, entry] of (draft.vocabulary ?? []).entries()) {
+          const item = el('fieldset','editor-form');
+          item.append(el('legend','',entry.headword || 'Nueva entrada'));
+          for (const [key, label] of [['lemma','Lema'],['headword','Enunciado'],['meaning','Significado'],['note','Nota']] as const) {
+            item.append(field(label, entry[key] ?? '', value => {
+              draft = {...draft, vocabulary: draft.vocabulary!.map((current, i) => i === index
+                ? {...current, [key]: key === 'meaning' || key === 'note' ? value || null : value}
+                : current)};
+              dirty = true;
+            }));
+          }
+          item.append(button('Quitar entrada', () => {
+            draft = {...draft, vocabulary: draft.vocabulary?.filter((_, i) => i !== index) ?? []};
+            dirty = true;
+            drawVocabulary();
+          }, 'btn btn-outline'));
+          entries.append(item);
+        }
+      }
+      vocabulary.append(entries, button('Añadir entrada de vocabulario', () => {
+        const existing = draft.vocabulary ?? [];
+        const order = Math.max(-1, ...existing.map(entry => entry.order)) + 1;
+        draft = {...draft, vocabulary: [...existing, {
+          id: 'vocab.' + crypto.randomUUID(), lemma: '', headword: '', meaning: null, note: null,
+          included: true, order, provenance: null, reviewState: 'manual', origin: 'manual', locked: true,
+        }]};
+        dirty = true;
+        drawVocabulary();
+      }, 'btn btn-outline'));
+      drawVocabulary();
+      form.append(vocabulary);
+    }
     const grammar=el('section','grammar-editor');
     grammar.append(el('h3','','Etiquetas gramaticales'),
       el('p','hint','Selección docente manual. Clasifica por separado construcción, tiempo y voz del infinitivo, funciones sintácticas y pronombres. No se asignan etiquetas por IA.'));
@@ -529,6 +620,23 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
     customRow.append(customInput,addCustom);
     grammar.append(customRow);
     form.append(grammar);
+    if (independent) {
+      const reviewLabel = el('label','grammar-item');
+      const reviewed = el('input');
+      reviewed.type = 'checkbox';
+      reviewed.checked = draft.reviewed ?? false;
+      reviewed.addEventListener('change', () => {
+        draft = {...draft, reviewed: reviewed.checked};
+        dirty = true;
+      });
+      form.querySelector('textarea')?.addEventListener('input', () => {
+        if (!reviewed.checked) return;
+        reviewed.checked = false;
+        draft = {...draft, reviewed: false};
+      });
+      reviewLabel.append(reviewed,el('span','','Etiquetas revisadas'));
+      form.append(reviewLabel);
+    }
     const action=el('div','editor-actions');
     const save=button('Guardar texto',async()=>{
       if(!ready())return;
@@ -544,7 +652,7 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
     if(editingId){
       const remove=button('Eliminar texto',async()=>{
         const references=snapshot?.corpus.notebooks.filter(book=>book.textIds.includes(editingId!)).length??0;
-        if(!window.confirm('¿Eliminar este texto?'+(references?' Se quitará también de '+references+' cuaderno(s).':'')+' Esta acción no se puede deshacer sin una copia de seguridad.'))return;
+        if(!window.confirm('¿Eliminar este texto?'+(references?' Se conservará la versión usada en '+references+' cuaderno(s).':'')+' Esta acción no se puede deshacer sin una copia de seguridad.'))return;
         const id=editingId!;
         const ok=await transaction(corpus=>deleteText(corpus,id));
         if(ok){
@@ -640,16 +748,21 @@ export function mountLibraryApp(root: HTMLElement, { independent = false } = {})
         },'btn btn-primary'));editor.append(row);
       }
       const sequence=el('ol','notebook-contents');
-      for(const id of notebook.textIds){
-        const text=snapshot?.corpus.texts.find(x=>x.id===id);
-        if(!text)continue;
+      for(const text of notebookTexts(snapshot!.corpus, notebook)){
+        const id=text.id;
         const row=el('li','notebook-line');
         const label=el('div');
         label.append(el('strong','',text.title),el('span','work-desc',[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ')));
         row.append(label);
         row.append(button('↑',async()=>{if(await transaction(c=>moveTextInNotebook(c,notebook.id,id,-1)))render();},'btn btn-outline btn-icon'));
         row.append(button('↓',async()=>{if(await transaction(c=>moveTextInNotebook(c,notebook.id,id,1)))render();},'btn btn-outline btn-icon'));
-        row.append(button('Abrir',()=>editText(id),'btn btn-outline'));
+        if(notebook.retainedTexts?.some(item=>item.textId===id)){
+          const preview=el('details');
+          preview.append(el('summary','','Ver pasaje conservado'),el('p','',text.latin));
+          label.append(preview);
+        }else{
+          row.append(button('Abrir',()=>editText(id),'btn btn-outline'));
+        }
         row.append(button('Quitar',async()=>{if(await transaction(c=>removeTextFromNotebook(c,notebook.id,id)))render();},'btn btn-outline'));
         sequence.append(row);
       }

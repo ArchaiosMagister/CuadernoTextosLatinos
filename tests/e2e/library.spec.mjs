@@ -224,3 +224,53 @@ test('la portada abre la biblioteca independiente y filtra los textos guardados 
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText('Segundo pasaje');
 });
+
+test('importar un TXT crea un borrador y conserva los textos existentes', async ({ page }) => {
+  await page.goto('/?biblioteca=1');
+  const form = page.locator('.editor-form');
+  const status = page.locator('#phase2-status');
+  await expect(status).toContainText('Biblioteca cargada');
+  await form.getByLabel('Título', {exact:true}).fill('Texto anterior');
+  await form.getByLabel('Texto latino', {exact:true}).fill('Gallia est omnis divisa.');
+  await form.getByRole('button', {name:'Guardar texto'}).click();
+  await expect(status).toContainText('Cambios guardados');
+  await page.locator('.lib-sidebar input[type=file]').setInputFiles({
+    name: 'Nepote.txt', mimeType: 'text/plain', buffer: Buffer.from('Magnā cum cūrā.')
+  });
+  await expect(form.getByLabel('Título', {exact:true})).toHaveValue('Nepote');
+  await expect(form.getByLabel('Texto latino', {exact:true})).toHaveValue('Magnā cum cūrā.');
+  await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(1);
+  await form.getByRole('button', {name:'Guardar texto'}).click();
+  await expect(status).toContainText('Cambios guardados');
+  await page.reload();
+  await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(2);
+});
+
+test('la biblioteca conserva las notas y el vocabulario y permite filtrar la revisión', async ({ page }) => {
+  await page.goto('/?biblioteca=1');
+  const form = page.locator('.editor-form').first();
+  const status = page.locator('#phase2-status');
+  await expect(status).toContainText('Biblioteca cargada');
+  await form.getByLabel('Título', {exact:true}).fill('Pasaje revisado');
+  await form.getByLabel('Texto latino', {exact:true}).fill('Milites veniunt.');
+  await form.getByLabel('Notas del texto', {exact:true}).fill('Contexto de la campaña.');
+  await form.getByText('Vocabulario del texto', {exact:true}).click();
+  await form.getByRole('button', {name:'Añadir entrada de vocabulario'}).click();
+  await form.getByLabel('Lema', {exact:true}).fill('miles');
+  await form.getByLabel('Enunciado', {exact:true}).fill('miles, militis');
+  await form.getByLabel('Significado', {exact:true}).fill('soldado');
+  await form.getByLabel('Etiquetas revisadas', {exact:true}).check();
+  await form.getByRole('button', {name:'Guardar texto'}).click();
+  await expect(status).toContainText('Cambios guardados');
+  await page.reload();
+  const filter = page.getByLabel('Filtrar por estado de revisión');
+  await filter.selectOption('pending');
+  await expect(page.locator('.lib-sidebar .work-row')).toHaveCount(0);
+  await filter.selectOption('reviewed');
+  await page.getByRole('button', {name:'Pasaje revisado'}).click();
+  await expect(form.getByLabel('Notas del texto', {exact:true})).toHaveValue('Contexto de la campaña.');
+  await form.getByText('Vocabulario del texto', {exact:true}).click();
+  await expect(form.getByLabel('Significado', {exact:true})).toHaveValue('soldado');
+  await form.getByLabel('Texto latino', {exact:true}).fill('Milites veniebant.');
+  await expect(form.getByLabel('Etiquetas revisadas', {exact:true})).not.toBeChecked();
+});

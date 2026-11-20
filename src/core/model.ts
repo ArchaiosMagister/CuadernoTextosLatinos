@@ -1,4 +1,6 @@
 /** Modelo persistido. No se introduce aún ninguna operación de edición. */
+import type { VocabularyEntryV1 } from './edition-model.js';
+
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
 export interface TextSource {
@@ -13,6 +15,9 @@ export interface LatinText {
   latin: string;
   source: TextSource;
   tagIds: string[];
+  notes?: string;
+  reviewed?: boolean;
+  vocabulary?: VocabularyEntryV1[];
   createdAt: string;
   updatedAt: string;
 }
@@ -30,11 +35,13 @@ export interface Notebook {
   id: string;
   title: string;
   textIds: string[];
+  retainedTexts?: { textId: string; revisionId: string }[];
 }
 
 export interface CorpusV1 {
   schemaVersion: typeof CURRENT_SCHEMA_VERSION;
   texts: LatinText[];
+  textRevisions?: { id: string; text: LatinText }[];
   tags: GrammarTag[];
   notebooks: Notebook[];
 }
