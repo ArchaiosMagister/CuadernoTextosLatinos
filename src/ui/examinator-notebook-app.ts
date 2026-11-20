@@ -1265,12 +1265,11 @@ function renderHome():HTMLElement{
     if(!texts.length){target.append(el('p','small muted','No hay textos con ese filtro.'));return;}
     for(const text of texts){
       const row=el('details','cuaderno-home-text');
-      row.append(el('summary','',text.title));
-      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
-      if(origin)row.append(el('p','small muted',origin));
-      row.append(el('p','cuaderno-home-latin',text.latin));
-      const actions=el('div','cuaderno-home-text-actions');
-      const select=el('label','cuaderno-home-select'),checkbox=el('input','cuaderno-bank-select');
+      // Selección siempre visible aunque los detalles de la fuente estén cerrados.
+      // El título despliega el latín; la casilla solo cambia la selección.
+      const rowSummary=el('summary','cuaderno-home-text-heading');
+      rowSummary.append(el('span','',text.title));
+      const selection=el('label','cuaderno-home-select'),checkbox=el('input','cuaderno-bank-select');
       checkbox.type='checkbox';checkbox.value=text.id;
       checkbox.setAttribute('aria-label','Seleccionar para quitar: '+text.title);
       checkbox.disabled=protectedIds.has(text.id);
@@ -1280,14 +1279,20 @@ function renderHome():HTMLElement{
         else selectedForRemoval.delete(text.id);
         updateSelection();
       });
-      select.append(checkbox,el('span','','Seleccionar'));
+      selection.addEventListener('click',event=>event.stopPropagation());
+      selection.append(checkbox,el('span','','Seleccionar'));
+      if(checkbox.disabled)selection.title='Protegido: se utiliza en un cuaderno histórico';
+      rowSummary.append(selection);row.append(rowSummary);
+      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
+      if(origin)row.append(el('p','small muted',origin));
+      row.append(el('p','cuaderno-home-latin',text.latin));
+      const actions=el('div','cuaderno-home-text-actions');
       const remove=button('Quitar del banco',()=>removeBankText(text),'tbtn');
       if(protectedIds.has(text.id)){
         remove.disabled=true;
         remove.title='Protegido: se utiliza en un cuaderno histórico';
-        select.title=remove.title;
       }
-      actions.append(select,button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
+      actions.append(button('Etiquetar',()=>tagBankText(text),'hbtn'),remove);
       row.append(actions);
       target.append(row);
     }
