@@ -831,3 +831,147 @@ html[data-cuaderno-theme='oled']{
     background:#fff;color:#151515;color-scheme:light;
   }
 }
+
+/* Reorganización aprobada: solo presentación de los controles existentes.
+   Sin modificaciones en hoja A4, exportación ni diseño de impresión. */
+@media screen{
+  body>header{gap:6px;padding-inline:10px;}
+  body>header .sep{display:none!important;}
+  body>header .cuaderno-header-nav,
+  body>header .cuaderno-header-save,
+  body>header .cuaderno-header-exports{
+    display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;min-width:0;
+  }
+  body>header .cuaderno-header-nav{
+    border:1px solid var(--rule-2);border-radius:7px;padding:2px;
+  }
+  body>header .cuaderno-header-nav .hbtn{border:0;min-height:30px;padding:5px 7px;}
+  body>header .cuaderno-header-nav #btnOpen{font-weight:650;color:var(--ink);}
+  body>header .cuaderno-header-nav #btnNew{
+    min-width:30px;width:30px;padding:4px;
+    font-size:19px;line-height:1;
+    background:var(--accent-soft);color:var(--accent);
+  }
+  body>header .cuaderno-header-save{
+    border-inline-start:1px solid var(--rule-2);
+    padding-inline-start:7px;
+  }
+  body>header .cuaderno-header-save-state{
+    font-size:10px;color:var(--ink-3);
+    max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  body>header .cuaderno-header-exports .hbtn{
+    min-height:32px;min-width:48px;padding:5px 9px;
+    font-weight:700;letter-spacing:.01em;
+  }
+  body>header .cuaderno-theme-select{
+    min-height:32px;max-width:102px;min-width:80px;
+    border:1px solid var(--rule);border-radius:6px;
+    background:var(--panel);color:var(--ink);
+    padding:4px 6px;font:600 12px var(--ui-font);
+  }
+  body>header .cuaderno-header-more-trigger{
+    min-height:32px;padding:5px 8px;
+    font-weight:600;
+  }
+  body>.cuaderno-header-more{
+    position:fixed;top:49px;right:10px;z-index:70;
+    background:var(--panel);border:1px solid var(--rule);
+    border-radius:8px;padding:6px;
+    box-shadow:0 12px 30px rgba(0,0,0,.2);
+  }
+  body>.cuaderno-header-more[hidden]{display:none!important;}
+  body>.cuaderno-header-more .hbtn{
+    width:100%;min-height:36px;text-align:left;font-size:12px;
+  }
+  body[data-cuaderno-home='true']>header :is(.cuaderno-header-nav,.cuaderno-header-save,.cuaderno-header-exports,.cuaderno-header-more-trigger){
+    display:none!important;
+  }
+  body[data-cuaderno-home='true']>header .cuaderno-theme-select{margin-left:auto;}
+  #editor .cuaderno-context-add{gap:5px;}
+  #editor .cuaderno-add-actions{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    gap:6px;min-width:0;
+  }
+  #editor .cuaderno-add-primary,
+  #editor .cuaderno-add-secondary{
+    display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-width:0;
+  }
+  #editor .cuaderno-add-secondary .hbtn{
+    border-color:var(--rule-2);background:var(--panel);
+    color:var(--ink-2);
+  }
+  #editor .cuaderno-add-actions .hbtn{
+    min-height:31px;padding:5px 8px;font-size:11.5px;
+  }
+  /* Cinco pestañas fijas de igual ancho, estado activo inequívoco. */
+  #editor .edition-menu-nav .btn{
+    min-height:32px;font-weight:600;
+    transition:background-color .1s,color .1s;
+  }
+  #editor .edition-menu-nav .btn[aria-current='page']{
+    font-weight:750;
+    text-decoration:underline;text-decoration-thickness:1.5px;
+    text-underline-offset:4px;
+  }
+  #editor .edition-menu-nav .btn:focus-visible{
+    outline:2px solid var(--accent);outline-offset:-2px;
+  }
+  /* Tres bloques breves, sin duplicar ni ocultar opciones académicas. */
+  #editor .edition-menu-vocabulary{
+    display:grid;gap:7px;
+  }
+  #editor .edition-menu-vocabulary>.edition-vocab-section{
+    display:grid;gap:6px;align-content:start;min-width:0;
+    border:1px solid var(--rule-2);border-radius:8px;
+    padding:8px;background:var(--panel);
+  }
+  #editor .edition-vocab-section>h3{
+    font:700 12.5px/1.3 var(--ui-font);
+    color:var(--accent);margin:0;
+  }
+  #editor .edition-vocab-selection .edition-vocab-toolbar{
+    display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+    min-width:0;margin:0;
+  }
+  #editor .edition-vocab-selection .edition-vocab-modes{
+    display:flex;flex-wrap:wrap;gap:4px;
+  }
+  #editor .edition-vocab-analysis>.btn{
+    justify-self:start;white-space:normal;text-align:left;
+    min-height:31px;max-width:100%;
+  }
+  #editor .edition-vocab-entries>.hint{margin:0;font-size:11.5px;}
+  #editor .edition-vocab-entries .edition-vocab-list{min-width:0;}
+  #editor .edition-vocab-entries .edition-vocab-bulk{margin:0;gap:5px;}
+  #editor .edition-vocab-entries .edition-vocab-add{margin:0;}
+}
+@media screen and (max-width:760px){
+  body>header .brand{font-size:18px;margin-right:3px;}
+  body>header .cuaderno-header-save-state{display:none;}
+  body>header .cuaderno-header-nav .hbtn{min-height:36px;}
+  body>header .cuaderno-theme-select{min-height:36px;font-size:16px;}
+  #editor .cuaderno-add-actions .hbtn{min-height:38px;}
+}
+@media screen and (max-width:460px){
+  body[data-has-editor='true']>header{
+    overflow-x:auto;overflow-y:hidden;max-width:100%;
+    white-space:nowrap;
+    scrollbar-width:thin;
+  }
+  body>header .brand{font-size:15px;}
+  body>header .cuaderno-header-nav #btnOpen{font-size:11.5px;}
+  body>header .cuaderno-header-save{padding-inline-start:3px;}
+  #editor .edition-menu-nav{
+    grid-template-columns:repeat(5,minmax(84px,1fr));
+    overflow-x:auto;overscroll-behavior-inline:contain;
+    scroll-snap-type:x proximity;scrollbar-width:thin;
+    max-width:100%;
+  }
+  #editor .edition-menu-nav .btn{scroll-snap-align:start;font-size:11.5px;}
+  #editor .cuaderno-add-primary,
+  #editor .cuaderno-add-secondary{flex:1 1 100%;}
+  #editor .cuaderno-add-primary>.hbtn,
+  #editor .cuaderno-add-secondary>.hbtn{flex:1 1 0;}
+}
+
