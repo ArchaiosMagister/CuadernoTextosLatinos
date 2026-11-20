@@ -42,6 +42,7 @@ const finite=(description:string)=>/\b(?:indicativo|subjuntivo|imperativo)\b/u.t
 
 /** Propuestas trazables al léxico y los análisis del motor publicado. */
 export function proposeCollatinusGrammar(latin:string,tokens:readonly CollatinusGrammarToken[]):CollatinusGrammarProposal[]{
+  const infinitiveAuxiliaries=new Set<number>();
   const proposals=new Map<string,CollatinusGrammarProposal>();
   const aligned=(t:CollatinusGrammarToken)=>Number.isSafeInteger(t.s)&&Number.isSafeInteger(t.e)
     &&t.s>=0&&t.e>t.s&&latin.slice(t.s,t.e)===t.w;
@@ -58,6 +59,10 @@ export function proposeCollatinusGrammar(latin:string,tokens:readonly Collatinus
   }
   for(const [index,token] of tokens.entries()){
     const alternatives=[...new Set(readings(token))];
+    const preferred=selected(token);
+    const selectedDeponent=preferred?.pos.includes('v') && deponent(preferred);
+    const infinitives=new Map<string,string>();
+    let selectedInfinitive:string|undefined;
     for(const candidate of token.cands??[]){
       const dep=candidate.pos.includes('v')&&deponent(candidate);
       for(const morph of candidate.morphos){
@@ -73,37 +78,55 @@ export function proposeCollatinusGrammar(latin:string,tokens:readonly Collatinus
         if(dep)tag('deponente');
         const infinitive=/^infinitivo de (presente|perfecto|futuro) (activo|pasivo)\b/u.exec(morph);
         if(infinitive){
-          tag('inf.'+infinitive[1]);
-          if(!dep||infinitive[2]==='activo')tag('inf.'+infinitive[2]);
+          const id='gram.inf.'+infinitive[1]+'.'+(dep?'deponente':infinitive[2]);
+          infinitives.set(id,evidence);
+          if(candidate===preferred&&morph===token.sel?.morpho)selectedInfinitive=id;
         }
         if(/\bsubjuntivo\b/u.test(morph))tag('subjuntivo');
-        if(!dep&&/\bpasivo\b/u.test(morph)&&(finite(morph)||infinitive))tag('voz.pasiva');
+        if(!dep&&!selectedDeponent&&/\bpasivo\b/u.test(morph)&&finite(morph))tag('voz.pasiva');
         if(morph.startsWith('participio de presente activo:'))tag('part.presente.activo');
         if(morph.startsWith('participio de futuro activo:'))tag('part.futuro.activo');
-        if(morph.startsWith('participio de perfecto pasivo:'))tag(dep?'part.perfecto.deponente':'part.perfecto.pasivo');
+        if((dep||!selectedDeponent)&&morph.startsWith('participio de perfecto pasivo:'))tag(dep?'part.perfecto.deponente':'part.perfecto.pasivo');
         if(dep&&morph.startsWith('participio de perfecto activo:'))tag('part.perfecto.deponente');
       }
     }
 
-    const candidate=selected(token);
+    const infinitiveId=selectedInfinitive ?? (infinitives.size===1 ? infinitives.keys().next().value : undefined);
+    if(infinitiveId&&!infinitiveAuxiliaries.has(token.s)){
+      const evidence=infinitives.get(infinitiveId)!;
+      add(token,token,infinitiveId,evidence,alternatives.filter(reading=>reading!==evidence));
+    }
+
+    const candidate=preferred;
     if(!candidate||!token.sel)continue;
     const morph=token.sel.morpho;
     const lemma=foldLatin(candidate.lemma.split(',')[0]!);
     // El motor agrupa por cercanía. Exigimos adyacencia y concordancia adicional.
     const aux=tokens[index+1];
-    if(aux&&token.group?.includes(index+1)&&selected(aux)&&aux.sel
-      &&foldLatin(selected(aux)!.lemma)==='sum'&&aux.pb===''&&aux.sent===token.sent){
+    const adjacent=aux&&aux.pb===''&&aux.sent===token.sent && /^\s+$/u.test(latin.slice(token.e,aux.s));
+    if(adjacent&&foldLatin(aux.w)==='iri'){
+      const supine=token.cands?.find(item=>item.pos.includes('v')&&!deponent(item)
+        &&item.morphos.includes('supino en -um'));
+      if(supine)add(token,aux,'gram.inf.futuro.pasivo',
+        supine.lemma+' · supino en -um + iri (formas adyacentes)',[...alternatives,...readings(aux)],true);
+    }
+    const perfectDeponent=selectedDeponent&&morph.startsWith('participio de perfecto activo:');
+    if(adjacent&&(token.group?.includes(index+1)||perfectDeponent)&&selected(aux)&&aux.sel
+      &&foldLatin(selected(aux)!.lemma)==='sum'){
       const auxMorph=aux.sel.morpho;
-      const kind=/^participio de (perfecto pasivo|futuro activo): (nominativo|acusativo)/u.exec(morph);
+      const kind=/^participio de (perfecto (?:pasivo|activo)|futuro activo): (nominativo|acusativo)/u.exec(morph);
       const evidence=candidate.lemma+' · '+morph+' + sum · '+auxMorph+' (formas adyacentes)';
       const other=[...alternatives,...readings(aux)];
-      if(kind&&!deponent(candidate)){
-        if(kind[2]==='nominativo'&&kind[1]==='perfecto pasivo'&&finite(auxMorph)
+      if(kind){
+        if(!selectedDeponent&&kind[2]==='nominativo'&&kind[1]==='perfecto pasivo'&&finite(auxMorph)
           &&['singular','plural'].some(number=>morph.endsWith(number)&&auxMorph.endsWith(number)))
           add(token,aux,'gram.voz.pasiva',evidence,other,true);
         if(/^infinitivo de presente activo$/u.test(auxMorph)){
-          add(token,aux,kind[1]==='futuro activo'?'gram.inf.futuro':'gram.inf.perfecto',evidence,other,true);
-          add(token,aux,kind[1]==='futuro activo'?'gram.inf.activo':'gram.inf.pasivo',evidence,other,true);
+          const tense=kind[1]==='futuro activo'?'futuro':'perfecto';
+          const voice=selectedDeponent?'deponente':tense==='futuro'?'activo':'pasivo';
+          add(token,aux,'gram.inf.'+tense+'.'+voice,evidence,other,true);
+          // Esse is the auxiliary of this infinitive, not a second occurrence.
+          infinitiveAuxiliaries.add(aux.s);
         }
       }
     }
