@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: 223274763924b3830671c6db71a9bccab9375a25
+          ref: 50b6db1e982305a313e556aab57ded525354e23c
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -331,6 +331,13 @@ jobs:
           assert 'cuaderno-context-current' in app, 'Falta el título contextual del cuaderno'
           assert 'cuaderno-context-count' in app, 'Falta el contador de textos'
           assert 'cuaderno-theme-select' in app, 'Falta el selector de apariencia'
+          # Safari/iPhone: la edición previa recupera los cuadernos guardados
+          # antes de que el banco de etiquetas esté listo. No repetir ese fallo.
+          assert 'await composer.open()' in app and 'await reload()' in app
+          assert app.rfind('await reload()') < app.rfind('await composer.open()'), (
+            'Safari: el editor se abre antes de cargar corpus.tags')
+          assert 'tagLabel:' in app and 'allGrammarTags(corpus)' in app, (
+            'Falta resolver etiquetas guardadas en la versión experimental')
           assert 'btnCuadernoTheme' in app and 'OLED' in app, 'Falta opción OLED'
           assert 'cuaderno-header-nav' in app, 'Falta nueva cabecera'
           assert 'cuaderno-add-primary' in app, 'Falta agrupación de Añadir textos'
