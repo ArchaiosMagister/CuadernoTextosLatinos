@@ -136,7 +136,7 @@ export class SupabaseWorkspaceTransport {
 
 /** JSONB may reorder object keys; sync hashes must be independent of key insertion order. */
 function stableJson(value:unknown):string{
-  if(value===null||typeof value!=='object')return JSON.stringify(value);
+  if(value===null||typeof value!=='object')return JSON.stringify(value)??'null';
   if(Array.isArray(value))return '['+value.map(stableJson).join(',')+']';
   const record=value as Record<string,unknown>;
   return '{'+Object.keys(record).sort().filter(k=>record[k]!==undefined)
