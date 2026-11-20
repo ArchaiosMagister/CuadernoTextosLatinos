@@ -481,3 +481,36 @@ test('fase 5: la misma palabra entre categorías distintas cuenta como uso previ
   const scarce=engine([eligible[0]!]).previewSlot(valid,t);
   assert.deepEqual(scarce.candidates.map(x=>x.value),['prefix-0']);
 });
+
+
+test('las preguntas y los apartados desactivados no agotan los términos nuevos del cuaderno',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('active-used','prefix-0')];
+  other.options.find(o=>o.kind==='latinism')!.slots=[slot('inactive-use','prefix-1')];
+  other.options.find(o=>o.kind==='latinism')!.enabled=false;
+  const e=engine([record('prefix',0),record('prefix',1)]);
+  const valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:1,seed:0});
+  assert.equal(e.bank.findVerified(plan.assignments[0]!.items[0]!.candidateId!)!.value,'prefix-1');
+  other.options.find(o=>o.kind==='latinism')!.enabled=true;
+  other.enabled=false;
+  // La pregunta entera desactivada tampoco reserva ninguna de sus palabras.
+  const inactive=validateEdition(ed);
+  assert.deepEqual(e.previewSlot(inactive,target(inactive,'prefix')).candidates
+    .map(c=>c.value).sort(),['prefix-0','prefix-1']);
+});
+
+test('si hay otra palabra inédita, nunca se repite una ya usada; agotado el banco, se admite la reutilización',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('used','prefix-0')];
+  const rows=[record('prefix',0),record('prefix',1)];
+  const e=engine(rows),valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const exhausted=engine([rows[0]!]).previewSlot(valid,t);
+  assert.deepEqual(exhausted.candidates.map(c=>c.value),['prefix-0']);
+});
