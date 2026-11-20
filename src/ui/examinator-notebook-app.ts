@@ -1380,6 +1380,15 @@ function render():void{
       originalNew.className='hbtn primary';
     }
   }
+  // La tarjeta anterior se reconstruye por completo. Rescatar también los
+  // botones únicos Biblioteca/Banco antes de vaciar #editor; si no, un
+  // segundo render los dejaría desconectados y perdería sus manejadores.
+  const header=document.querySelector('body > header');
+  for(const id of ['btnLib','btnLists']){
+    const control=document.getElementById(id);
+    if(header&&control instanceof HTMLButtonElement&&control.parentElement!==header)
+      header.append(control);
+  }
   const left=document.getElementById('editor');
   const page=document.getElementById('sheet');
   if(!left||!page)throw new Error('Falta el documento original de Examinator2.');
