@@ -71,11 +71,15 @@ test('iPad: portada propia se guarda, es editable y forma primera hoja del PDF',
 
 test('catálogo CC0 incorpora una foto al cuaderno sin introducir dependencia posterior de red',async({page})=>{
   const details=await prepare(page);
-  await page.route('https://upload.wikimedia.org/**',route=>route.fulfill({
-    status:200,contentType:'image/png',
-    headers:{'access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'},
-    body:tinyPng,
-  }));
+  // Simular en el propio navegador la respuesta de Wikimedia: los Service Workers
+  // no siempre permiten interceptar una petición externa con page.route en WebKit.
+  await page.evaluate(bytes=>{
+    const original=window.fetch.bind(window);
+    window.fetch=(input,init)=>String(input).startsWith('https://upload.wikimedia.org/')
+      ?Promise.resolve(new Response(new Uint8Array(bytes),{
+        status:200,headers:{'Content-Type':'image/png'},
+      })):original(input,init);
+  },[...tinyPng]);
   await details.getByRole('button',{name:'Elegir foto Panteón de Roma'}).click();
   try{await expect(page.getByRole('textbox',{name:'Título de portada'})).toBeVisible({timeout:12000});}
   catch(error){
