@@ -95,6 +95,14 @@ test('Fase 5: auditar la misma palabra en categorías diferentes sin modificar e
     await modal.getByRole('textbox',{name:'Texto latino'}).fill(latin);
     await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   }
+  await expect(page.locator('.edition-counter')).toContainText('Texto 2 de 2');
+  await expect.poll(()=>page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const [state]=await new WorkspaceRepository().listEditions();
+    return state.edition.placements.filter(p=>p.vocabulary.some(v=>v.collatinusSource)).length;
+  })).toBe(2);
+  // Detener procesos de enriquecimiento de la página antes del commit CAS externo.
+  await page.reload();
   await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const repository=new WorkspaceRepository();
