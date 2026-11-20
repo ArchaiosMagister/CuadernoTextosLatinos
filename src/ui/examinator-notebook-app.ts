@@ -128,6 +128,14 @@ const el=<K extends keyof HTMLElementTagNameMap>(name:K,cls='',label=''):HTMLEle
 };
 function button(text:string,onClick:()=>void|Promise<void>,cls='tbtn'):HTMLButtonElement{
   const b=el('button',cls,text);b.type='button';
+  // Clases de presentación únicamente; la acción original permanece intacta.
+  if(/\bWord\b/.test(text))b.classList.add('cuaderno-ui-word');
+  if(/\bPDF\b/.test(text))b.classList.add('cuaderno-ui-pdf');
+  if(/^(?:Exportar|PDF \/ Imprimir|Imprimir borrador)/.test(text))b.classList.add('cuaderno-ui-export');
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\b/.test(text))b.classList.add('cuaderno-ui-regen');
+  if(/^\+?\s*(?:Añadir|Agregar)\b|^Pegar (?:en el banco|texto propio)\b/.test(text))b.classList.add('cuaderno-ui-add');
+  if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\b))\b/.test(text))b.classList.add('cuaderno-ui-remove');
+  if(/^Guardar\b/.test(text))b.classList.add('cuaderno-ui-save');
   b.addEventListener('click',()=>{void Promise.resolve(onClick()).catch(error=>M.toast(String(error),5500));});
   return b;
 }
