@@ -1718,7 +1718,7 @@ export function createEditionPane(options:{
     for(const photo of COVER_PHOTOS){
       const option=node('div','edition-cover-choice');
       const preview=node('img');
-      preview.src=photo.imageUrl;preview.alt=photo.name;
+      preview.dataset.src=photo.imageUrl;preview.alt=photo.name;
       preview.loading='lazy';option.append(preview);
       const select=action('Elegir '+photo.name,async()=>{
         select.disabled=true;
@@ -1744,6 +1744,12 @@ export function createEditionPane(options:{
       option.append(credit);list.append(option);
     }
     group.append(list);
+    group.addEventListener('toggle',()=>{
+      if(!group.open)return;
+      for(const img of Array.from(list.querySelectorAll('img'))){
+        if(!img.src&&img.dataset.src)img.src=img.dataset.src;
+      }
+    });
     const own=node('label','edition-field');
     own.append(node('span','edition-field-label','O utilizar una imagen propia (JPG, PNG o WebP)'));
     const file=node('input','field-control');
