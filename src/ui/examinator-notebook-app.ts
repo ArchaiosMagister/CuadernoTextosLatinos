@@ -1580,15 +1580,35 @@ function wireHeaderLayout():void{
   pdf.textContent='PDF';pdf.setAttribute('aria-label','Exportar PDF');
   exports.append(word,pdf);
   const appearance=document.getElementById('btnCuadernoTheme');
-  const more=el('details','cuaderno-header-more');
-  const summary=el('summary','','Más');
-  summary.setAttribute('aria-label','Más herramientas');
+  // Menú flotante fuera del encabezado para que no se recorte al desplazarse
+  // horizontalmente en Safari iPad/iPhone.
+  const moreTrigger=el('button','hbtn cuaderno-header-more-trigger','Más');
+  moreTrigger.type='button';
+  moreTrigger.setAttribute('aria-expanded','false');
+  moreTrigger.setAttribute('aria-controls','cuadernoMoreTools');
+  const more=el('div','cuaderno-header-more');
+  more.id='cuadernoMoreTools';
+  more.hidden=true;
   const setting=get('btnSettings');
   setting.textContent='Formato y ajustes';
-  more.append(summary,setting);
+  more.append(setting);
+  moreTrigger.addEventListener('click',()=>{
+    more.hidden=!more.hidden;
+    moreTrigger.setAttribute('aria-expanded',String(!more.hidden));
+  });
+  setting.addEventListener('click',()=>{
+    more.hidden=true;moreTrigger.setAttribute('aria-expanded','false');
+  });
+  document.addEventListener('click',event=>{
+    const target=event.target;
+    if(target instanceof Node&&!more.contains(target)&&!moreTrigger.contains(target)){
+      more.hidden=true;moreTrigger.setAttribute('aria-expanded','false');
+    }
+  });
   header.append(exports);
   if(appearance)header.append(appearance);
-  header.append(more);
+  header.append(moreTrigger);
+  document.body.append(more);
 }
 function wireButtons():void{
   wireThemeButton();
