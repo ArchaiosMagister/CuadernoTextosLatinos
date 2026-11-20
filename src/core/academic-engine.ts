@@ -154,7 +154,7 @@ export class AcademicQuestionEngineV1 {
       option.kind==='phonetics'?target.phoneticRules:undefined).filter(row=>!taken.has(normalizeAcademicExercise(row.value)));
     const usage=notebookUsage(valid);
     const rows=onlyUnused?eligible.filter(row=>!usage.has(normalizeAcademicExercise(row.value))):preferNew(eligible,usage);
-    return {status:teacherProtected(slot)?'locked':rows.length?'ready':'no-candidates',
+    return {status:!rows.length?'no-candidates':teacherProtected(slot)?'locked':'ready',
       candidates:rows.map(r=>({id:r.id,value:generatedAcademicValue(option.kind,r.value),
         lemmaId:r.lemmaId,analysis:r.analysis})),
       pendingReview:this.bank.statusCounts(option.kind).needsReview};
