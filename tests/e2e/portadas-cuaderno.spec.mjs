@@ -72,10 +72,19 @@ test('iPad: portada propia se guarda, es editable y forma primera hoja del PDF',
 test('catálogo CC0 incorpora una foto al cuaderno sin introducir dependencia posterior de red',async({page})=>{
   const details=await prepare(page);
   await page.route('https://upload.wikimedia.org/**',route=>route.fulfill({
-    status:200,contentType:'image/png',body:tinyPng,
+    status:200,contentType:'image/png',
+    headers:{'access-control-allow-origin':'*','cross-origin-resource-policy':'cross-origin'},
+    body:tinyPng,
   }));
   await details.getByRole('button',{name:'Elegir foto Panteón de Roma'}).click();
-  await expect(page.getByRole('textbox',{name:'Título de portada'})).toBeVisible();
+  try{await expect(page.getByRole('textbox',{name:'Título de portada'})).toBeVisible({timeout:12000});}
+  catch(error){
+    const diagnostic=await page.evaluate(()=>({
+      messages:[...document.querySelectorAll('.toast,[role="alert"]')].map(e=>e.textContent),
+      options:document.querySelector('.edition-cover-editor')?.textContent?.slice(0,700),
+    }));
+    throw new Error(String(error)+' · Diagnóstico de descarga: '+JSON.stringify(diagnostic));
+  }
   const credit=await page.evaluate(async()=>{
     const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
     const editions=await new WorkspaceRepository().listEditions();
