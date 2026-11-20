@@ -86,7 +86,7 @@ test('C D E: pregunta cuatro en filas, regeneración individual y ajustes sin al
   await section.locator('summary').click();
   const global=choice.locator('.edition-question-advanced');
   await expect(global).not.toHaveAttribute('open','');
-  await global.locator('summary').click();
+  await global.locator(':scope > summary').click();
   await expect(global.getByRole('button',{name:/Generar pregunta 4|Proponer pregunta 4 completa/})).toBeVisible();
   await expect(panel.locator('.edition-score, .edition-error').last()).toContainText('Total activo');
   await expect(panel.locator('.edition-question-panel[data-kind=morphology] .edition-academic-morph')).toBeVisible();
@@ -95,7 +95,7 @@ test('C D E: pregunta cuatro en filas, regeneración individual y ajustes sin al
   // plegar una tarjeta; no modifica sus lemas, enunciados ni puntuaciones.
   await page.locator('#btnSave').click();
   const before=await data(page);
-  await global.locator('summary').click();
+  await global.locator(':scope > summary').click();
   await choice.locator('.edition-question-fold').click();
   await choice.locator('.edition-question-fold').click();
   expect(await data(page)).toEqual(before);
