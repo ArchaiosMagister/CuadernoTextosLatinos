@@ -267,6 +267,8 @@ test('Banco: proteger de retirada masiva los textos utilizados en cuadernos hist
   const bank=page.locator('.cuaderno-home-bank');
   await bank.locator('.cuaderno-home-category').first().locator('summary').first().click();
   await expect(bank.getByRole('checkbox',{name:'Seleccionar para quitar: Fuente antigua'})).toBeDisabled();
+  await bank.locator('.cuaderno-home-text').filter({hasText:'Fuente antigua'})
+    .first().locator('summary').first().click();
   await expect(bank.getByRole('button',{name:'Quitar del banco'})).toBeDisabled();
   await bank.getByRole('button',{name:/Seleccionar todo el banco/}).click();
   await expect(bank.getByRole('button',{name:'Quitar seleccionados'})).toBeDisabled();
