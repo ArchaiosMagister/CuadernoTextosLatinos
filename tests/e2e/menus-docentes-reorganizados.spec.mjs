@@ -84,6 +84,11 @@ test('Apariencia: selector accesible, OLED persistente y papel A4 intacto',async
   page.once('dialog',d=>d.accept('Cuaderno visual OLED'));
   await page.locator('#btnNew').click();
   await expect(page.locator('body')).toHaveCSS('background-color','rgb(0, 0, 0)');
+  await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
+  const modal=page.locator('.modal');
+  await modal.getByRole('textbox',{name:'Título'}).fill('Prueba de papel OLED');
+  await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caesar in Gallia erat.');
+  await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-paper').first()).toHaveCSS('background-color','rgb(255, 255, 255)');
   await selector.selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','dark');
