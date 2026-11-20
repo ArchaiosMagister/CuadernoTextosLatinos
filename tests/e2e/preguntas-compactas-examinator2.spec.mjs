@@ -66,7 +66,7 @@ test('C D E: pregunta cuatro en filas, regeneración individual y ajustes sin al
   const panel=page.locator('.edition-menu-questions');
   const choice=panel.locator('.edition-question-panel[data-kind=choice]');
   await expect(choice.locator('.edition-option')).toHaveCount(4);
-  await expect(choice.locator('.edition-option-head')).toHaveCount(4);
+  await expect(choice.locator('.edition-option > .edition-option-head')).toHaveCount(4);
   const prefix=choice.locator('.edition-option').filter({hasText:'Prefijos'});
   const section=prefix.locator('.edition-option-advanced');
   await expect(section).not.toHaveAttribute('open','');
