@@ -1348,3 +1348,19 @@ html[data-cuaderno-theme='oled']{
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Revisión global de fuentes: tarjetas legibles en iPad, sin mover el A4. */
+.cuaderno-duplicate-audit{display:grid;gap:9px;min-width:0}
+.cuaderno-duplicate-audit>p{margin:0}
+.cuaderno-duplicate-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cuaderno-duplicate-controls .field{min-width:0}
+.cuaderno-duplicate-controls input,
+.cuaderno-duplicate-controls select{width:100%;min-width:0;max-width:100%}
+.cuaderno-duplicate-results{display:grid;gap:8px;max-height:56vh;overflow:auto}
+.cuaderno-duplicate-result{border:1px solid var(--rule-2,#ccc);border-radius:8px;padding:9px;min-width:0}
+.cuaderno-duplicate-result summary{cursor:pointer;overflow-wrap:anywhere;font-weight:600}
+.cuaderno-duplicate-source{border-top:1px solid var(--rule-2,#ddd);margin-top:8px;padding-top:8px;min-width:0}
+.cuaderno-duplicate-source p{margin:4px 0}
+.cuaderno-duplicate-latin{font:inherit;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.cuaderno-duplicate-latin mark{background:#f3dc94;color:#1d1d1d;border-radius:2px}
+@media(max-width:650px){.cuaderno-duplicate-controls{grid-template-columns:1fr}}
