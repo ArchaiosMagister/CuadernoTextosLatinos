@@ -46,7 +46,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',text=''):HTMLEle
   const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;
 }
 function button(label:string,act:()=>void|Promise<void>):HTMLButtonElement{
-  const b=el('button','btn btn-outline',label);b.type='button';b.addEventListener('click',()=>{void act();});return b;
+  const b=el('button','btn btn-outline',label);b.type='button';
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\b/.test(label))
+    b.classList.add('cuaderno-ui-regen');
+  if(/^(?:Añadir|Subrayar)\b/.test(label))b.classList.add('cuaderno-ui-add');
+  b.addEventListener('click',()=>{void act();});return b;
 }
 function summary(error:unknown):string{return error instanceof Error?error.message:String(error);}
 function randomSeed():number{return crypto.getRandomValues(new Uint32Array(1))[0]??0;}
