@@ -62,10 +62,34 @@ function preview(snapshot: WorkspaceSnapshotV1, exportedAt: string): WorkspaceBa
   };
 }
 
+/**
+ * Una colisión divergente no puede resolverse con Map(...): eso descartaría
+ * silenciosamente la ficha anterior, algo especialmente peligroso al cambiar
+ * de navegador y hacer una copia integral.
+ */
+export function checkPortableCorpusCollisions(editorial:CorpusV1,historical:CorpusV1):void{
+  for(const [kind,left,right] of [
+    ['texto',editorial.texts,historical.texts],
+    ['etiqueta',editorial.tags,historical.tags],
+    ['cuaderno antiguo',editorial.notebooks,historical.notebooks],
+  ] as const){
+    const ids=new Map(left.map(item=>[item.id,item]));
+    for(const item of right){
+      const previous=ids.get(item.id);
+      if(previous&&JSON.stringify(previous)!==JSON.stringify(item)){
+        throw new WorkspaceBackupError('No se ha creado la copia: ID de '+kind+
+          ' duplicado con datos diferentes ('+item.id+'). '+
+          'Conserva ambas bases y resuelve la colisión antes de transferirla.');
+      }
+    }
+  }
+}
+
 /** El workspace se lee en una sola transacción y el banco histórico se incorpora a la copia portátil. */
 export async function createWorkspaceBackup(workspace: WorkspaceRepository, at = new Date(),
   historical?:CorpusV1): Promise<string> {
   const current=await workspace.snapshot();
+  if(historical)checkPortableCorpusCollisions(current.corpus?.corpus??emptyCorpus(),historical);
   const snapshot=validateWorkspaceSnapshot(historical?{
     ...current,workspaceRevision:Math.max(current.workspaceRevision,1),
     corpus:{revision:current.corpus?.revision??1,corpus:combineNotebookCorpora(current.corpus?.corpus??emptyCorpus(),historical)},
@@ -181,7 +205,13 @@ function dependencySubset(edition:NotebookEditionV1, corpus:CorpusV1):CorpusV1 {
   for(const text of texts)for(const id of text.tagIds)include(id);
   for(const placement of edition.placements){
     for(const id of placement.grammaticalTagIds)include(id);
-    for(const span of placement.grammaticalSpans??[])for(const id of span.tagIds)include(id);
+    for(const span of placement.grammaticalSpans??[]){
+      for(const id of span.tagIds)include(id);
+      for(const evidence of span.evidence??[])include(evidence.tagId);
+    }
+    for(const decision of placement.grammarReview??[]){
+      if(decision.kind==='rejected')include(decision.tagId);
+    }
   }
   return validateCorpus({...emptyCorpus(),texts,tags:[...tags.values()]});
 }
@@ -264,6 +294,8 @@ export function importNotebookDependencies(edition:NotebookEditionV1, dependenci
     source:{...p.source,sourceId:p.source.kind==='corpus'&&p.source.sourceId
       ?sourceIds.get(p.source.sourceId)??p.source.sourceId:p.source.sourceId},
     grammaticalTagIds:p.grammaticalTagIds.map(resolveTag),
+    ...(p.grammarReview?{grammarReview:p.grammarReview.map(decision=>
+      decision.kind==='rejected'?{...decision,tagId:resolveTag(decision.tagId)}:decision)}:{}),
     ...(p.grammaticalSpans?{grammaticalSpans:p.grammaticalSpans.map(span=>({
       ...span,tagIds:span.tagIds.map(resolveTag),
       ...(span.evidence?{evidence:span.evidence.map(item=>({...item,tagId:resolveTag(item.tagId)}))}:{}),
