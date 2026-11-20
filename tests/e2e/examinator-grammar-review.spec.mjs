@@ -87,7 +87,7 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     await expect(restoredModal.getByText(/Loquitur · .* · Descartada/)).toBeVisible();
     await restoredModal.getByRole('button',{name:'Cerrar'}).click();
 
-    await restored.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+    await restored.locator('#btnOpen').click();
     await expect(restored.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
     restored.once('dialog',dialog=>dialog.accept('Cuaderno nuevo'));
     await restored.locator('#btnNew').click();
@@ -99,7 +99,7 @@ test('copia individual traslada etiquetas y fuentes a otro perfil sin duplicar e
     // Un texto ya incorporado se oculta del selector de ese cuaderno.
     await expect(picker.getByRole('button',{name:'Quitar del banco: Pasaje transportable'})).toHaveCount(0);
     await picker.getByRole('button',{name:'Cerrar'}).click();
-    await restored.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+    await restored.locator('#btnOpen').click();
     // La retirada de una fuente usada se realiza desde el banco general de Inicio.
     const general=restored.locator('.cuaderno-home-bank');
     await general.locator('.cuaderno-home-category').first().locator('summary').first().click();

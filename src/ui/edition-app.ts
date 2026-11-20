@@ -1250,6 +1250,15 @@ export function createEditionPane(options:{
     }
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
+    // Tres grupos visuales, conservando íntegros los controles y callbacks.
+    const selectionSection=node('section','edition-vocab-section edition-vocab-selection');
+    selectionSection.append(node('h3','','Selección de palabras'));
+    const analysisSection=node('section','edition-vocab-section edition-vocab-analysis');
+    analysisSection.append(node('h3','',options.onAnalyzeVocabulary
+      ?'Análisis con Collatinus':'Análisis y propuestas'));
+    const entriesSection=node('section','edition-vocab-section edition-vocab-entries');
+    entriesSection.append(node('h3','','Entradas editables'));
+    panel.append(selectionSection,analysisSection,entriesSection);
     const selectionMode=p.vocabularySelectionMode??'elegir';
     const quantityMode=p.vocabularyQuantityMode??'modelo';
     const toolbar=node('div','edition-vocab-toolbar');
@@ -1297,31 +1306,31 @@ export function createEditionPane(options:{
       void refreshCollatinusVocabulary(p);
     });
     qtyLabel.append(qty);toolbar.append(qtyLabel);
-    panel.append(toolbar);
+    selectionSection.append(toolbar);
     const scan=action(options.onAnalyzeVocabulary
       ?'Buscar otras formas con Collatinus (actualizar)'
       :options.autoVocabulary===false?'Buscar otras formas (opcional)'
         :'Proponer vocabulario del texto',
       ()=>refreshCollatinusVocabulary(p),'btn btn-outline');
-    panel.append(scan);
-    if(!options.onAnalyzeVocabulary)renderVocabularySuggestions(panel,p);
+    analysisSection.append(scan);
+    if(!options.onAnalyzeVocabulary)renderVocabularySuggestions(analysisSection,p);
 
     const items=[...p.vocabulary].sort((a,b)=>
       vocabularySortKey(a.headword).localeCompare(vocabularySortKey(b.headword),
         'es',{sensitivity:'base'}));
     const chosen=items.filter(v=>v.included).length;
-    panel.append(node('p','hint',items.length
+    entriesSection.append(node('p','hint',items.length
       ?chosen+' de '+items.length+' entradas seleccionadas. Solo se imprimen las marcadas.'
       :'El vocabulario se prepara al analizar el texto.'));
     let preferred:ReturnType<typeof parsePreferredVocabulary>=[];
     try{preferred=parsePreferredVocabulary(localStorage.getItem(PREFERRED_VOCABULARY_KEY));}
-    catch(err){panel.append(node('p','edition-error',
+    catch(err){entriesSection.append(node('p','edition-error',
       'El vocabulario preferente guardado necesita revisión: '+String(err)));}
     if(items.length){
       const headers=node('div','edition-vocab-column-heads');
       for(const label of ['','Enunciado','Traducción','Aclaración','Guardar',''])
         headers.append(node('span','',label));
-      panel.append(headers);
+      entriesSection.append(headers);
       const list=node('div','edition-vocab-list');
       list.setAttribute('aria-label','Entradas de vocabulario editables');
       for(const v of items){
@@ -1443,7 +1452,7 @@ export function createEditionPane(options:{
         }
         list.append(row);
       }
-      panel.append(list);
+      entriesSection.append(list);
     }
     const actions=node('div','edition-vocab-bulk');
     actions.append(action('Marcar todas',()=>{
@@ -1461,10 +1470,10 @@ export function createEditionPane(options:{
         }),
       }));paint();
     }));
-    panel.append(actions);
+    entriesSection.append(actions);
     const unreviewed=items.filter(isUnreviewedAutoVocabulary);
     if(unreviewed.length){
-      panel.append(action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
+      entriesSection.append(action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
         if(!window.confirm('¿Retirar únicamente las propuestas automáticas sin glosa ni edición manual?'))return;
         apply((e,at)=>validateEdition({...e,updatedAt:at,
           placements:e.placements.map(x=>x.id!==p.id?x:{
@@ -1491,7 +1500,7 @@ export function createEditionPane(options:{
       });paint();
     },'btn btn-primary');
     const row=node('div','edition-vocab-add');row.append(headword,meaning,add);
-    panel.append(row);
+    entriesSection.append(row);
   }
   function menuFormat(panel:HTMLElement):void {
     if(!draft)return;

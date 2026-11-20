@@ -13,7 +13,7 @@ test('cabecera compacta: accesos originales, contador y distribución sin desbor
   await expect(panel.locator('h3')).toHaveText('Cuaderno de textos latinos');
   await expect(panel.locator('.cuaderno-context-current')).toHaveText('Cuaderno compacto');
   await expect(panel.locator('.cuaderno-context-count')).toHaveText('0 textos');
-  await expect(panel.getByRole('button',{name:'Volver a mis cuadernos'})).toBeVisible();
+  await expect(page.locator('#btnOpen')).toBeVisible();
   await expect(panel.getByRole('button',{name:'Gestionar cuadernos'})).toBeVisible();
   await expect(panel.getByRole('combobox',{name:'Elegir cuaderno'})).toBeVisible();
   await expect(panel.getByText('0 textos en este cuaderno.')).toHaveCount(0);
@@ -52,7 +52,7 @@ test('cabecera compacta: accesos originales, contador y distribución sin desbor
       body:await page.screenshot({animations:'disabled'}),contentType:'image/png',
     });
   }
-  await panel.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+  await page.locator('#btnOpen').click();
   await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -63,18 +63,18 @@ test('OLED: negro puro, A4 blanca, colores funcionales y persistencia en iPad',a
   await page.setViewportSize({width:820,height:1180});
   await page.goto('/examinator-cuadernos/');
   const theme=page.locator('#btnCuadernoTheme');
-  await expect(theme).toHaveText('Modo oscuro');
-  await theme.click();
+  await expect(theme).toHaveValue('light');
+  await theme.selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','dark');
-  await expect(theme).toHaveText('Modo OLED');
-  await theme.click();
+  await expect(theme).toHaveValue('dark');
+  await theme.selectOption('oled');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','oled');
-  await expect(theme).toHaveText('Modo claro');
+  await expect(theme).toHaveValue('oled');
   await expect(page.locator('body')).toHaveCSS('background-color','rgb(0, 0, 0)');
   await expect(page.locator('#editor .cuaderno-home')).toHaveCSS('background-color','rgb(0, 0, 0)');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','oled');
-  await expect(theme).toHaveText('Modo claro');
+  await expect(theme).toHaveValue('oled');
 
   page.once('dialog',d=>d.accept('Cuaderno OLED'));
   await page.locator('#btnNew').click();
@@ -97,8 +97,8 @@ test('OLED: negro puro, A4 blanca, colores funcionales y persistencia en iPad',a
   await page.setViewportSize({width:390,height:844});
   await info.attach('oled-iphone',{body:await page.screenshot({animations:'disabled'}),contentType:'image/png'});
 
-  await theme.click();
+  await theme.selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','light');
-  await expect(theme).toHaveText('Modo oscuro');
+  await expect(theme).toHaveValue('light');
   expect(errors).toEqual([]);
 });

@@ -26,17 +26,17 @@ test('editor de cuadernos: menús 40 % y vista previa 60 % en iPad y escritorio'
 
 test('modo claro, oscuro y OLED persistentes; controles del zoom con + a la izquierda',async({page})=>{
   await page.goto('/examinator-cuadernos/');
-  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo oscuro');
-  await page.locator('#btnCuadernoTheme').click();
+  const theme=page.getByRole('combobox',{name:'Apariencia'});
+  await expect(theme).toHaveValue('light');
+  await theme.selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','dark');
-  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo OLED');
   await page.reload();
-  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo OLED');
-  await page.locator('#btnCuadernoTheme').click();
+  await expect(theme).toHaveValue('dark');
+  await theme.selectOption('oled');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','oled');
   await page.reload();
-  await expect(page.locator('#btnCuadernoTheme')).toHaveText('Modo claro');
-  await page.locator('#btnCuadernoTheme').click();
+  await expect(theme).toHaveValue('oled');
+  await theme.selectOption('light');
   await expect(page.locator('html')).toHaveAttribute('data-cuaderno-theme','light');
   page.once('dialog',dialog=>dialog.accept('Cuaderno zoom'));
   await page.locator('#btnNew').click();

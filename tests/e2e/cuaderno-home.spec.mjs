@@ -18,14 +18,14 @@ test('Tarjetas: crear, volver, copia voluntaria, cancelación y borrado con una 
   await page.goto('/examinator-cuadernos/');
   page.once('dialog',d=>d.accept('Cuaderno en tarjetas'));
   await page.getByRole('button',{name:'Nuevo cuaderno'}).click();
-  await expect(page.getByRole('button',{name:'Volver a mis cuadernos'})).toBeVisible();
+  await expect(page.locator('#btnOpen')).toBeVisible();
   await page.getByRole('button',{name:'Pegar texto',exact:true}).click();
   const modal=page.locator('.modal').last();
   await modal.getByRole('textbox',{name:'Título'}).fill('Pasaje para banco');
   await modal.getByRole('textbox',{name:'Texto latino'}).fill('Caesar Galliam vicit.');
   await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
-  await page.getByRole('button',{name:'Volver a mis cuadernos'}).click();
+  await page.locator('#btnOpen').click();
   const card=page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno en tarjetas'});
   await expect(card).toBeVisible();
   await expect(card).toContainText('1 texto');
