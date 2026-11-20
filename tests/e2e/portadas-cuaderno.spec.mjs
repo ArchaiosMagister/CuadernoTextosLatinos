@@ -25,7 +25,7 @@ async function prepare(page){
 test('iPad: portada propia se guarda, es editable y forma primera hoja del PDF',async({page})=>{
   await page.setViewportSize({width:820,height:1180});
   const details=await prepare(page);
-  await details.getByRole('textbox',{name:'Subir imagen de portada propia'}).setInputFiles({
+  await details.locator('input[type="file"][aria-label="Subir imagen de portada propia"]').setInputFiles({
     name:'portada.png',mimeType:'image/png',buffer:tinyPng,
   });
   await expect(details.getByRole('textbox',{name:'Título de portada'})).toBeVisible();
