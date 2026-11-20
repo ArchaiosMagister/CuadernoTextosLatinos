@@ -1391,7 +1391,7 @@ function openDuplicateAudit():void{
   for(const [value,label] of [
     ['all','Todas las coincidencias'],['identical','Textos idénticos'],
     ['overlap','Fragmentos compartidos'],['citation','Misma referencia bibliográfica'],
-  ]){
+  ] as const){
     const option=el('option');option.value=value;option.textContent=label;filter.append(option);
   }
   filterLabel.append(el('span','','Tipo de coincidencia'),filter);
