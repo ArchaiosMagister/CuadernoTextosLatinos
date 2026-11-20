@@ -165,7 +165,7 @@ export class AcademicQuestionEngineV1 {
     const q=getChoice(getPlacement(edition,target.placementId),target.questionId);
     const option=getOption(q,target.optionId);
     const slot=option.slots.find(x=>x.id===target.slotId)??fail('Palabra inexistente');
-    if(teacherProtected(slot)&&!replaceLocked)fail('Palabra manual protegida; requiere autorización expresa');
+    if(teacherProtected(slot)&&!replaceLocked)fail('Palabra manual bloqueada o protegida; requiere autorización expresa');
     const preview=this.previewSlot(edition,target);
     const chosen=candidateId?preview.candidates.find(x=>x.id===candidateId):choose(preview.candidates,seed);
     if(!chosen)fail('No hay alternativas académicas verificadas para esta palabra');
