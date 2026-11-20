@@ -46,21 +46,24 @@ test('controles semánticos: colores, guardado, pestañas y tamaños en WebKit',
   const addEntry=form.getByRole('button',{name:'Añadir entrada'});
   await expect(addEntry).toHaveClass(/cuaderno-ui-add/);
   await addEntry.click();
-  const row=page.locator('#editor .edition-vocab-row').filter({has:page.locator('input[value="terra, -ae (f.)"]')}).first();
-  // La fila puede reutilizar un valor normalizado; también admite el emparejamiento por contenido.
-  const preferred=await row.count()?row:page.locator('#editor .edition-vocab-row').last();
+  const index=await page.locator('#editor .edition-vocab-row').evaluateAll(rows=>
+    rows.findIndex(row=>row.querySelector('input.edition-vocab-headword')?.value.startsWith('terra')));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const preferred=page.locator('#editor .edition-vocab-row').nth(index);
   const save=preferred.locator('button.edition-vocab-save');
   await expect(save).toHaveText('Guardar');
   await expect(save).toHaveClass(/cuaderno-ui-save/);
+  await expect(save).toBeVisible();
+  await expect(save).toHaveCSS('width','84px');
   const before=await save.evaluate(element=>({
-    width:element.getBoundingClientRect().width,
+    width:getComputedStyle(element).width,
     bg:getComputedStyle(element).backgroundColor,
   }));
   await save.click();
   await expect(save).toHaveText('✓ Guardado');
   await expect(save).toHaveClass(/is-saved/);
   const after=await save.evaluate(element=>({
-    width:element.getBoundingClientRect().width,
+    width:getComputedStyle(element).width,
     bg:getComputedStyle(element).backgroundColor,
   }));
   expect(after.width).toBe(before.width);
