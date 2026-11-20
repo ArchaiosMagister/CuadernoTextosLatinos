@@ -20,7 +20,7 @@ async function engine() {
 async function analyze(args) {
   let cache, key;
   try {
-    const data = new TextEncoder().encode(args.text);
+    const data = new TextEncoder().encode(JSON.stringify(args.text));
     const digest = await crypto.subtle.digest('SHA-256', data);
     const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
     key = new URL('./analysis-' + engineVersion + '-' + hash, self.location.href).href;
@@ -36,7 +36,9 @@ async function analyze(args) {
   const result = await (await engine()).call('analyze', args);
   if (cache && key && Array.isArray(result)) {
     try {
-      await cache.put(key, new Response(JSON.stringify(result), {
+      const json = JSON.stringify(result);
+      if (json.length > 2_000_000) return result;
+      await cache.put(key, new Response(json, {
         headers: { 'Content-Type': 'application/json' },
       }));
       const keys = await cache.keys();

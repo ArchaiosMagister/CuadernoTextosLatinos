@@ -103,10 +103,18 @@ export function proposeCollatinusGrammar(latin:string,tokens:readonly Collatinus
     const lemma=foldLatin(candidate.lemma.split(',')[0]!);
     // El motor agrupa por cercanía. Exigimos adyacencia y concordancia adicional.
     const aux=tokens[index+1];
-    if(aux&&token.group?.includes(index+1)&&selected(aux)&&aux.sel
-      &&foldLatin(selected(aux)!.lemma)==='sum'&&aux.pb===''&&aux.sent===token.sent){
+    const adjacent=aux&&aux.pb===''&&aux.sent===token.sent && /^\s+$/u.test(latin.slice(token.e,aux.s));
+    if(adjacent&&foldLatin(aux.w)==='iri'){
+      const supine=token.cands?.find(item=>item.pos.includes('v')&&!deponent(item)
+        &&item.morphos.includes('supino en -um'));
+      if(supine)add(token,aux,'gram.inf.futuro.pasivo',
+        supine.lemma+' · supino en -um + iri (formas adyacentes)',[...alternatives,...readings(aux)],true);
+    }
+    const perfectDeponent=selectedDeponent&&morph.startsWith('participio de perfecto activo:');
+    if(adjacent&&(token.group?.includes(index+1)||perfectDeponent)&&selected(aux)&&aux.sel
+      &&foldLatin(selected(aux)!.lemma)==='sum'){
       const auxMorph=aux.sel.morpho;
-      const kind=/^participio de (perfecto pasivo|futuro activo): (nominativo|acusativo)/u.exec(morph);
+      const kind=/^participio de (perfecto (?:pasivo|activo)|futuro activo): (nominativo|acusativo)/u.exec(morph);
       const evidence=candidate.lemma+' · '+morph+' + sum · '+auxMorph+' (formas adyacentes)';
       const other=[...alternatives,...readings(aux)];
       if(kind){

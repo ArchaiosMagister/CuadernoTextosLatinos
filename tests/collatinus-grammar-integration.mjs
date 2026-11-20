@@ -22,7 +22,8 @@ context.addEventListener=(type, listener)=>{
 context.postMessage=message=>{ reply=message; };
 load('worker.js');
 const latin='Venit. Cum amicis venit. Cum veniret, quod dicit auditur. Amatus est. Missi erant. Loquitur. '+
-  'Amavisse dicit. Amaturum esse dicit. Si veniat. Rogat ut audiat. Amando discit. Liber legendus. Quid faciat nescio.';
+  'Amavisse dicit. Amaturum esse dicit. Si veniat. Rogat ut audiat. Amando discit. Liber legendus. Quid faciat nescio. '+
+  'Amatum iri dicit. Locutum esse dicit. Locuturum esse dicit. Loqui dicit.';
 await receive({data:{id:1,method:'analyze',args:{text:latin}}});
 assert.equal(reply.id,1);
 assert.equal(reply.error,undefined);
@@ -43,6 +44,10 @@ assert.ok(has('Loquitur','gram.deponente'));
 assert.ok(!has('Loquitur','gram.voz.pasiva'));
 assert.ok(has('Amavisse','gram.inf.perfecto.activo'));
 assert.ok(has('Amaturum esse','gram.inf.futuro.activo'));
+assert.ok(has('Amatum iri','gram.inf.futuro.pasivo'));
+assert.ok(has('Locutum esse','gram.inf.perfecto.deponente'));
+assert.ok(has('Locuturum esse','gram.inf.futuro.deponente'));
+assert.ok(has('Loqui','gram.inf.presente.deponente'));
 assert.ok(has('Si veniat','gram.condicional'));
 assert.ok(has('ut audiat','gram.ut'));
 const manualTags=['gram.gerundio','gram.gerundivo','gram.interrogativa.indirecta'];

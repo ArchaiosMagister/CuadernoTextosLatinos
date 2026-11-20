@@ -312,6 +312,10 @@ async function analyzeLatin(latin: string): Promise<AnalysisToken[]> {
   });
   analyses.set(latin, pending);
   if (analyses.size > maxCachedAnalyses) analyses.delete(analyses.keys().next().value!);
+  if (latin.length > 20_000) {
+    const clear = () => { if (analyses.get(latin) === pending) analyses.delete(latin); };
+    void pending.then(clear, clear);
+  }
   return pending;
 }
 /** No se infiere un gentilicio por su sufijo: lista editorial de gentilicios
