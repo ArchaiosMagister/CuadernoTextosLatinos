@@ -45,3 +45,14 @@ test('con categorías ya ocupadas no se repiten ni se fuerzan cuatro si faltan',
   assert.equal(two.length,1);
   assert.deepEqual(selectDiverseMorphology([row],new Set(),new Set(['verbo-personal']),new Map(),4),[]);
 });
+
+test('no se reutiliza una categoría con palabra ya usada mientras haya cuatro categorías con vocablos nuevos',()=>{
+  const types=['pronombre','verbo-personal','infinitivo','participio','sustantivo'] as const;
+  const rows: MorphChoice[]=types.map((category,i)=>({
+    surface:'forma-'+i,start:i*10,end:i*10+7,key:'forma-'+i,category,lemmaId:'lemma-'+i,
+    analysis:'análisis',source:'collatinus',
+  }));
+  const selected=selectDiverseMorphology(rows,new Set(['forma-0']),new Set(),new Map(),4);
+  assert.equal(selected.length,4);
+  assert.ok(selected.every(x=>x.key!=='forma-0'),'No debe seleccionar la palabra usada');
+});
