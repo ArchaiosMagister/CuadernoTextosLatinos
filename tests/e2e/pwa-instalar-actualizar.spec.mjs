@@ -19,6 +19,8 @@ test('PWA: manifiesto e iconos PNG instalables en la ruta real del cuaderno',asy
   expect(result.manifest.start_url).toBe('./');
   expect(result.manifest.scope).toBe('./');
   expect(result.manifest.display).toBe('standalone');
+  expect(new URL(result.manifest.start_url,new URL('./manifest.webmanifest',result.base)).pathname)
+    .toBe('/examinator-cuadernos/');
   for(const icon of result.manifest.icons){
     const url=new URL(icon.src,result.base);
     const resp=await page.request.get(url.toString());
