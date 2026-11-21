@@ -93,11 +93,47 @@ async function analyze(args) {
   return result;
 }
 
+// Los lemas de vocabulario se solicitan reiteradamente al revisar un texto,
+// volver al cuaderno o cambiar entre modos de cantidades vocálicas. Evitar
+// repetir el cálculo para una petición idéntica, sin modificar su orden ni
+// sus valores y sin conservar respuestas de versiones anteriores del worker.
+const vocabularyCapacity = 12;
+const vocabularyAnalyses = new Map();
+async function vocabularyEntries(args) {
+  // Las llamadas ajenas al contrato conservan el comportamiento del motor.
+  if (!args || !Array.isArray(args.lids) || !args.lids.every(Number.isSafeInteger)) {
+    return (await engine()).call('vocabEntries', args);
+  }
+  const key = JSON.stringify(args);
+  if (key.length > 16000) return (await engine()).call('vocabEntries', args);
+  if (vocabularyAnalyses.has(key)) {
+    const hit = vocabularyAnalyses.get(key);
+    vocabularyAnalyses.delete(key);
+    vocabularyAnalyses.set(key, hit);
+    return hit;
+  }
+  // Guardar también la promesa: dos solicitudes concurrentes usan el mismo
+  // resultado, y un error elimina la entrada para permitir reintentar.
+  const pending = (async () => (await engine()).call('vocabEntries', args))();
+  vocabularyAnalyses.set(key, pending);
+  if (vocabularyAnalyses.size > vocabularyCapacity) {
+    vocabularyAnalyses.delete(vocabularyAnalyses.keys().next().value);
+  }
+  try {
+    return await pending;
+  } catch (error) {
+    if (vocabularyAnalyses.get(key) === pending) vocabularyAnalyses.delete(key);
+    throw error;
+  }
+}
+
 self.addEventListener('message', async ({ data: { id, method, args } }) => {
   try {
     const result = method === 'analyze'
       ? await analyze(args)
-      : await (await engine()).call(method, args);
+      : method === 'vocabEntries'
+        ? await vocabularyEntries(args)
+        : await (await engine()).call(method, args);
     self.postMessage({ id, result });
   } catch (error) {
     self.postMessage({ id, error: String(error) });
