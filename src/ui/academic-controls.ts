@@ -457,7 +457,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         .find(x=>x.id===q.id&&x.kind==='morphology');
       const currentWord=word?.kind==='morphology'?word.words.find(w=>w.id===wordId):null;
       if(!currentWord)throw new Error('La aparición morfológica ya no existe.');
-      if(currentWord.locked){
+      if(currentWord.locked||currentWord.reviewState==='manual'){
         const message='Este análisis manual está protegido. No se ha modificado nada.';
         morphNotice={wordId,message,error:false};bind.repaint();bind.status(message);return;
       }
@@ -506,7 +506,18 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       }
       // Ni siquiera en el modo automático elegir arbitrariamente la primera
       // lectura: cada aparición se revisa y confirma en su propio panel.
-      const rows=candidateRows('morphology',view.candidates);
+      const otherTypes=new Set(q.words.filter(w=>w.id!==wordId)
+        .map(w=>w.schoolCategory??morphTypeFromAnalysis(w.analysis))
+        .filter((x):x is MorphType=>x!==null));
+      const available=options.onAnalyzeMorphology?view.candidates.filter(c=>{
+        const type=morphTypeFromAnalysis(c.analysis);
+        return type&&!otherTypes.has(type);
+      }):view.candidates;
+      if(!available.length){
+        const message='Ningún análisis verificado permite cambiar esta aparición sin repetir categoría.';
+        morphNotice={wordId,message,error:false};bind.repaint();bind.status(message);return;
+      }
+      const rows=candidateRows('morphology',available);
       showCandidate('morph','Revisar análisis de «'+currentWord.surface+'»',target,
         rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
       bind.status('Revisa el análisis de «'+currentWord.surface+
@@ -581,9 +592,21 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         wordId:'morph.'+crypto.randomUUID(),
       };
       const view=service().selector.preview(s.edition,t);
-      const rows=view.candidates.map(x=>({id:x.id,value:view.surface,
+      if(options.onAnalyzeMorphology&&q.words.length>=4)
+        throw new Error('Ya hay cuatro apariciones morfológicas. Quita una antes de añadir otra.');
+      const existing=new Set(q.words.map(w=>w.schoolCategory??morphTypeFromAnalysis(w.analysis))
+        .filter((x):x is MorphType=>x!==null));
+      const eligible=options.onAnalyzeMorphology?
+        view.candidates.filter(x=>{
+          const category=morphTypeFromAnalysis(x.analysis);
+          return category&&!existing.has(category);
+        }):view.candidates;
+      const rows=eligible.map(x=>({id:x.id,value:view.surface,
         detail:x.lemmaId+' · '+x.analysis+' · '+x.reference}));
-      if(autoApply)await chooseCandidateDirect('token',t,rows,false);
+      if(!rows.length)throw new Error(options.onAnalyzeMorphology?
+        'Esta forma no añade un tipo nuevo, es invariable o carece de clasificación verificada.':
+        'No hay análisis elegibles para esta palabra.');
+      if(autoApply&&rows.length===1)await chooseCandidateDirect('token',t,rows,false);
       else showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
         JSON.stringify(s.edition),s.revision);
     });
