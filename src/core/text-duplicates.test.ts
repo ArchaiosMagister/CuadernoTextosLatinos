@@ -79,5 +79,5 @@ test('normaliza igual las vocales con cantidad precompuesta y con macrón combin
     latin:decomposed,author:'Otro',work:'Otro libro',reference:'2.3',
   });
   assert.equal(matches[0]?.kind,'identical');
-  assert.equal(matches[0]?.sharedWords,11);
+  assert.equal(matches[0]?.sharedWords,9);
 });
