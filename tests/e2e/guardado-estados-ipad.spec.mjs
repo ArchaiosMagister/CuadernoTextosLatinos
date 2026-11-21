@@ -20,15 +20,12 @@ test('guardado del cuaderno y vocabulario: estados diferenciados y visibles en i
   await form.locator('input').nth(0).fill('terra, -ae (f.)');
   await form.locator('input').nth(1).fill('tierra');
   await form.getByRole('button',{name:'Añadir entrada'}).click();
-  const row=page.locator('#editor .edition-vocab-row')
-    .filter({has:page.locator('input.edition-vocab-headword[value="terra, -ae (f.)"]')});
-  // El formulario de entrada puede repintarse, buscar por el valor efectivo.
-  const selected=page.locator('#editor .edition-vocab-row').filter({
-    has:page.locator('input.edition-vocab-headword')
-  }).filter({hasText:'Guardar'}).last();
-  const preferred=page.locator('#editor .edition-vocab-row').filter({
-    has:page.locator('input.edition-vocab-headword')
-  }).filter({has:page.locator('input.edition-vocab-meaning')}).last();
+  // La lista se ordena y Collatinus puede repintarla: usar el valor
+  // efectivo del input, no el orden de los lemas ni el atributo HTML.
+  const index=await page.locator('#editor .edition-vocab-row').evaluateAll(rows=>
+    rows.findIndex(row=>row.querySelector('input.edition-vocab-headword')?.value.startsWith('terra')));
+  expect(index).toBeGreaterThanOrEqual(0);
+  const preferred=page.locator('#editor .edition-vocab-row').nth(index);
   const save=preferred.locator('button.edition-vocab-save');
   const meaning=preferred.locator('input.edition-vocab-meaning');
   await expect(save).toHaveAttribute('data-save-state',/pending|saved/);
@@ -79,6 +76,7 @@ test('iPad: navegación y acciones siguen cómodas y hay foco visible',async({pa
   }));
   expect(new Set(metrics.inputHeights).size).toBe(1);
   expect(metrics.scroll).toBeLessThanOrEqual(2);
+  await page.keyboard.press('Tab');
   await pwa.focus();
   await expect(pwa).toHaveCSS('outline-style','solid');
 
