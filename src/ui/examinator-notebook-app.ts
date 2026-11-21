@@ -271,10 +271,11 @@ function proposalContext(latin: string, proposal: CollatinusGrammarProposal): HT
   return context;
 }
 type LatinLemma={lid:number;head:string;trad:string;note:string;proper:boolean};
-type CollatinusMethod = 'analyze' | 'vocabEntries';
+type CollatinusMethod = 'analyze' | 'vocabEntries' | 'warm';
 let collatinusWorker: Worker | null = null;
 let requestId = 0;
 const requests = new Map<number, { resolve: (result: unknown) => void; reject: (error: Error) => void }>();
+let collatinusWarmTask:Promise<void>|null=null;
 
 function callCollatinus(method: CollatinusMethod, args: Record<string, unknown>): Promise<unknown> {
   if (!collatinusWorker) {
@@ -290,6 +291,7 @@ function callCollatinus(method: CollatinusMethod, args: Record<string, unknown>)
     worker.addEventListener('error', event => {
       worker.terminate();
       collatinusWorker = null;
+      collatinusWarmTask = null;
       for (const request of requests.values()) request.reject(new Error(event.message || 'Collatinus no se pudo iniciar.'));
       requests.clear();
     });
@@ -305,6 +307,22 @@ function callCollatinus(method: CollatinusMethod, args: Record<string, unknown>)
       reject(error);
     }
   });
+}
+
+/** Solo se anticipa la preparación tras una acción docente de abrir etiquetas.
+ * Nunca se precarga en Inicio ni modifica el texto o las propuestas.
+ * Si falla, el análisis explícito conserva su mensaje de error habitual. */
+function prepareCollatinusForReview():void{
+  if(collatinusWarmTask)return;
+  try{
+    const pending=callCollatinus('warm',{}).then(()=>undefined);
+    collatinusWarmTask=pending;
+    void pending.catch(()=>{
+      if(collatinusWarmTask===pending)collatinusWarmTask=null;
+    });
+  }catch{
+    collatinusWarmTask=null;
+  }
 }
 
 interface AnalysisToken extends CollatinusGrammarToken {
@@ -973,6 +991,7 @@ function tagBankText(text:LatinText):void{
   passage.open=true;
   passage.append(el('summary','','Texto latino'),el('p','',text.latin));
   review.append(passage,analyze,status,result);panel.append(review);
+  prepareCollatinusForReview();
   M.modal('Etiquetas de «'+text.title+'»',panel,[{label:'Cancelar'},
     {label:'Guardar etiquetas',primary:true,onclick:async()=>{
       await writeSource(async()=>{
@@ -1186,6 +1205,7 @@ async function openGrammarEditor():Promise<void>{
   if(!await composer.flush())throw Error('No se han guardado los cambios pendientes.');
   const placement=composer.activePlacement();
   if(!placement)return;
+  prepareCollatinusForReview();
   const panel=el('div');
   const manual=el('div');
   const suggestions=el('div','collatinus-grammar-review');
