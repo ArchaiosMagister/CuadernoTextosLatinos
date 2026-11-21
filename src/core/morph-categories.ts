@@ -61,9 +61,11 @@ export function selectDiverseMorphology(
   const frequencies=new Map<MorphType,number>();
   for(const c of pool)frequencies.set(c.category,(frequencies.get(c.category)??0)+1);
   const choices=[...pool].sort((a,b)=>
+    // Primera prioridad docente: no repetir una palabra usada en el cuaderno
+    // cuando existe otra inédita de un tipo compatible.
+    Number(usedForms.has(a.key))-Number(usedForms.has(b.key))||
     (usedCategoryCounts.get(a.category)??0)-(usedCategoryCounts.get(b.category)??0)||
     (frequencies.get(a.category)??0)-(frequencies.get(b.category)??0)||
-    Number(usedForms.has(a.key))-Number(usedForms.has(b.key))||
     Number(a.source!=='verified')-Number(b.source!=='verified')||
     a.start-b.start);
   const chosen:MorphChoice[]=[],types=new Set(existingCategories),words=new Set<string>();
