@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { auditLibraryDuplicates, normalizedCitationKey, normalizedLatinKey } from './text-duplicates.js';
+import { auditLibraryDuplicates, findPossibleDuplicates, normalizedCitationKey, normalizedLatinKey } from './text-duplicates.js';
 import type { LatinText } from './model.js';
 
 type Source = Pick<LatinText, 'id' | 'title' | 'latin' | 'source'>;
@@ -59,4 +59,18 @@ test('los fragmentos largos con distinto contexto se reconocen aunque cambie la 
   assert.equal(found.length,1);
   assert.equal(found[0]?.kind,'overlap');
   assert.ok(found[0]!.sharedWords>=15);
+});
+
+test('detecta ocho palabras compartidas tras más de cuarenta fórmulas repetidas',()=>{
+  const prefix='arma virumque cano troiae qui primus';
+  const target=prefix+' ab oris';
+  const longLatin=Array.from({length:45},()=>prefix+' discessit').join(' ')
+    +' '+target+' postero die';
+  const found=findPossibleDuplicates([make('old',longLatin)],{
+    latin:target,author:'Salustio',work:'Catilina',reference:'18',
+  });
+  assert.equal(found.length,1,'el límite de posiciones no debe ocultar el solapamiento');
+  assert.equal(found[0]?.kind,'overlap');
+  assert.equal(found[0]?.sharedWords,8);
+  assert.equal(found[0]?.excerpt,target);
 });
