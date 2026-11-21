@@ -32,8 +32,16 @@ function hitAt(x:number,y:number,root:HTMLElement):Hit|null{
   // Comprobamos el rectángulo de cada token: el punto debe estar dentro de
   // las letras reales y no en el margen ni en el espacio entre palabras.
   const element=document.elementFromPoint(x,y);
-  const paragraph=element?.closest<HTMLElement>('.edition-latin');
-  if(!paragraph||!root.contains(paragraph))return null;
+  // WebKit puede asignar el clic al papel o a un elemento adyacente aunque
+  // el rectángulo real del token coincida con ese punto. La comprobación
+  // final se hace siempre contra las letras del texto (exact), no el margen.
+  if(!element||!root.contains(element))return null;
+  const paragraph=element.closest<HTMLElement>('.edition-latin')??
+    Array.from(root.querySelectorAll<HTMLElement>('.edition-latin')).find(candidate=>{
+      const box=candidate.getBoundingClientRect();
+      return x>=box.left-4&&x<=box.right+4&&y>=box.top-4&&y<=box.bottom+4;
+    });
+  if(!paragraph)return null;
   const latin=paragraph.textContent??'';
   const doc=document as Document&{
     caretRangeFromPoint?:(x:number,y:number)=>Range|null;
