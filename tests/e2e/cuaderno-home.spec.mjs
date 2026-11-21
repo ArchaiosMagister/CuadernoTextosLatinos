@@ -115,12 +115,16 @@ test('Banco: Collatinus propone etiquetas pero sólo persisten las confirmadas',
   await candidate.getByRole('button',{name:'Aceptar',exact:true}).click();
   await expect(review.locator('.cuaderno-bank-current')).toContainText('Voz pasiva');
   await review.getByRole('button',{name:'Guardar etiquetas'}).click();
-  const after=await page.evaluate(async()=>{
+  // El modal lanza una escritura asíncrona: esperar la confirmación real,
+  // y después verificar la persistencia. Un clic no es un commit de IndexedDB.
+  await expect(page.getByText('Etiquetas de la fuente guardadas.',{exact:true}))
+    .toBeVisible({timeout:15000});
+  await expect.poll(async()=>page.evaluate(async()=>{
     const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
     return (await new IndexedDbCorpusRepository().load()).corpus.texts
       .find(t=>t.title==='Pasaje para etiquetado')?.tagIds??[];
-  });
-  expect(after).toEqual(['gram.voz.pasiva']);
+  }),{timeout:15000,message:'La etiqueta confirmada debe persistir en IndexedDB'})
+    .toEqual(['gram.voz.pasiva']);
 });
 
 
