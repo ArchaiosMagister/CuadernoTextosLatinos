@@ -1,6 +1,7 @@
 import { conflictsWithGrammarForm } from '../core/grammar-tags.js';
 import type { LatinText } from '../core/model.js';
 import type {CollatinusGrammarToken} from '../core/collatinus-grammar.js';
+import {attachLatinReadingCards} from './latin-reading-card.js';
 /**
  * Primera interfaz de composición editorial.
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
@@ -923,7 +924,9 @@ export function createEditionPane(options:{
     }catch(e){setMessage('Migración cancelada: '+(e instanceof Error?e.message:String(e)),true);}
   }
 
+  let disposeLatinReader:()=>void=()=>{};
   function paintPreview():void {
+    disposeLatinReader();disposeLatinReader=()=>{};
     const target=element.querySelector<HTMLElement>('.edition-paper-pages');
     if(!target)return;
     target.replaceChildren();
@@ -934,6 +937,9 @@ export function createEditionPane(options:{
     if(session.mode==='whole-notebook'&&draft.cover)target.append(renderNotebookCover(draft.cover));
     for(const p of placements)target.append(paperFor(draft,p,draft.placements.indexOf(p),draft.placements.length));
     target.style.zoom=String(zoom/100);
+    // El lector vive exclusivamente en la vista previa. No se incorpora al papel exportable.
+    if(options.onAnalyzeMorphology)
+      disposeLatinReader=attachLatinReadingCards(target,options.onAnalyzeMorphology);
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
     if(review)review.textContent='Word numera las páginas físicas. En Safari, el PDF por impresión puede salir sin numeración 1 | N: si la necesitas, abre el DOCX en Pages y expórtalo como PDF. Comprueba los saltos en textos largos.';
   }
