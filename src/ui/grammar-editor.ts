@@ -1,3 +1,4 @@
+import {foldLatin} from '../core/library.js';
 import {allGrammarTags,GRAMMAR_GROUP_IDS,matchesGrammarTag,placementGrammarTags} from '../core/grammar-tags.js';
 import type {CorpusV1} from '../core/model.js';
 import type {TextPlacementV1} from '../core/edition-model.js';
@@ -31,6 +32,21 @@ export function renderGrammarEditor(placement:TextPlacementV1, corpus:CorpusV1, 
     const body=el('div','simple-grammar-body');
     body.append(el('p','hint','Etiquetas manuales del texto actual. No modifican las demás apariciones.'));
     const all=allGrammarTags(corpus);
+    const selectedTags=placementGrammarTags(placement);
+    const chips=el('div','grammar-chips');
+    chips.setAttribute('aria-label','Etiquetas seleccionadas');
+    for(const id of selectedTags){
+      const tag=all.find(item=>item.id===id);
+      const chip=el('span','grammar-chip',tag?.label??id);
+      chip.dataset.group=GRAMMAR_GROUP_IDS.find(group=>matchesGrammarTag(id,group,all))??'custom';
+      chips.append(chip);
+    }
+    body.append(chips);
+    const search=el('input','field-control grammar-tag-search');
+    search.type='search';search.placeholder='Buscar en el catálogo';
+    search.setAttribute('aria-label','Buscar etiqueta gramatical');
+    body.append(search);
+
     const children=(parent:string,host:HTMLElement,depth=0):void=>{
       for(const tag of all.filter(t=>t.parentId===parent)){
         const row=el('label','simple-tag-option');
@@ -76,6 +92,15 @@ export function renderGrammarEditor(placement:TextPlacementV1, corpus:CorpusV1, 
     input.setAttribute('aria-label','Nueva etiqueta gramatical');
     own.append(input,button('Añadir',()=>addCustomTag(input.value)));
     body.append(own);
+    search.addEventListener('input',()=>{
+      const query=foldLatin(search.value.trim());
+      for(const group of Array.from(body.querySelectorAll<HTMLDetailsElement>('.simple-tag-group'))){
+        const options=Array.from(group.querySelectorAll<HTMLElement>('.simple-tag-option'));
+        for(const option of options)option.hidden=Boolean(query)&&!foldLatin(option.textContent??'').includes(query);
+        group.hidden=Boolean(query)&&options.every(option=>option.hidden);
+        if(query&&!group.hidden)group.open=true;
+      }
+    });
     const fragments=el('details','notebook-fragments');
     fragments.append(el('summary','','Etiquetar fragmentos del texto ('+
       (placement.grammaticalSpans?.length??0)+')'));

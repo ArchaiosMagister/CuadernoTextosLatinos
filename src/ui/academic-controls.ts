@@ -16,6 +16,7 @@ import { createOfflineTeacherBankV1, academicTeacherSnapshotV1 } from '../core/a
 import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teacher-adapter.js';
 import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
 import {validateEdition} from '../core/edition-validation.js';
+import {morphologyOccurrencesFreshFirst} from '../core/academic-repetition.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -45,7 +46,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',text=''):HTMLEle
   const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;
 }
 function button(label:string,act:()=>void|Promise<void>):HTMLButtonElement{
-  const b=el('button','btn btn-outline',label);b.type='button';b.addEventListener('click',()=>{void act();});return b;
+  const b=el('button','btn btn-outline',label);b.type='button';
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\b/.test(label))
+    b.classList.add('cuaderno-ui-regen');
+  if(/^(?:Añadir|Subrayar)\b/.test(label))b.classList.add('cuaderno-ui-add');
+  b.addEventListener('click',()=>{void act();});return b;
 }
 function summary(error:unknown):string{return error instanceof Error?error.message:String(error);}
 function randomSeed():number{return crypto.getRandomValues(new Uint32Array(1))[0]??0;}
@@ -89,6 +94,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
   let pending:Pending|null=null;
+  let morphNotice:{wordId:string;message:string;error:boolean}|null=null;
   let paperRange:RangeTarget|null=null;
   let working=false;
   const allRules=Array.from({length:20},(_,i)=>'N'+String(i+1).padStart(2,'0'));
@@ -100,7 +106,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     }
     return {report:services,engine:engine!,selector:selector!};
   }
-  function clear():void{pending=null;paperRange=null;}
+  function clear():void{pending=null;paperRange=null;morphNotice=null;}
   function reject(error:unknown):void{bind.status('Propuesta no aplicada: '+summary(error),true);}
   function current(){
     const state=bind.snapshot();
@@ -314,14 +320,43 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   }
   function requestMorph(p:TextPlacementV1,q:Morph,wordId:string):void{
     void withSaved(async s=>{
+      morphNotice=null;
       const target:AcademicMorphTargetV1={
         placementId:p.id,questionId:q.id,wordId,expectedRevision:s.revision,
       };
-      const view=service().engine.previewMorph(s.edition,target);
+      const word=s.edition.placements.find(x=>x.id===p.id)?.questions
+        .find(x=>x.id===q.id&&x.kind==='morphology');
+      const currentWord=word?.kind==='morphology'?word.words.find(w=>w.id===wordId):null;
+      if(!currentWord)throw new Error('La aparición morfológica ya no existe.');
+      let view:ReturnType<AcademicQuestionEngineV1['previewMorph']>;
+      try {
+        view=service().engine.previewMorph(s.edition,target);
+      }catch(error){
+        const message='No se puede revisar esta aparición: '+summary(error);
+        morphNotice={wordId,message,error:true};
+        bind.repaint();bind.status(message,true);return;
+      }
+      if(!view.candidates.length){
+        const message='No hay análisis verificados disponibles para «'+currentWord.surface+
+          '». No se ha modificado nada.';
+        morphNotice={wordId,message,error:false};
+        bind.repaint();bind.status(message);return;
+      }
+      const only=view.candidates.length===1?view.candidates[0]:null;
+      if(only&&currentWord.reviewState==='verified'&&!currentWord.locked&&
+        only.lemmaId===currentWord.lemmaId&&only.analysis===currentWord.analysis){
+        const message='«'+currentWord.surface+
+          '» ya tiene su único análisis verificado. No hay una interpretación alternativa en el banco.';
+        morphNotice={wordId,message,error:false};
+        bind.repaint();bind.status(message);return;
+      }
+      // Ni siquiera en el modo automático elegir arbitrariamente la primera
+      // lectura: cada aparición se revisa y confirma en su propio panel.
       const rows=candidateRows('morphology',view.candidates);
-      if(autoApply)await chooseCandidateDirect('morph',target,rows,view.status==='locked');
-      else showCandidate('morph','Reanalizar únicamente esta aparición',target,
+      showCandidate('morph','Revisar análisis de «'+currentWord.surface+'»',target,
         rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
+      bind.status('Revisa el análisis de «'+currentWord.surface+
+        '» debajo de su aparición y confirma tu elección.');
     });
   }
   function requestGroup(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1):void{
@@ -422,8 +457,22 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           const plan=selector.prepare(e,original.target as MorphTokenTargetV1,original.chosen);
           next=await selector.commit(repository,plan,new Date().toISOString());
         }else if(original.kind==='morph'){
-          const plan=engine.prepareMorph(e,original.target as AcademicMorphTargetV1,
-            original.chosen,original.replaceLocked);
+          const target=original.target as AcademicMorphTargetV1;
+          const placement=e.placements.find(p=>p.id===target.placementId);
+          const question=placement?.questions.find(q=>q.id===target.questionId);
+          const word=question?.kind==='morphology'?
+            question.words.find(w=>w.id===target.wordId):null;
+          const selected=engine.previewMorph(e,target).candidates
+            .find(row=>row.id===original.chosen);
+          if(word&&selected&&word.reviewState==='verified'&&
+            word.lemmaId===selected.lemmaId&&word.analysis===selected.analysis){
+            const message='Ese análisis ya estaba confirmado para «'+word.surface+
+              '». No se han modificado los datos.';
+            pending=null;
+            morphNotice={wordId:word.id,message,error:false};
+            bind.repaint();bind.status(message);return;
+          }
+          const plan=engine.prepareMorph(e,target,original.chosen,original.replaceLocked);
           next=await engine.commit(repository,plan,new Date().toISOString());
         }else{
           const plan=engine.prepareSlot(e,original.target as AcademicSlotTargetV1,
@@ -431,13 +480,16 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           next=await engine.commit(repository,plan,new Date().toISOString());
         }
       }
-      pending=null;paperRange=null;replaceGroups.clear();
+      pending=null;morphNotice=null;paperRange=null;replaceGroups.clear();
       bind.saved(next);
       bind.status('Propuesta confirmada y guardada con historial. Revisión '+next.revision+'.');
     });
   }
-  function review():HTMLElement|null{
+  function review(inlineMorph=false):HTMLElement|null{
     if(!pending)return null;
+    const morphCandidate=pending.type==='candidate'&&pending.kind==='morph';
+    // El panel morfológico aparece junto a la palabra, no lejos en la cabecera.
+    if(morphCandidate!==inlineMorph)return null;
     const box=el('section','edition-academic-review');
     box.setAttribute('aria-label','Revisar propuesta académica');
     box.append(el('h3','',pending.label),
@@ -570,7 +622,14 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     section.append(ui);
   }
   function renderSlot(section:HTMLElement,p:TextPlacementV1,q:Choice,o:ChoiceOptionV1,slotId:string,index:number):void{
-    section.append(button('Proponer solo esta palabra',()=>requestSlot(p,q,o,slotId,index)));
+    // Examinator2: «Otra» / «Otro» junto a cada término. Mantener el nombre
+    // accesible anterior y exactamente el mismo manejador de propuesta.
+    const short=o.kind==='preverb'||o.kind==='latinism'?'Otro':'Otra';
+    const propose=button(short,()=>requestSlot(p,q,o,slotId,index));
+    propose.title='Proponer solo esta palabra';
+    propose.setAttribute('aria-label','Proponer solo esta palabra');
+    propose.classList.add('cuaderno-ui-regen','edition-slot-regenerate');
+    section.append(propose);
   }
   function renderQuestion(section:HTMLElement,p:TextPlacementV1,q:Choice):void{
     const ui=el('div','edition-academic-question');
@@ -589,8 +648,23 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const line=el('div','edition-academic-morph-row');
         line.append(el('span','',word.surface+' · '+(word.analysis??'Pendiente')+
           (word.locked?' · manual protegida':'')));
-        line.append(button('Reanalizar aparición',()=>requestMorph(p,q,word.id)));
+        const revisit=button('Revisar análisis',()=>requestMorph(p,q,word.id));
+        revisit.setAttribute('aria-label','Revisar análisis de '+word.surface);
+        line.append(revisit);
         ui.append(line);
+        if(morphNotice?.wordId===word.id){
+          const notice=el('p','edition-morph-feedback',morphNotice.message);
+          notice.setAttribute('role',morphNotice.error?'alert':'status');
+          ui.append(notice);
+        }
+        if(pending?.type==='candidate'&&pending.kind==='morph'&&
+          (pending.target as AcademicMorphTargetV1).wordId===word.id){
+          const inline=review(true);
+          if(inline){
+            inline.classList.add('edition-morph-inline-review');
+            ui.append(inline);
+          }
+        }
       }
     }
     ui.append(el('p','hint',
@@ -687,8 +761,9 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         return records.length&&unambiguous
           ?[{surface,start:t.index!,end:t.index!+surface.length,key}]:[];
       });
-      const unique=possible.filter(t=>!already.has(t.key));
-      const pool=unique.length>=2?unique:possible;
+      // Si solo queda una forma inédita, utilizarla primero y completar
+      // únicamente lo que falte con formas previamente usadas.
+      const pool=morphologyOccurrencesFreshFirst(possible,already);
       const taken=new Set<string>();
       for(const token of pool){
         if(taken.size>=2)break;
@@ -714,9 +789,21 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   function inspectRepetitions(state:EditionSnapshotV1){
     const groups=new Map<string,{title:string;kind:AcademicSlotKindV1;word:string;
       target:AcademicSlotTargetV1;protected:boolean}[]>();
+    const morphology=new Map<string,{title:string;surface:string;protected:boolean}[]>();
     const baseCounts=new Map<string,string[]>();
     for(const placement of state.edition.placements)for(const question of placement.questions){
-      if(!question.enabled||question.kind!=='choice')continue;
+      if(!question.enabled)continue;
+      if(question.kind==='morphology'){
+        for(const word of question.words){
+          const key=normalizeAcademicExercise(word.surface);
+          const uses=morphology.get(key)??[];
+          uses.push({title:placement.text.title,surface:word.surface,
+            protected:word.locked||word.reviewState==='manual'});
+          morphology.set(key,uses);
+        }
+        continue;
+      }
+      if(question.kind!=='choice')continue;
       for(const option of question.options){
         if(!option.enabled)continue;
         if(option.kind==='preverb'){
@@ -727,7 +814,8 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           continue;
         }
         for(const slot of option.slots){
-          const key=option.kind+'\0'+normalizeAcademicExercise(slot.value);
+          // Evitar repetir la misma palabra incluso entre tipos distintos de ejercicio.
+          const key=normalizeAcademicExercise(slot.value);
           const uses=groups.get(key)??[];
           uses.push({title:placement.text.title,kind:option.kind,word:slot.value,
             protected:slot.locked||slot.origin==='manual',
@@ -738,18 +826,21 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         }
       }
     }
-    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),baseCounts};
+    return {duplicates:[...groups.values()].filter(uses=>uses.length>1),
+      morphologyDuplicates:[...morphology.values()].filter(uses=>uses.length>1),
+      baseCounts};
   }
   function repetitionNotice():HTMLElement|null{
     const state=bind.snapshot();
     if(!state)return null;
-    const {duplicates,baseCounts}=inspectRepetitions(state);
+    const {duplicates,morphologyDuplicates,baseCounts}=inspectRepetitions(state);
     const repeatedBases=[...baseCounts.values()].filter(uses=>uses.length>1).length;
-    if(!duplicates.length&&!repeatedBases)return null;
+    if(!duplicates.length&&!repeatedBases&&!morphologyDuplicates.length)return null;
     const notice=el('p','hint edition-repetition-notice',
       'Repeticiones: '+duplicates.length+(duplicates.length===1?' palabra':' palabras')+
+      ', '+morphologyDuplicates.length+(morphologyDuplicates.length===1?' forma morfológica':' formas morfológicas')+
       ' y '+repeatedBases+(repeatedBases===1?' base preverbial':' bases preverbiales')+
-      '. Cuaderno → Revisar cuaderno.');
+      (autoApply?'. Organizar → Revisar cuaderno.':'. Cuaderno → Revisar cuaderno.'));
     notice.setAttribute('role','status');
     return notice;
   }
@@ -809,23 +900,28 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     const result=el('div');details.append(result);
     async function inspect():Promise<void>{
       await withSaved(state=>{
-        const {duplicates,baseCounts}=inspectRepetitions(state);
+        const {duplicates,morphologyDuplicates,baseCounts}=inspectRepetitions(state);
         result.replaceChildren(el('p','',state.edition.placements.length+' textos revisados · '+
           baseCounts.size+' bases preverbiales distintas'));
+        result.append(el('p','hint','Las palabras se comparan en todo el cuaderno, '+
+          'también entre apartados distintos. Las decisiones manuales están protegidas; '+
+          'si el banco verificado no ofrece alternativas nuevas, la repetición es inevitable.'));
         for(const kind of ['phonetics','prefix','latinism'] as const){
           const rows=duplicates.filter(uses=>uses[0]?.kind===kind);
           result.append(el('h4','',optionName(kind)+' · '+rows.length+' palabras repetidas'));
           for(const uses of rows){
             const first=uses[0]!;
             result.append(el('p','',first.word+' · '+uses.map(use=>
-              use.title+(use.protected?' (protegida)':'')).join(', ')));
+              use.title+(use.protected?' (protegida)':'')+
+                (use.kind!==first.kind?' ['+optionName(use.kind)+']':'')).join(', ')));
             const preserved=uses.find(use=>use.protected)??first;
             for(const use of uses.filter(use=>use!==preserved&&!use.protected)){
               const engine=service().engine;
               const choices=engine.previewSlot(state.edition,use.target,true).candidates;
               const candidate=choices[0];
               if(!candidate){
-                result.append(el('p','',use.title+' · Sin alternativa verificada libre'));
+                result.append(el('p','',use.title+
+                  ' · Repetición inevitable: no quedan alternativas nuevas verificadas con los filtros actuales'));
                 continue;
               }
               result.append(button(use.title+' · Sustituir por '+candidate.value+' ('+
@@ -841,6 +937,13 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
               }));
             }
           }
+        }
+        result.append(el('h4','','Morfología · '+morphologyDuplicates.length+
+          (morphologyDuplicates.length===1?' forma repetida':' formas repetidas')));
+        for(const uses of morphologyDuplicates){
+          result.append(el('p','',uses[0]!.surface+' · '+uses.map(use=>use.title+
+            (use.protected?' (manual protegida)':'')).join(', ')+
+            ' · La forma se conserva; comprueba si hay otra forma verificable en el pasaje.'));
         }
         reviewPreverbBases(result,state,baseCounts);
       });

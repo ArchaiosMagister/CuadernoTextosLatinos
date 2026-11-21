@@ -182,6 +182,19 @@ export interface TextPlacementV1 {
   reviewFlags: ReviewFlagV1[];
 }
 
+/** Portada opcional; no se modifica el esquema ni los cuadernos existentes. */
+export interface NotebookCoverV1 {
+  title: string;
+  subtitle: string;
+  course: string;
+  studentLabel: string;
+  groupLabel: string;
+  imageDataUrl: string;
+  imageCredit: string;
+  colorMode: 'color' | 'gray' | 'mono';
+  reflection: boolean;
+}
+
 export interface NotebookEditionV1 {
   editionSchemaVersion: typeof EDITION_SCHEMA_VERSION;
   id: EntityId;
@@ -192,6 +205,7 @@ export interface NotebookEditionV1 {
   updatedAt: string;
   format: PageFormatV1;
   placements: TextPlacementV1[];
+  cover?: NotebookCoverV1;
 }
 
 /** El control de sesión NO forma parte de la copia académica. */

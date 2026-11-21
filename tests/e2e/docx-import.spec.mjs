@@ -60,11 +60,14 @@ test('iPad: importar DOCX offline con subrayados, vocabulario y latinismos gener
   page.once('dialog',dialog=>dialog.accept('Cuaderno de importación'));
   await page.locator('#btnNew').click();
   const chooser=page.waitForEvent('filechooser');
-  await page.getByRole('button',{name:'Importar Word'}).click();
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
   await (await chooser).setFiles({name:'eutropio.docx',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(documentXml())});
-  await expect(page.getByRole('button',{name:'Incorporar al cuaderno'})).toBeVisible();
+  // Parsear DOCX en Safari puede tardar más de los 5 s del timeout global
+  // en CI; seguimos exigiendo que el botón aparezca y el archivo sea válido.
+  await expect(page.getByRole('button',{name:'Incorporar al cuaderno'}))
+    .toBeVisible({timeout:15000});
   await expect(page.getByText('4 subrayados · 4 entradas reales de vocabulario.')).toBeVisible();
   await page.getByRole('button',{name:'Incorporar al cuaderno'}).click();
   await expect(page.locator('.edition-paper-title')).toHaveText(
@@ -95,7 +98,7 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
   await page.setViewportSize({width:390,height:844});
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
   page.once('dialog',dialog=>dialog.accept('Cuaderno de Salustio'));
   await page.locator('#btnNew').click();
   const latin='Omnis homines qui sese student praestare ceteris animalibus summa ope niti decet.';
@@ -108,7 +111,7 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
     p(['Análisis morfológico de las palabras subrayadas. (1p.)'])+
     '</w:body></w:document>';
   const choose=page.waitForEvent('filechooser');
-  await page.getByRole('button',{name:'Importar Word'}).click();
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
   await (await choose).setFiles({name:'salustio.docx',
     mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer:sampleDocx(xml)});
@@ -174,8 +177,86 @@ test('Salustio sin vocabulario en Word: analizar todo el pasaje sin marcar palab
   await page.locator('#btnSave').click();
   await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})
-    .locator('option:checked')).toContainText('Cuaderno de Salustio');
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno de Salustio'})
+    .getByRole('button',{name:'Abrir'}).click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('textbox',{name:'Traducción de animal, -alis'})).toHaveValue('animal');
+});
+
+test('selecciona varios Word y conserva el orden de los textos en un solo cuaderno',async({page})=>{
+  await page.setViewportSize({width:390,height:740});
+  await page.goto('/examinator-cuadernos/');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept('Cuaderno por lotes'));
+  await page.locator('#btnNew').click();
+  const chooser=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Importar Word',exact:true}).click();
+  const file=name=>({name,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(documentXml())});
+  await (await chooser).setFiles([file('primero.docx'),file('segundo.docx')]);
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(2);
+  const first=modal.locator('.word-review-item').nth(0);
+  const second=modal.locator('.word-review-item').nth(1);
+  await first.locator('summary').first().click();
+  await first.getByRole('textbox',{name:'Título del texto'}).fill('Entrada primera');
+  await second.locator('summary').first().click();
+  await second.getByRole('textbox',{name:'Título del texto'}).fill('Entrada segunda');
+  await expect(modal.locator('.mf').getByRole('button',{name:'Incorporar 2 textos'})).toBeInViewport();
+  await modal.getByRole('button',{name:'Incorporar 2 textos'}).click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 2 de 2');
+  await expect(page.getByRole('combobox',{name:'Ir a texto del cuaderno'}).locator('option')).toHaveText([
+    'Entrada primera','Entrada segunda',
+  ]);
+});
+
+
+test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabulario al reutilizar',async({page})=>{
+  await page.setViewportSize({width:820,height:1180});
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  const chooser=page.waitForEvent('filechooser');
+  await bank.getByRole('button',{name:'Importar Word al banco'}).click();
+  await (await chooser).setFiles([
+    {name:'primero.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer:sampleDocx(documentXml())},
+    {name:'segundo.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer:sampleDocx(documentXml().replace('Finito igitur','Postremo igitur'))},
+  ]);
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(2);
+  await modal.getByRole('button',{name:'Guardar 2 textos en el banco'}).click();
+  await expect(bank).toContainText('2 textos distintos');
+  const data=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const x=(await new IndexedDbCorpusRepository().load()).corpus.texts;
+    return x.map(t=>({title:t.title,underlines:t.teacherDocx?.underlines.length,
+      vocabulary:t.teacherDocx?.vocabulary.length,lexical:t.teacherDocx?.lexical.phonetics.length}));
+  });
+  expect(data).toHaveLength(2);
+  expect(data.every(x=>x.underlines===4 && x.vocabulary===4)).toBe(true);
+  // Las etiquetas confirmadas en el banco deben pasar a la aparición,
+  // incluso cuando el Word lleva subrayados y vocabulario.
+  await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    const {attachGrammarTags}=await import('/core/grammar-tags.js');
+    const repository=new IndexedDbCorpusRepository();
+    const saved=await repository.load();
+    const next=attachGrammarTags(saved.corpus,saved.corpus.texts[0].id,['gram.voz.pasiva']);
+    await repository.save(next,saved.revision);
+  });
+  page.once('dialog',d=>d.accept('Cuaderno que reutiliza Word'));
+  await page.locator('#btnNew').click();
+  await page.getByRole('button',{name:'Banco propio'}).click();
+  const listing=page.locator('.modal').last();
+  await listing.getByRole('button',{name:/Añadir «Los romanos envían legados/}).first().click();
+  await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
+  await expect(page.locator('.edition-underlined')).toHaveCount(4);
+  await expect(page.locator('.edition-vocabulary-line').filter({hasText:'Egipto'})).toHaveCount(1);
+  expect(await page.evaluate(async()=>{
+    const {WorkspaceRepository}=await import('/storage/workspace-repository.js');
+    const saved=(await new WorkspaceRepository().listEditions())
+      .find(n=>n.edition.title==='Cuaderno que reutiliza Word');
+    return saved?.edition.placements[0]?.grammaticalTagIds.includes('gram.voz.pasiva');
+  })).toBe(true);
 });

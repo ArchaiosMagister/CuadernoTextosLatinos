@@ -2,7 +2,7 @@ import {
   EDITION_SCHEMA_VERSION, TEMPLATE_POINTS_HUNDREDTHS,
   type ChoiceOptionV1, type EditableFieldV1, type EditableTextV1,
   type EvidenceV1, type MorphWordV1, type NotebookEditionV1,
-  type PageFormatV1, type QuestionKindV1, type QuestionStyleV1,
+  type NotebookCoverV1, type PageFormatV1, type QuestionKindV1, type QuestionStyleV1,
   type QuestionV1, type QuestionWordSlotV1, type ReviewFlagV1,
   type SourceLinkV1, type TextMarkV1, type TextPlacementV1,
   type VocabularyEntryV1, type GrammarSpanV1, type GrammarAnchorV1, type GrammarReviewDecisionV1,
@@ -278,16 +278,37 @@ function placement(input:unknown,path:string):TextPlacementV1 {
       .map((decision,i)=>grammarReviewDecision(decision,`${path}.grammarReview[${i}]`,sourceText.latin))}:{}),
     reviewFlags:array(d.reviewFlags,`${path}.reviewFlags`,4000).map((v,i)=>reviewFlag(v,`${path}.reviewFlags[${i}]`))};
 }
+function coverData(input:unknown):NotebookCoverV1{
+  const d=object(input,'edition.cover',[
+    'title','subtitle','course','studentLabel','groupLabel','imageDataUrl',
+    'imageCredit','colorMode','reflection',
+  ]);
+  const imageDataUrl=str(d.imageDataUrl,'edition.cover.imageDataUrl',850_000);
+  if(!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(imageDataUrl) ||
+     (imageDataUrl.length-23)%4!==0)
+    fail('edition.cover.imageDataUrl','imagen JPEG incrustada inválida');
+  return {
+    title:str(d.title,'edition.cover.title',180),
+    subtitle:str(d.subtitle,'edition.cover.subtitle',180,true),
+    course:str(d.course,'edition.cover.course',120,true),
+    studentLabel:str(d.studentLabel,'edition.cover.studentLabel',100),
+    groupLabel:str(d.groupLabel,'edition.cover.groupLabel',100),
+    imageDataUrl,imageCredit:str(d.imageCredit,'edition.cover.imageCredit',280,true),
+    colorMode:choice(d.colorMode,'edition.cover.colorMode',['color','gray','mono']),
+    reflection:flag(d.reflection,'edition.cover.reflection'),
+  };
+}
 /** Rechaza campos extraños y referencias rotas; devuelve una copia normalizada independiente. */
 export function validateEdition(input:unknown):NotebookEditionV1 {
-  const d=object(input,'edition',['editionSchemaVersion','id','legacyNotebookId','title','locale','createdAt','updatedAt','format','placements']);
+  const d=object(input,'edition',['editionSchemaVersion','id','legacyNotebookId','title','locale','createdAt','updatedAt','format','placements'],['cover']);
   if(d.editionSchemaVersion!==EDITION_SCHEMA_VERSION)fail('edition.editionSchemaVersion','versión incompatible');
   const e:NotebookEditionV1={editionSchemaVersion:EDITION_SCHEMA_VERSION,id:id(d.id,'edition.id'),
     legacyNotebookId:d.legacyNotebookId===null?null:id(d.legacyNotebookId,'edition.legacyNotebookId'),
     title:str(d.title,'edition.title',250),locale:choice(d.locale,'edition.locale',['es']),
     createdAt:utc(d.createdAt,'edition.createdAt'),updatedAt:utc(d.updatedAt,'edition.updatedAt'),
     format:format(d.format,'edition.format'),
-    placements:array(d.placements,'edition.placements',1000).map((v,i)=>placement(v,`edition.placements[${i}]`))};
+    placements:array(d.placements,'edition.placements',1000).map((v,i)=>placement(v,`edition.placements[${i}]`)),
+    ...(d.cover===undefined?{}:{cover:coverData(d.cover)})};
   if(e.updatedAt<e.createdAt)fail('edition.updatedAt','anterior a createdAt');
   // Los IDs de entidades son únicos en toda la edición, no solo dentro de un arreglo.
   const ids = new Set<string>();

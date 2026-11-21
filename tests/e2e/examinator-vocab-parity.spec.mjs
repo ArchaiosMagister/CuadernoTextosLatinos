@@ -43,15 +43,15 @@ test('Vocabulario Examinator2: modos, æ/œ, hiatos, cantidades y preferencias a
   const row=page.locator('.edition-vocab-row').nth(idx);
   await row.locator('.edition-vocab-meaning').fill('pena | castigo');
   await row.locator('.edition-vocab-save').click();
-  await expect(row.locator('.edition-vocab-save')).toContainText('Guardada');
+  await expect(row.locator('.edition-vocab-save')).toContainText('Guardado');
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem(
     'cuaderno-examinator.vocabulario.v1')||'[]').some(x=>
     x.headword.startsWith('pœna')&&x.meaning==='pena | castigo'))).toBe(true);
   await page.locator('#btnSave').click();
   await expect(page.getByText('Cuaderno guardado.',{exact:true})).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})
-    .locator('option:checked')).toContainText('Cuaderno ligaduras');
+  await page.locator('.cuaderno-home-card').filter({hasText:'Cuaderno ligaduras'})
+    .getByRole('button',{name:'Abrir'}).click();
   await tabs.getByRole('button',{name:'Vocabulario'}).click();
   await expect(page.getByRole('combobox',{name:'Cantidades vocálicas'})).toHaveValue('ninguna');
   await expect.poll(async()=>(await heads.evaluateAll(nodes=>nodes.map(node=>node.value))).join(' | '),

@@ -1,11 +1,13 @@
+import { conflictsWithGrammarForm } from '../core/grammar-tags.js';
 import type { LatinText } from '../core/model.js';
 /**
  * Primera interfaz de composición editorial.
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
  * no una segunda fuente de datos. El legado de fase 2 permanece intacto.
  */
-import type { GrammarReviewDecisionV1, NotebookEditionV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
+import type { GrammarReviewDecisionV1, NotebookEditionV1, NotebookCoverV1, TextPlacementV1, VocabularyEntryV1 } from '../core/edition-model.js';
 import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
+import { COVER_PHOTOS, loadCoverPhoto, loadOwnCoverPhoto, prepareWordCoverImage } from '../core/cover-photos.js';
 import type {ParsedTeacherDocx} from '../core/docx-import.js';
 import {applyParsedTeacherDocx} from '../core/docx-import-apply.js';
 import { choiceHeading, editOptionStatement, editPlacementText, editQuestionStatement,
@@ -20,7 +22,8 @@ import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPla
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
 import { createAcademicControls } from './academic-controls.js';
 import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
-import { splitInlineItalics } from '../core/edition-inline-formatting.js';
+import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
+import {placementGrammarTags,GRAMMAR_CATALOGUE,GRAMMAR_GROUP_IDS,matchesGrammarTag} from '../core/grammar-tags.js';
 import { suggestVocabulary, acceptVocabulary, type VocabularyDecisionV1, type VocabularyProposalV1 } from '../core/vocabulary-suggestions.js';
 import { createNotebookDocx, notebookExportWarnings, exportQuestionHeading } from '../export/notebook-documents.js';
 import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
@@ -46,7 +49,16 @@ function node<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',value=''):HTML
   const e=document.createElement(tag);if(cls)e.className=cls;if(value)e.textContent=value;return e;
 }
 function action(label:string,callback:()=>void|Promise<void>,cls='btn btn-outline'):HTMLButtonElement {
-  const e=node('button',cls,label);e.type='button';e.addEventListener('click',()=>{void callback();});return e;
+  const e=node('button',cls,label);e.type='button';
+  // Identificadores solo visuales: nunca modifican los manejadores ni sus datos.
+  if(/\bWord\b/.test(label))e.classList.add('cuaderno-ui-word');
+  if(/\bPDF\b/.test(label))e.classList.add('cuaderno-ui-pdf');
+  if(/^(?:Exportar|PDF \/ Imprimir|Imprimir borrador)/.test(label))e.classList.add('cuaderno-ui-export');
+  if(/^(?:Regenerar|Generar|Proponer|Reanalizar|Sustituir)\b/.test(label))e.classList.add('cuaderno-ui-regen');
+  if(/^\+?\s*(?:Añadir|Agregar)\b|^\+ Cuaderno\b/.test(label))e.classList.add('cuaderno-ui-add');
+  if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\b))\b/.test(label)||label==='×')e.classList.add('cuaderno-ui-remove');
+  if(/^Guardar\b/.test(label))e.classList.add('cuaderno-ui-save');
+  e.addEventListener('click',()=>{void callback();});return e;
 }
 function textField(label:string,value:string,change:(value:string)=>void,multiline=false):HTMLElement {
   const wrap=node('label','edition-field');
@@ -83,15 +95,24 @@ function buildMarkedLatin(p:TextPlacementV1):HTMLElement {
   paragraph.dataset.placementId=p.id;
   const raw=p.text.latin, marks=[...p.text.markup].sort((a,b)=>a.startUtf16-b.startUtf16);
   let position=0;
+  const appendLatin=(text:string,markKind:'morph-underline'|'editorial-roman'|null=null,review=false):void=>{
+    for(const segment of splitLatinOmissions(text)){
+      if(!segment.roman&&!markKind){paragraph.append(document.createTextNode(segment.text));continue;}
+      const part=node('span',markKind==='morph-underline'?'edition-underlined':'edition-roman');
+      // Una omisión editorial […] es puntuación, no latín.
+      if(segment.roman)part.classList.add('edition-roman');
+      part.textContent=segment.text;
+      if(review){part.classList.add('edition-review');part.title='Revisión del anclaje necesaria';}
+      paragraph.append(part);
+    }
+  };
   for(const mark of marks){
     if(mark.startUtf16<position)continue;
-    paragraph.append(document.createTextNode(raw.slice(position,mark.startUtf16)));
-    const part=node('span',mark.kind==='morph-underline'?'edition-underlined':'edition-roman');
-    part.textContent=raw.slice(mark.startUtf16,mark.endUtf16);
-    if(mark.reviewRequired){part.classList.add('edition-review');part.title='Revisión del anclaje necesaria';}
-    paragraph.append(part);position=mark.endUtf16;
+    appendLatin(raw.slice(position,mark.startUtf16));
+    appendLatin(raw.slice(mark.startUtf16,mark.endUtf16),mark.kind,mark.reviewRequired);
+    position=mark.endUtf16;
   }
-  paragraph.append(document.createTextNode(raw.slice(position)));
+  appendLatin(raw.slice(position));
   return paragraph;
 }
 function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total:number):HTMLElement {
@@ -162,10 +183,38 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
   paper.append(footer);
   return paper;
 }
+/** Portada académica del modelo del usuario: marco, fotografía y nombre/grupo. */
+export function renderNotebookCover(cover:NotebookCoverV1):HTMLElement{
+  const paper=node('article','edition-cover');
+  paper.setAttribute('aria-label','Portada del cuaderno');
+  paper.dataset.colorMode=cover.colorMode;
+  const header=node('header','edition-cover-heading');
+  header.append(node('h1','',cover.title));
+  paper.append(header);
+  if(cover.subtitle)paper.append(node('p','edition-cover-subtitle',cover.subtitle));
+  if(cover.course)paper.append(node('p','edition-cover-course',cover.course));
+  const figure=node('figure','edition-cover-figure');
+  const image=node('img','edition-cover-photo');
+  image.src=cover.imageDataUrl;
+  image.alt='Imagen elegida para la portada';
+  figure.append(image);
+  if(cover.reflection){
+    const mirror=node('img','edition-cover-reflection');
+    mirror.src=cover.imageDataUrl;mirror.alt='';
+    mirror.setAttribute('aria-hidden','true');figure.append(mirror);
+  }
+  paper.append(figure);
+  const fields=node('div','edition-cover-fields');
+  fields.append(node('p','',cover.studentLabel),node('p','',cover.groupLabel));
+  paper.append(fields);
+  return paper;
+}
+
 /** Hoja imprimible derivada del mismo modelo que la vista previa, sin datos duplicados. */
 export function renderNotebookPrintPages(edition:NotebookEditionV1):HTMLElement {
   const root=node('main','edition-print-root');
   root.setAttribute('aria-label','Cuaderno A4 para impresión PDF');
+  if(edition.cover)root.append(renderNotebookCover(edition.cover));
   for(const [index,p] of edition.placements.entries()){
     root.append(paperFor(edition,p,index,edition.placements.length));
   }
@@ -191,6 +240,8 @@ type GrammarAssignment={
 };
 export function createEditionPane(options:{
   autoApply?:boolean;autoVocabulary?:boolean;onAddSource?:()=>void;
+  onEditGrammarTags?:()=>void|Promise<void>;
+  tagLabel?:(id:string)=>string;
   findCorpusSource?:(id:string)=>Promise<LatinText|undefined>;
   onAnalyzeVocabulary?:(latin:string,quantity:VocabularyQuantityMode)=>
     Promise<CollatinusVocabularyCandidate[]>;
@@ -385,6 +436,14 @@ export function createEditionPane(options:{
         setMessage('Este texto ya figura en el cuaderno; se abre sin duplicarlo.');
         return true;
       }
+      // Un DOCX del banco mantiene sus subrayados, entradas de vocabulario y
+      // ejercicios docentes. Se crea una aparición vinculada, no una importación plana.
+      if(text.teacherDocx){
+        const imported={...text.teacherDocx,title:titleOverride?.trim()||text.title,
+          latin:text.latin,author:text.source.author,work:text.source.work,
+          reference:text.source.reference};
+        return importTeacherDocument(imported,text.id,text.tagIds);
+      }
       const at=now(),place=placementFromCorpus(text,freshId('place'),at,()=>freshId('item'));
       // Un pasaje puede tener títulos docentes diferentes en cuadernos distintos.
       // La biblioteca compartida, los títulos históricos y las fuentes no cambian.
@@ -419,15 +478,16 @@ export function createEditionPane(options:{
   }
 
   /** Un Word es una aparición manual aislada del Corpus original. */
-  async function importTeacherDocument(doc:ParsedTeacherDocx):Promise<boolean>{
+  async function importTeacherDocument(doc:ParsedTeacherDocx,sourceId:string|null=null,
+    sourceTagIds:readonly string[]=[]):Promise<boolean>{
     if(!draft||!session||!current||!await flush())return false;
     if(!doc.title.trim()||!doc.latin.trim())return false;
     const at=now(),editionId=current.edition.id;
     const place=createPlacement({
       id:freshId('place'),
-      source:{kind:'manual',sourceId:null,urn:null,importedAt:at},
+      source:{kind:sourceId?'corpus':'manual',sourceId,urn:null,importedAt:at},
       title:doc.title,latin:doc.latin,author:doc.author,work:doc.work,
-      reference:doc.reference,
+      reference:doc.reference,grammaticalTagIds:[...sourceTagIds],
     },()=>freshId('item'));
     try{
       // Prevalidar el documento completo antes del primer commit: un DOCX
@@ -501,6 +561,10 @@ export function createEditionPane(options:{
       const index=spans.findIndex(span=>!span.reviewRequired&&span.startUtf16===start&&span.endUtf16===end);
       const existing=spans[index];
       if(existing?.tagIds.includes(tagId))continue;
+      if(existing && conflictsWithGrammarForm(existing.tagIds, tagId)){
+        setMessage('Ese fragmento ya tiene una forma incompatible. Revísala antes de añadir otra.', true);
+        return false;
+      }
       const span={id:existing?.id??freshId('span'),startUtf16:start,endUtf16:end,
         exact:latin.slice(start,end),textFingerprint:fingerprintForMark(latin,start,end),
         tagIds:[...(existing?.tagIds??[]),tagId],reviewRequired:false,
@@ -865,13 +929,40 @@ export function createEditionPane(options:{
     const placements=session.mode==='whole-notebook'?draft.placements:
       draft.placements.filter(p=>p.id===(selection()?.id??''));
     if(!placements.length){target.append(node('p','hint','Este cuaderno no contiene textos. Añádelos desde «Cuaderno».'));return;}
+    if(session.mode==='whole-notebook'&&draft.cover)target.append(renderNotebookCover(draft.cover));
     for(const p of placements)target.append(paperFor(draft,p,draft.placements.indexOf(p),draft.placements.length));
     target.style.zoom=String(zoom/100);
     const review=element.querySelector<HTMLElement>('.edition-preview-note');
     if(review)review.textContent='Word numera las páginas físicas. En Safari, el PDF por impresión puede salir sin numeración 1 | N: si la necesitas, abre el DOCX en Pages y expórtalo como PDF. Comprueba los saltos en textos largos.';
   }
   let vocabularyAnalysisTimer:number|undefined;
+  // Preferencias de despliegue solo de interfaz, no se guardan en el cuaderno.
+  let bibliographyExpanded=true;
+  const foldedQuestions=new Set<string>();
+  // Estos estados son únicamente de presentación: nunca se escriben en el
+  // cuaderno ni generan de nuevo palabras al desplegar un bloque.
+  const editingQuestionStatements=new Set<string>();
+  const editingOptionStatements=new Set<string>();
+  const expandedAcademicOptions=new Set<string>();
+  const formatExpanded={typography:true,spacing:true,margins:false};
   function menuText(panel:HTMLElement,p:TextPlacementV1):void {
+    if(options.onEditGrammarTags){
+    const tags=placementGrammarTags(p);
+    const tagPanel=node('section','edition-tags-summary');
+    tagPanel.setAttribute('aria-label','Etiquetas del texto en edición');
+    tagPanel.append(node('strong','','Etiquetas gramaticales de este texto'));
+    const chips=node('div','grammar-chips');
+    if(!tags.length)chips.append(node('span','hint','Sin etiquetas asignadas.'));
+    for(const id of tags){
+      const label=options.tagLabel?.(id)??GRAMMAR_CATALOGUE.find(t=>t.id===id)?.label??id;
+      const chip=node('span','grammar-chip',label);
+      chip.dataset.group=GRAMMAR_GROUP_IDS.find(g=>matchesGrammarTag(id,g,GRAMMAR_CATALOGUE))??'custom';
+      chips.append(chip);
+    }
+    tagPanel.append(chips);
+    if(options.onEditGrammarTags)tagPanel.append(action('Editar etiquetas',options.onEditGrammarTags,'btn btn-outline'));
+    panel.append(tagPanel);
+    }
     const mutate=(key:'title'|'author'|'work'|'reference'|'latin')=>(value:string)=>{
       apply((e,at)=>editPlacementText(e,p.id,key,key==='latin'||key==='title'?value:value.trim()||null,at));
       if(key==='latin'&&options.onAnalyzeVocabulary){
@@ -884,35 +975,78 @@ export function createEditionPane(options:{
       }
     };
     const latin=textField('Texto latino',p.text.latin,mutate('latin'),true);
-    panel.append(textField('Título del texto',p.text.title,mutate('title')),
-      textField('Autor',p.text.author??'',mutate('author')),
-      textField('Obra',p.text.work??'',mutate('work')),
-      textField('Libro, capítulo o referencia',p.text.reference??'',mutate('reference')),
-      latin);
+    // Título y latín siempre a la vista; no se ocultan al contraer la ficha.
+    panel.append(textField('Título del texto',p.text.title,mutate('title')),latin);
     const textArea=latin.querySelector('textarea');
     if(textArea)panel.append(academics.renderTextSelect(p,textArea));
+    const bibliography=node('details','edition-bibliography');
+    bibliography.open=bibliographyExpanded;
+    bibliography.append(node('summary','','Datos bibliográficos'));
+    const fields=node('div','edition-bibliography-fields');
+    fields.append(textField('Autor',p.text.author??'',mutate('author')),
+      textField('Obra',p.text.work??'',mutate('work')),
+      textField('Libro, capítulo o referencia',p.text.reference??'',mutate('reference')));
+    bibliography.append(fields);
+    bibliography.addEventListener('toggle',()=>{
+      if(bibliography.isConnected)bibliographyExpanded=bibliography.open;
+    });
+    panel.append(bibliography);
     panel.append(node('p','hint','La edición no altera el fragmento original de la biblioteca. Los subrayados se conservan por aparición; si cambia su contexto se señala revisión.'));
   }
   function menuQuestions(panel:HTMLElement,p:TextPlacementV1):void {
-    // Índice compacto a la manera de Examinator2: navegar a cada tarjeta sin
-    // duplicar sus campos ni modificar las palabras y decisiones del docente.
+    // Un índice sin tarjeta redundante, con las cuatro preguntas y sus
+    // funciones intactas. Los cambios de panel no regeneran ejercicios.
     const names:Record<string,string>={
       translation:'Traducción',syntax:'Sintaxis',morphology:'Morfología',choice:'Elección',
     };
     const overview=node('nav','edition-question-index');
     overview.setAttribute('aria-label','Ir a una pregunta');
-    overview.append(node('strong','','Preguntas del texto'));
     const shortcuts=node('div','edition-question-shortcuts');
     for(const [index,q] of p.questions.entries()){
-      const jump=action(String(index+1)+'. '+(names[q.kind]??q.kind),()=>{
-        panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
+      const key=p.id+':'+q.id;
+      const caption=names[q.kind]??q.kind;
+      const jump=action(String(index+1)+'. '+caption,()=>{
+        if(foldedQuestions.delete(key)){
+          paint();
+          element.querySelectorAll<HTMLElement>('.edition-menu-questions .edition-question-panel')[index]
+            ?.scrollIntoView({block:'nearest',behavior:'auto'});
+        }else panel.querySelectorAll<HTMLElement>('.edition-question-panel')[index]
           ?.scrollIntoView({block:'nearest',behavior:'auto'});
       },'btn btn-outline edition-question-jump');
+      jump.setAttribute('aria-label','Ir a pregunta '+(index+1)+': '+caption);
       if(!q.enabled)jump.classList.add('is-inactive');
       shortcuts.append(jump);
     }
-    overview.append(shortcuts);
-    panel.append(overview);
+    overview.append(shortcuts);panel.append(overview);
+
+    // Una vista de enunciado en línea; edición completa con el mismo campo
+    // y la misma operación de edición cuando el docente la necesita.
+    const statement=(container:HTMLElement,key:string,value:string,label:string,
+      onChange:(value:string)=>void,editing:Set<string>,isOption=false):void=>{
+      const view=node('div','edition-statement-row'+(isOption?' edition-option-statement':''));
+      // La vista clásica no se rediseña: sus campos siguen abiertos y
+      // localizables, evitando regresiones en otras vistas de la plataforma.
+      const classic=!options.onAnalyzeVocabulary;
+      if(classic||editing.has(key)){
+        const field=textField(label,value,onChange);
+        view.append(field);
+        if(!classic){
+          const finish=action('Terminar edición',()=>{editing.delete(key);paint();},
+            'btn btn-outline edition-statement-finish');
+          finish.setAttribute('aria-label','Terminar edición de '+label.toLowerCase());
+          view.append(finish);
+        }
+      }else{
+        const text=node('span','edition-statement-text',value||'Sin enunciado');
+        if(!value)text.classList.add('hint');
+        const edit=action('Editar',()=>{editing.add(key);paint();},
+          'btn btn-outline edition-statement-edit');
+        edit.setAttribute('aria-label','Editar '+label.toLowerCase());
+        view.append(text,edit);
+      }
+      container.append(view);
+    };
+
     for(const q of p.questions){
       const section=node('section','edition-question-panel');
       section.dataset.kind=q.kind;
@@ -920,6 +1054,7 @@ export function createEditionPane(options:{
       const top=node('div','edition-question-top');
       const check=node('input');check.type='checkbox';check.checked=q.enabled;
       check.setAttribute('aria-label','Incluir pregunta '+q.kind);
+      check.title=q.enabled?'Pregunta incluida':'Pregunta no incluida';
       check.addEventListener('change',()=>{
         apply((e,at)=>toggleQuestion(e,p.id,q.id,check.checked,at));paint();
       });
@@ -927,61 +1062,112 @@ export function createEditionPane(options:{
         translation:'1. Traducción',syntax:'2. Sintaxis',
         morphology:'3. Morfología',choice:'4. Elección',
       } as Record<string,string>)[q.kind]??q.kind;
-      top.append(check,node('h3','',heading),
-        node('span','edition-question-status',q.enabled?'Incluida':'No incluida'));
-      section.append(top);
-      section.append(textField('Enunciado',q.statement.value,value=>{
-        apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
-      }));
+      const foldKey=p.id+':'+q.id;
+      const folded=foldedQuestions.has(foldKey);
       const points=node('div','edition-question-points');
       points.append(numberField('Puntos',q.pointsHundredths/100,0,100,.25,value=>{
         apply((e,at)=>setQuestionPoints(e,p.id,q.id,Math.round(value*100),at));paint();
       }));
-      section.append(points);
+      const toggle=action(folded?'▸':'▾',()=>{
+        if(folded)foldedQuestions.delete(foldKey);
+        else foldedQuestions.add(foldKey);
+        paint();
+      },'btn btn-outline edition-question-fold');
+      toggle.title=folded?'Desplegar '+heading:'Plegar '+heading;
+      toggle.setAttribute('aria-expanded',String(!folded));
+      toggle.setAttribute('aria-label',(folded?'Desplegar ':'Plegar ')+heading);
+      top.append(check,node('h3','',heading),points,toggle);
+      section.append(top);
+      if(folded){section.classList.add('is-folded');panel.append(section);continue;}
+
+      statement(section,foldKey,q.statement.value,'Enunciado',value=>{
+        apply((e,at)=>editQuestionStatement(e,p.id,q.id,value,at));
+      },editingQuestionStatements);
+
       if(q.kind==='morphology')academics.renderMorph(section,p,q);
       if(q.kind==='choice'){
-        const options=q.options;
-        for(const [idx,o] of options.entries()){
+        for(const [idx,o] of q.options.entries()){
           const opt=node('div','edition-option');
-          const head=node('label','edition-option-head');
+          const head=node('div','edition-option-head');
           const checkOption=node('input');checkOption.type='checkbox';checkOption.checked=o.enabled;
+          checkOption.setAttribute('aria-label','Incluir apartado '+optionNames[o.kind]);
           checkOption.addEventListener('change',()=>{
             apply((e,at)=>toggleOption(e,p.id,q.id,o.id,checkOption.checked,at));paint();
           });
-          head.append(checkOption,node('strong','',String.fromCharCode(97+idx)+'. '+optionNames[o.kind]));
-          opt.append(head,textField('Enunciado del apartado',o.statement.value,value=>{
+          const optionTitle=node('strong','',String.fromCharCode(97+idx)+'. '+optionNames[o.kind]);
+          head.append(checkOption,optionTitle);
+          const optionKey=p.id+':'+o.id;
+          const advanced=node('details','edition-option-advanced');
+          advanced.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(optionKey);
+          advanced.append(node('summary','','Opciones del apartado'));
+          const advancedBody=node('div','edition-option-advanced-body');
+          academics.renderOption(advancedBody,p,q,o);
+          // La regeneración de todo el apartado se conserva con su manejador
+          // original, pero ahora es un botón de la cabecera, como Examinator2.
+          const generate=advancedBody.querySelector<HTMLButtonElement>('.edition-academic-option > button');
+          if(generate){
+            generate.classList.add('edition-generate-option');
+            generate.title=generate.textContent??'Generar apartado';
+            head.append(generate);
+          }
+          advanced.append(advancedBody);
+          advanced.addEventListener('toggle',()=>{
+            if(!advanced.isConnected)return;
+            if(advanced.open)expandedAcademicOptions.add(optionKey);
+            else expandedAcademicOptions.delete(optionKey);
+          });
+          opt.append(head);
+          statement(opt,optionKey,o.statement.value,'Enunciado del apartado',value=>{
             apply((e,at)=>editOptionStatement(e,p.id,q.id,o.id,value,at));
-          }));
-          opt.append(node('p','hint','Para aplicar cursiva a una palabra dentro del enunciado, rodéala de *asteriscos*.'));
+          },editingOptionStatements,true);
+
+          const rows=node('div','edition-option-rows');
           for(const [slotIndex,slot] of o.slots.entries()){
-            const word=node('div','edition-inline-edit');
+            const word=node('div','edition-inline-edit edition-qword-row');
             word.append(textField('Palabra',slot.value,value=>{
               apply((e,at)=>editSlotManual(e,p.id,q.id,o.id,slot.id,value,at));
             }));
-            word.append(action('Quitar',()=>{
+            academics.renderSlot(word,p,q,o,slot.id,slotIndex);
+            const remove=action('×',()=>{
               apply((e,at)=>validateEdition({...e,updatedAt:at,placements:e.placements.map(x=>
                 x.id!==p.id?x:{...x,questions:x.questions.map(item=>item.id!==q.id||item.kind!=='choice'?item:{
-                  ...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:opt.slots.filter(s=>s.id!==slot.id)}),
+                  ...item,options:item.options.map(option=>option.id!==o.id?option:{
+                    ...option,slots:option.slots.filter(s=>s.id!==slot.id)}),
                 })})}));paint();
-            }));
-            academics.renderSlot(word,p,q,o,slot.id,slotIndex);
-            opt.append(word);
+            },'btn btn-outline edition-qword-remove');
+            remove.title='Quitar término';
+            remove.setAttribute('aria-label','Quitar término '+(slotIndex+1)+' de '+optionNames[o.kind]);
+            word.append(remove);rows.append(word);
           }
-          const input=node('input','field-control');input.placeholder='Añadir término manual…';
+          opt.append(rows);
+          const input=node('input','field-control edition-option-add-input');
+          input.placeholder='Añadir término manual…';input.setAttribute('aria-label','Añadir término manual');
           const add=action('+ Término',()=>{
             const value=input.value.trim();if(!value)return;
             apply((e,at)=>validateEdition({...e,updatedAt:at,
               placements:e.placements.map(x=>x.id!==p.id?x:{...x,questions:x.questions.map(item=>
-                item.id!==q.id||item.kind!=='choice'?item:{...item,options:item.options.map(opt=>opt.id!==o.id?opt:{...opt,slots:[
-                  ...opt.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
+                item.id!==q.id||item.kind!=='choice'?item:{...item,options:item.options.map(option=>option.id!==o.id?option:{...option,slots:[
+                  ...option.slots,{id:freshId('slot'),value,origin:'manual' as const,locked:true,
                     proposedLemmaId:null,provenance:null},
                 ]})})})}));paint();
-          },'btn btn-outline');
-          const row=node('div','edition-inline-edit');row.append(input,add);opt.append(row);
-          academics.renderOption(opt,p,q,o);
+          },'btn btn-outline edition-option-add-button');
+          const addRow=node('div','edition-inline-edit edition-option-add');
+          addRow.append(input,add);opt.append(addRow,advanced);
           section.append(opt);
         }
-        academics.renderQuestion(section,p,q);
+        const wholeKey=p.id+':'+q.id+':advanced';
+        const whole=node('details','edition-question-advanced');
+        whole.open=!options.onAnalyzeVocabulary||expandedAcademicOptions.has(wholeKey);
+        whole.append(node('summary','','Configuración avanzada de la pregunta'));
+        const wholeBody=node('div','edition-question-advanced-body');
+        academics.renderQuestion(wholeBody,p,q);
+        whole.append(wholeBody);
+        whole.addEventListener('toggle',()=>{
+          if(!whole.isConnected)return;
+          if(whole.open)expandedAcademicOptions.add(wholeKey);
+          else expandedAcademicOptions.delete(wholeKey);
+        });
+        section.append(whole);
         const count=q.options.filter(o=>o.enabled).length;
         section.append(node('p',count<q.requiredCount?'edition-error':'hint',
           choiceHeading(q)+(count<q.requiredCount?' Faltan apartados activos.':'')));
@@ -1203,6 +1389,15 @@ export function createEditionPane(options:{
     }
   }
   function menuVocabulary(panel:HTMLElement,p:TextPlacementV1):void {
+    // Tres grupos visuales, conservando íntegros los controles y callbacks.
+    const selectionSection=node('section','edition-vocab-section edition-vocab-selection');
+    selectionSection.append(node('h3','','Selección de palabras'));
+    const analysisSection=node('section','edition-vocab-section edition-vocab-analysis');
+    analysisSection.append(node('h3','',options.onAnalyzeVocabulary
+      ?'Análisis con Collatinus':'Análisis y propuestas'));
+    const entriesSection=node('section','edition-vocab-section edition-vocab-entries');
+    entriesSection.append(node('h3','','Entradas editables'));
+    panel.append(selectionSection,analysisSection,entriesSection);
     const selectionMode=p.vocabularySelectionMode??'elegir';
     const quantityMode=p.vocabularyQuantityMode??'modelo';
     const toolbar=node('div','edition-vocab-toolbar');
@@ -1250,31 +1445,31 @@ export function createEditionPane(options:{
       void refreshCollatinusVocabulary(p);
     });
     qtyLabel.append(qty);toolbar.append(qtyLabel);
-    panel.append(toolbar);
+    selectionSection.append(toolbar);
     const scan=action(options.onAnalyzeVocabulary
       ?'Buscar otras formas con Collatinus (actualizar)'
       :options.autoVocabulary===false?'Buscar otras formas (opcional)'
         :'Proponer vocabulario del texto',
       ()=>refreshCollatinusVocabulary(p),'btn btn-outline');
-    panel.append(scan);
-    if(!options.onAnalyzeVocabulary)renderVocabularySuggestions(panel,p);
+    analysisSection.append(scan);
+    if(!options.onAnalyzeVocabulary)renderVocabularySuggestions(analysisSection,p);
 
     const items=[...p.vocabulary].sort((a,b)=>
       vocabularySortKey(a.headword).localeCompare(vocabularySortKey(b.headword),
         'es',{sensitivity:'base'}));
     const chosen=items.filter(v=>v.included).length;
-    panel.append(node('p','hint',items.length
+    entriesSection.append(node('p','hint',items.length
       ?chosen+' de '+items.length+' entradas seleccionadas. Solo se imprimen las marcadas.'
       :'El vocabulario se prepara al analizar el texto.'));
     let preferred:ReturnType<typeof parsePreferredVocabulary>=[];
     try{preferred=parsePreferredVocabulary(localStorage.getItem(PREFERRED_VOCABULARY_KEY));}
-    catch(err){panel.append(node('p','edition-error',
+    catch(err){entriesSection.append(node('p','edition-error',
       'El vocabulario preferente guardado necesita revisión: '+String(err)));}
     if(items.length){
       const headers=node('div','edition-vocab-column-heads');
       for(const label of ['','Enunciado','Traducción','Aclaración','Guardar',''])
         headers.append(node('span','',label));
-      panel.append(headers);
+      entriesSection.append(headers);
       const list=node('div','edition-vocab-list');
       list.setAttribute('aria-label','Entradas de vocabulario editables');
       for(const v of items){
@@ -1322,7 +1517,7 @@ export function createEditionPane(options:{
           });
           row.append(input);
         }
-        saveButton=action(isSaved?'✓ Guardada':'Guardar',async()=>{
+        saveButton=action(isSaved?'✓ Guardado':'Guardar',async()=>{
           if(!await flush())return;
           const current=draft?.placements.find(x=>x.id===p.id)
             ?.vocabulary.find(x=>x.id===v.id);
@@ -1338,7 +1533,7 @@ export function createEditionPane(options:{
               note:current.note??'',glossesSeparated:current.glossesSeparated===true,
             });
             localStorage.setItem(PREFERRED_VOCABULARY_KEY,JSON.stringify(next));
-            saveButton!.textContent='✓ Guardada';
+            saveButton!.textContent='✓ Guardado';
             saveButton!.classList.add('is-saved');
             setMessage('Corrección guardada para futuros cuadernos en este dispositivo.');
           }catch(err){setMessage('No se pudo guardar el vocabulario preferente: '+String(err),true);}
@@ -1396,7 +1591,7 @@ export function createEditionPane(options:{
         }
         list.append(row);
       }
-      panel.append(list);
+      entriesSection.append(list);
     }
     const actions=node('div','edition-vocab-bulk');
     actions.append(action('Marcar todas',()=>{
@@ -1414,10 +1609,10 @@ export function createEditionPane(options:{
         }),
       }));paint();
     }));
-    panel.append(actions);
+    entriesSection.append(actions);
     const unreviewed=items.filter(isUnreviewedAutoVocabulary);
     if(unreviewed.length){
-      panel.append(action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
+      entriesSection.append(action('Retirar '+unreviewed.length+' propuestas automáticas sin glosa',()=>{
         if(!window.confirm('¿Retirar únicamente las propuestas automáticas sin glosa ni edición manual?'))return;
         apply((e,at)=>validateEdition({...e,updatedAt:at,
           placements:e.placements.map(x=>x.id!==p.id?x:{
@@ -1444,7 +1639,7 @@ export function createEditionPane(options:{
       });paint();
     },'btn btn-primary');
     const row=node('div','edition-vocab-add');row.append(headword,meaning,add);
-    panel.append(row);
+    entriesSection.append(row);
   }
   function menuFormat(panel:HTMLElement):void {
     if(!draft)return;
@@ -1452,16 +1647,25 @@ export function createEditionPane(options:{
     const update=(fn:(d:NotebookEditionV1)=>void)=>apply((e,at)=>{
       const next=structuredClone(e);fn(next);next.updatedAt=at;return validateEdition(next);
     });
-    panel.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
+    const formatGroup=(key:keyof typeof formatExpanded,label:string)=>{
+      const group=node('details','edition-format-group edition-format-'+key);
+      group.open=formatExpanded[key];
+      group.append(node('summary','',label));
+      const body=node('div','edition-format-group-fields');
+      group.append(body);
+      group.addEventListener('toggle',()=>{
+        if(group.isConnected)formatExpanded[key]=group.open;
+      });
+      panel.append(group);
+      return body;
+    };
+    const typography=formatGroup('typography','Tipografía');
+    typography.append(numberField('Tamaño del texto (pt)',f.fontSizePt,6,32,.5,n=>{
       update(x=>{
         const extra=extraLatinSpacingPt(x.format.fontSizePt,x.format.lineSpacingPt);
         x.format.fontSizePt=n;
         x.format.lineSpacingPt=exactLatinLineHeightPt(n,extra);
       });paint();
-    }),numberField('Espacio adicional entre líneas (pt)',extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,'any',n=>{
-      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});
-    },true),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
-      update(x=>{x.format.questionGapPt=n;});paint();
     }));
     const family=node('select','field-control');family.setAttribute('aria-label','Tipografía');
     for(const value of ['Palatino Linotype','Palatino','Georgia','Times New Roman']){
@@ -1470,44 +1674,206 @@ export function createEditionPane(options:{
     family.value=f.fontFamily;family.addEventListener('change',()=>{
       update(x=>{x.format.fontFamily=family.value;});paint();
     });
-    panel.append(family);
+    const familyField=node('label','edition-field edition-font-family');
+    familyField.append(node('span','edition-field-label','Fuente'),family);
+    typography.append(familyField);
+
+    const spacing=formatGroup('spacing','Espaciado');
+    spacing.append(numberField('Espacio adicional entre líneas (pt)',
+      extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),0,45,'any',n=>{
+      update(x=>{x.format.lineSpacingPt=exactLatinLineHeightPt(x.format.fontSizePt,n);});
+    },true),numberField('Separación entre preguntas (pt)',f.questionGapPt,0,72,1,n=>{
+      update(x=>{x.format.questionGapPt=n;});paint();
+    }));
+    const marginsBody=formatGroup('margins','Márgenes');
     const margins=node('div','edition-margin-grid');
     for(const [key,label] of [['top','Superior'],['right','Derecho'],['bottom','Inferior'],['left','Izquierdo']] as const){
-      margins.append(numberField('Margen '+label+' (cm)',Number((f.marginsPt[key]/28.3464567).toFixed(2)),0,5,.1,n=>{
+      margins.append(numberField('Margen '+label+' (cm)',
+        Number((f.marginsPt[key]/28.3464567).toFixed(2)),0,5,.1,n=>{
         update(x=>{x.format.marginsPt[key]=Number((n*28.3464567).toFixed(2));});paint();
       }));
     }
-    panel.append(margins);
+    marginsBody.append(margins);
     const points=node('label','edition-option-head');
     const check=node('input');check.type='checkbox';check.checked=f.showPoints;
     check.addEventListener('change',()=>{update(x=>{x.format.showPoints=check.checked;});paint();});
     points.append(check,node('span','','Mostrar puntuación de las preguntas'));panel.append(points);
-    panel.append(node('p','hint','El interlineado se expresa como espacio adicional al interlineado normal, al estilo de Word: 3 pt suele ser suficiente. Los cuadernos anteriores conservan su altura de línea hasta que se ajuste este valor. Formato común a todos los textos; el zoom de lectura no cambia el tamaño editorial.'));
+    const formatStatus=node('p','hint');
+    formatStatus.setAttribute('role','status');
+    panel.append(action('Aplicar a todos los textos',async()=>{
+      formatStatus.textContent=await flush()?'Formato guardado para todos los textos del cuaderno.':
+        'No se ha podido guardar el formato.';
+    },'btn btn-primary'),formatStatus,node('p','hint',
+      'Interlineado: espacio adicional al normal de Word (3 pt suele ser suficiente). Los cuadernos anteriores conservan su altura de línea hasta que se ajuste. El zoom de lectura no cambia el tamaño editorial.'));
+  }
+  function renderCoverMenu(panel:HTMLElement):void{
+    if(!draft)return;
+    const group=node('details','edition-cover-editor');
+    group.open=Boolean(draft.cover);
+    group.append(node('summary','','Portada del cuaderno (opcional)'));
+    const description=node('p','hint','Modelo clásico: marco, imagen y campos para nombre y grupo. '+
+      'Solo se incluye en Word y PDF cuando eliges una imagen; queda guardada en el cuaderno.');
+    group.append(description);
+    const list=node('div','edition-cover-options');
+    for(const photo of COVER_PHOTOS){
+      const option=node('div','edition-cover-choice');
+      const preview=node('img');
+      preview.dataset.src=photo.imageUrl;preview.alt=photo.name;
+      preview.loading='lazy';option.append(preview);
+      const select=action('Elegir '+photo.name,async()=>{
+        select.disabled=true;
+        try{
+          const imageDataUrl=await loadCoverPhoto(photo);
+          apply((edition,at)=>validateEdition({...edition,updatedAt:at,cover:{
+            title:edition.cover?.title??edition.title.toLocaleUpperCase('es'),
+            subtitle:edition.cover?.subtitle??'',course:edition.cover?.course??'',
+            studentLabel:edition.cover?.studentLabel??'NOMBRE Y APELLIDOS:',
+            groupLabel:edition.cover?.groupLabel??'GRUPO:',
+            colorMode:edition.cover?.colorMode??'gray',
+            reflection:edition.cover?.reflection??true,
+            imageDataUrl,imageCredit:photo.name+' · '+photo.author+' · CC0 1.0',
+          }}));
+          paint();setMessage('Imagen de '+photo.name+' incorporada al cuaderno.');
+        }catch(e){
+          setMessage('No se pudo incorporar la imagen: '+String(e instanceof Error?e.message:e),true);
+        }finally{select.disabled=false;}
+      },'btn btn-outline');
+      select.setAttribute('aria-label','Elegir foto '+photo.name);
+      option.append(select);
+      const credit=node('small','',photo.author+' · CC0');
+      option.append(credit);list.append(option);
+    }
+    group.append(list);
+    group.addEventListener('toggle',()=>{
+      if(!group.open)return;
+      for(const img of Array.from(list.querySelectorAll('img'))){
+        if(!img.src&&img.dataset.src)img.src=img.dataset.src;
+      }
+    });
+    const own=node('label','edition-field');
+    own.append(node('span','edition-field-label','O utilizar una imagen propia (JPG, PNG o WebP)'));
+    const file=node('input','field-control');
+    file.type='file';file.accept='image/jpeg,image/png,image/webp';
+    file.setAttribute('aria-label','Subir imagen de portada propia');
+    file.addEventListener('change',async()=>{
+      const photo=file.files?.[0];if(!photo)return;
+      try{
+        const imageDataUrl=await loadOwnCoverPhoto(photo);
+        apply((edition,at)=>validateEdition({...edition,updatedAt:at,cover:{
+          title:edition.cover?.title??edition.title.toLocaleUpperCase('es'),
+          subtitle:edition.cover?.subtitle??'',course:edition.cover?.course??'',
+          studentLabel:edition.cover?.studentLabel??'NOMBRE Y APELLIDOS:',
+          groupLabel:edition.cover?.groupLabel??'GRUPO:',
+          colorMode:edition.cover?.colorMode??'gray',
+          reflection:edition.cover?.reflection??true,
+          imageDataUrl,imageCredit:'Imagen propia: '+photo.name.slice(0,100),
+        }}));
+        paint();
+      }catch(e){setMessage('No se pudo utilizar la imagen: '+String(e instanceof Error?e.message:e),true);}
+    });
+    own.append(file);group.append(own);
+    if(draft.cover){
+      const cover=draft.cover;
+      const adjust=(change:(cover:NotebookCoverV1)=>void):void=>{
+        apply((edition,at)=>{
+          if(!edition.cover)return edition;
+          const next=structuredClone(edition);
+          change(next.cover!);next.updatedAt=at;return validateEdition(next);
+        });
+      };
+      for(const [field,label] of [
+        ['title','Título de portada'],['subtitle','Subtítulo'],['course','Curso'],
+        ['studentLabel','Campo de nombre'],['groupLabel','Campo de grupo'],
+      ] as const){
+        group.append(textField(label,cover[field],value=>{
+          if(field==='title'&&!value.trim())return;
+          adjust(c=>{c[field]=value;});
+        }));
+      }
+      const style=node('label','edition-field');
+      style.append(node('span','edition-field-label','Tratamiento de imagen'));
+      const palette=node('select','field-control');
+      palette.setAttribute('aria-label','Color de portada');
+      for(const [mode,label] of [
+        ['gray','Escala de grises'],['mono','Blanco y negro'],['color','Color'],
+      ] as const){
+        const opt=node('option','',label);opt.value=mode;palette.append(opt);
+      }
+      palette.value=cover.colorMode;
+      palette.addEventListener('change',()=>{
+        adjust(c=>{c.colorMode=palette.value as NotebookCoverV1['colorMode'];});
+        paintPreview();
+      });
+      style.append(palette);group.append(style);
+      const reflect=node('label','edition-option-head');
+      const checked=node('input');checked.type='checkbox';checked.checked=cover.reflection;
+      checked.setAttribute('aria-label','Reflejo de fotografía');
+      checked.addEventListener('change',()=>{
+        adjust(c=>{c.reflection=checked.checked;});paintPreview();
+      });
+      reflect.append(checked,node('span','','Mostrar reflejo bajo la fotografía'));
+      group.append(reflect);
+      group.append(node('p','hint','Portada incluida en el Word y en la impresión PDF. '+
+        'Para verla antes de exportar, utiliza «Ver cuaderno completo».'));
+      group.append(action('Quitar portada',()=>{
+        if(!window.confirm('¿Quitar la portada de este cuaderno? Los textos seguirán intactos.'))return;
+        apply((edition,at)=>{
+          const {cover:_unused,...remaining}=edition;
+          return validateEdition({...remaining,updatedAt:at});
+        });paint();
+      },'btn btn-outline'));
+    }
+    panel.append(group);
   }
   function menuNotebook(panel:HTMLElement):void {
     if(!draft)return;
-    const e=draft;
-    panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
-    panel.append(textField('Título del cuaderno',e.title,value=>{
+    const e=draft,experimental=Boolean(options.onAnalyzeVocabulary);
+    const principal=experimental?node('section','edition-organize-primary'):panel;
+    if(experimental){
+      panel.append(node('h3','edition-organize-heading','Organizar el cuaderno'));
+      principal.append(node('h3','','Título y orden de los textos'));
+      principal.append(node('p','hint','Ordena con ↑ y ↓, o quita una aparición. Los textos originales y los demás cuadernos permanecen intactos.'));
+    }else panel.append(academics.renderNotebookAudit(),legacyNotebookPicker());
+    principal.append(textField('Título del cuaderno',e.title,value=>{
       apply((edition,at)=>validateEdition({...edition,title:value,updatedAt:at}));
     }));
+    if(experimental)principal.append(node('h4','','Orden de los textos ('+e.placements.length+')'));
     const list=node('ol','edition-notebook-list');
     e.placements.forEach((p,index)=>{
       const li=node('li','edition-notebook-row');
       li.append(node('span','',p.text.title+' · '+formatPoints(p)));
       const prev=action('↑',()=>{apply((ed,at)=>movePlacement(ed,p.id,index-1,at));paint();});
+      prev.setAttribute('aria-label','Subir '+p.text.title);prev.title='Subir el texto una posición';
       prev.disabled=index===0;
       const next=action('↓',()=>{apply((ed,at)=>movePlacement(ed,p.id,index+1,at));paint();});
+      next.setAttribute('aria-label','Bajar '+p.text.title);next.title='Bajar el texto una posición';
       next.disabled=index===e.placements.length-1;
-      const remove=action('Quitar',()=>{
-        if(!window.confirm('¿Quitar esta aparición del cuaderno? El texto original permanecerá en la biblioteca.'))return;
+      const remove=action(experimental?'Quitar del cuaderno':'Quitar',()=>{
+        if(!window.confirm(experimental
+          ?'¿Quitar «'+p.text.title+'» de este cuaderno? El banco y los demás cuadernos conservarán sus textos.'
+          :'¿Quitar esta aparición del cuaderno? El texto original permanecerá en la biblioteca.'))return;
         apply((ed,at)=>validateEdition({...ed,updatedAt:at,placements:ed.placements.filter(x=>x.id!==p.id)}));
         if(session?.activePlacementId===p.id&&draft)session={...session,activePlacementId:draft.placements[0]?.id??null};
         paint();
       });
       li.append(prev,next,remove);list.append(li);
     });
-    panel.append(list);
+    principal.append(list);
+    if(experimental)panel.append(principal);
+    if(experimental)renderCoverMenu(panel);
+    const advanced=experimental?node('details','edition-notebook-advanced'):null;
+    if(advanced){
+      const review=node('section','edition-organize-review');
+      review.append(node('h3','','Revisión del cuaderno'));
+      review.append(node('p','hint','Comprueba palabras repetidas y posibles alternativas sin modificar las decisiones docentes.'));
+      // La auditoría permanece visible, fuera de las opciones avanzadas.
+      review.append(academics.renderNotebookAudit());
+      panel.append(review);
+      advanced.append(node('summary','','Opciones avanzadas: importar desde cuadernos antiguos'));
+      advanced.append(node('p','hint','Las opciones siguientes corresponden a cuadernos de una versión anterior. '+
+        'Para añadir textos del banco actual, utiliza «Banco propio» encima del editor.'));
+      advanced.append(legacyNotebookPicker());
+    }
     const picker=node('select','field-control');picker.setAttribute('aria-label','Texto guardado para añadir');
     const add=action('Añadir desde Mis textos',async()=>{
       if(!picker.value||!await flush()||!current||!draft)return;
@@ -1521,7 +1887,7 @@ export function createEditionPane(options:{
         paint();
       }catch(err){setMessage('No se ha añadido: '+(err instanceof Error?err.message:String(err)),true);}
     },'btn btn-primary');
-    const row=node('div','edition-inline-edit');row.append(picker,add);panel.append(row);
+    const row=node('div','edition-inline-edit');row.append(picker,add);(advanced??panel).append(row);
     void legacy.load().then(s=>{
       if(!picker.isConnected)return;
       picker.replaceChildren();
@@ -1529,7 +1895,11 @@ export function createEditionPane(options:{
       add.disabled=!s.corpus.texts.length;
       if(!s.corpus.texts.length)picker.append(node('option','','Guarda primero textos en «Mis textos»'));
     }).catch(e=>setMessage('No se pudo leer Mis textos: '+String(e),true));
-    panel.append(node('p','hint','Una misma fuente puede tener varias apariciones independientes. Reordenar no regenera preguntas ni vocabulario.'));
+    if(advanced){
+      advanced.append(node('p','hint','Esta importación es opcional: no regenera preguntas ni vocabulario. '+
+        'Si quitas un texto del cuaderno, permanece guardado en su banco de origen.'));
+      panel.append(advanced);
+    }else panel.append(node('p','hint','Una misma fuente puede tener varias apariciones independientes. Reordenar no regenera preguntas ni vocabulario.'));
   }
   function docFilename(edition:NotebookEditionV1,draftExport:boolean):string{
     const safe=edition.title.normalize('NFC').replace(/[\\/:*?"<>|]+/g,'-')
@@ -1570,7 +1940,10 @@ export function createEditionPane(options:{
       exportReview=null;
       paint(); // El aviso no debe permanecer abierto tras exportar.
       if(kind==='word'){
-        exportBytes(createNotebookDocx(edition),docFilename(edition,warnings.length>0));
+        const portable=edition.cover?{...edition,cover:{
+          ...edition.cover,imageDataUrl:await prepareWordCoverImage(edition.cover),
+        }}:edition;
+        exportBytes(createNotebookDocx(portable),docFilename(edition,warnings.length>0));
         setMessage('DOCX '+(warnings.length?'de borrador ':'')+'preparado. Comprueba su maquetación antes de imprimirlo.');
       }else{
         setMessage('Abriendo impresión A4. Atención: Safari puede omitir 1 | N; para conservarlo, exporta Word y genera el PDF con Pages.');
@@ -1674,7 +2047,8 @@ export function createEditionPane(options:{
     navMenus.setAttribute('role','navigation');
     navMenus.setAttribute('aria-label','Secciones del cuaderno');
     for(const m of labels){
-      const tab=action(m.label,()=>{menu=m.key;paint();},
+      const tabLabel=m.key==='notebook'&&options.onAnalyzeVocabulary?'Organizar':m.label;
+      const tab=action(tabLabel,()=>{menu=m.key;paint();},
         'btn '+(menu===m.key?'btn-primary':'btn-outline'));
       tab.setAttribute('aria-current',String(menu===m.key?'page':'false'));
       navMenus.append(tab);

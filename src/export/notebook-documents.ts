@@ -6,10 +6,10 @@
 import {formattedVocabularyMeaning} from '../core/vocabulary-format.js';
 import {vocabularySortKey} from '../core/vocabulary-preferences.js';
 import {extraLatinSpacingPt} from '../core/latin-spacing.js';
-import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1 } from '../core/edition-model.js';
+import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1, NotebookCoverV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
-import { splitInlineItalics } from '../core/edition-inline-formatting.js';
+import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
 import { zipStore } from './zip-store.js';
 
 const XML='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -65,20 +65,26 @@ function run(text:string,{bold=false,italic=false,underline=false,sizePt}:{
 function paragraph(text:string,props:string,flags:{bold?:boolean;italic?:boolean;underline?:boolean;sizePt?:number}={}):string{
   return '<w:p>'+props+run(text,flags)+'</w:p>';
 }
+/** Omitir […] en redonda tanto en Word como en la vista previa/PDF. */
+function latinRun(text:string,italic:boolean,underline=false):string{
+  return splitLatinOmissions(text).map(part=>run(part.text,{
+    italic:italic&&!part.roman,underline,
+  })).join('');
+}
 function latin(p:TextPlacementV1,f:PageFormatV1):string{
   const marks=p.text.markup.slice().sort((a,b)=>a.startUtf16-b.startUtf16);
   const source=p.text.latin;
   let cursor=0,body='';
   for(const mark of marks){
     if(mark.startUtf16<cursor||mark.endUtf16>source.length)continue;
-    body+=run(source.slice(cursor,mark.startUtf16),{italic:true});
+    body+=latinRun(source.slice(cursor,mark.startUtf16),true);
     const text=source.slice(mark.startUtf16,mark.endUtf16);
     // No aparentar un subrayado válido si el anclaje está pendiente.
-    body+=run(text,{italic:mark.kind!=='editorial-roman',
-      underline:mark.kind==='morph-underline'&&!mark.reviewRequired});
+    body+=latinRun(text,mark.kind!=='editorial-roman',
+      mark.kind==='morph-underline'&&!mark.reviewRequired);
     cursor=mark.endUtf16;
   }
-  body+=run(source.slice(cursor),{italic:true});
+  body+=latinRun(source.slice(cursor),true);
   // Espacio posterior del pasaje igual al interlineado adicional (3 pt por defecto),
   // sin la antigua separación artificial de 6 em.
   return '<w:p>'+paraProps({align:'both',after:extraLatinSpacingPt(f.fontSizePt,f.lineSpacingPt),linePt:f.lineSpacingPt})+body+'</w:p>';
@@ -153,7 +159,7 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
   }
   return body;
 }
-function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
+function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1,hasCover=false):string{
   const sourceParts=[
     p.text.author?run(p.text.author):'',
     p.text.work?run((p.text.author?', ':'')+p.text.work,{italic:true}):'',
@@ -162,7 +168,7 @@ function placementContent(p:TextPlacementV1,index:number,f:PageFormatV1):string{
   // El tamaño explícito evita que Word/LibreOffice sustituyan la métrica del
   // título y lo dividan en dos líneas cuando cabe en el A4 del modelo docente.
   const heading=paragraph(p.text.title,
-    paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0}),
+    paraProps({align:'center',after:3,keepNext:true,topBorder:true,pageBreak:index>0||hasCover}),
     {bold:true,sizePt:Math.max(8,f.fontSizePt-1)});
   const source='<w:p>'+paraProps({align:'center',after:4,keepNext:true,bottomBorder:true})+
     sourceParts+'</w:p>';
@@ -174,9 +180,35 @@ function footerField(field:'PAGE'|'NUMPAGES'):string{
     '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
     '<w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>';
 }
+function wordCover(cover:NotebookCoverV1):string{
+  const title=paragraph(cover.title,paraProps({align:'center',after:20,
+    topBorder:true,bottomBorder:true,keepNext:true}),{bold:true,sizePt:15});
+  const note=cover.subtitle?paragraph(cover.subtitle,paraProps({align:'center',after:10}),
+    {sizePt:12}):'';
+  const course=cover.course?paragraph(cover.course,paraProps({align:'center',after:10}),
+    {sizePt:11}):'';
+  // Word-native drawing containing the same JPEG embedded in the saved edition.
+  const cx=5_420_000,cy=3_300_000;
+  const drawing='<w:p>'+paraProps({align:'center',after:70})+
+    '<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'+
+    ' distT="0" distB="0" distL="0" distR="0">'+
+    '<wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="1" name="Portada clásica"/>'+
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+
+    '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'+
+    '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'+
+    '<pic:nvPicPr><pic:cNvPr id="0" name="Foto de portada.jpg"/><pic:cNvPicPr/></pic:nvPicPr>'+
+    '<pic:blipFill><a:blip r:embed="rIdCoverImage"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'+
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm>'+
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'+
+    '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+  const student=paragraph(cover.studentLabel,paraProps({topBorder:true,keepNext:true,after:5}));
+  const group=paragraph(cover.groupLabel,paraProps({bottomBorder:true,after:0}));
+  return title+note+course+drawing+student+group;
+}
 function wordDocument(edition:NotebookEditionV1):string{
   const f=edition.format;
-  const body=edition.placements.map((p,i)=>placementContent(p,i,f)).join('');
+  const body=(edition.cover?wordCover(edition.cover):'')+
+    edition.placements.map((p,i)=>placementContent(p,i,f,Boolean(edition.cover))).join('');
   const margin=f.marginsPt;
   const sect='<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter1"/>'+
     '<w:pgSz w:w="11906" w:h="16838"/>'+
@@ -213,11 +245,12 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
   if(!edition.placements.length)throw new Error('El cuaderno no contiene textos para exportar.');
   if(edition.placements.length>500)throw new Error('Demasiados textos para esta exportación.');
   const f=edition.format;
-  const entries=[
+  const entries:{path:string;content:string|Uint8Array}[]=[
     {path:'[Content_Types].xml',content:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
       '<Default Extension="xml" ContentType="application/xml"/>'+
+      (edition.cover?'<Default Extension="jpg" ContentType="image/jpeg"/>':'')+
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
       '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
       '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'+
@@ -234,6 +267,7 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
       '<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'+
       '<Relationship Id="rIdStyles1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
       '<Relationship Id="rIdSettings1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>'+
+      (edition.cover?'<Relationship Id="rIdCoverImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/cover.jpg"/>':'')+
       '</Relationships>'},
     {path:'word/document.xml',content:wordDocument(edition)},
     {path:'word/styles.xml',content:styles(f)},
@@ -247,6 +281,13 @@ export function createNotebookDocx(raw:NotebookEditionV1):Uint8Array{
       '<dc:title>'+esc(edition.title)+'</dc:title><dc:creator>CuadernoTextosLatinos</dc:creator>'+
       '</cp:coreProperties>'},
   ];
+  if(edition.cover){
+    const encoded=edition.cover.imageDataUrl.slice('data:image/jpeg;base64,'.length);
+    const binary=atob(encoded);
+    const bytes=new Uint8Array(binary.length);
+    for(let n=0;n<binary.length;n++)bytes[n]=binary.charCodeAt(n);
+    entries.push({path:'word/media/cover.jpg',content:bytes});
+  }
   return zipStore(entries);
 }
 export function notebookExportWarnings(edition:NotebookEditionV1):string[]{

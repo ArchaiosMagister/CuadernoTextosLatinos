@@ -72,7 +72,7 @@ test('borrar un cuaderno nuevo exige respaldo y no afecta a otro',async({page})=
   assert.equal(persistent.history.length,1);
 });
 
-test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva los otros',async({page})=>{
+test('Cuaderno experimental: copia voluntaria y una confirmación para eliminar',async({page})=>{
   await page.goto('/examinator-cuadernos/');
   await expect(page.locator('#editor .card')).toBeVisible();
   for(const title of ['Conservar','Eliminar este']){
@@ -80,7 +80,11 @@ test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva 
     await page.locator('#btnNew').click();
     await expect(page.locator('#editor .card')).toContainText(title);
   }
-  await page.locator('#btnOpen').click();
+  await page.getByRole('button',{name:'Gestionar cuadernos',exact:true}).click();
+  const backup=page.waitForEvent('download');
+  await page.locator('.original-open-row').filter({hasText:'Conservar'})
+    .getByRole('button',{name:'Hacer copia',exact:true}).click();
+  expect((await backup).suggestedFilename()).toMatch(/^copia-cuaderno-.*\.json$/);
   const remove=page.getByRole('button',{name:'Eliminar cuaderno Eliminar este',exact:true});
   const dismissal=page.waitForEvent('dialog').then(dialog=>dialog.dismiss());
   await Promise.all([dismissal,remove.click()]);
@@ -88,18 +92,16 @@ test('Cuaderno experimental: eliminar desde Abrir descarga una copia y conserva 
   let confirmations=0;
   const accept=async dialog=>{confirmations++;await dialog.accept();};
   page.on('dialog',accept);
-  const download=page.waitForEvent('download');
   await remove.click();
-  expect((await download).suggestedFilename()).toMatch(/^copia-antes-de-eliminar-cuaderno-.*\.json$/);
   await expect(remove).toHaveCount(0);
   page.off('dialog',accept);
-  expect(confirmations).toBe(2);
+  expect(confirmations).toBe(1);
   const survivor=page.locator('.original-open-row').filter({hasText:'Conservar'});
   await survivor.getByRole('button',{name:'Abrir',exact:true}).click();
   await expect(page.locator('#editor .card')).toContainText('Conservar');
   await page.reload();
-  await expect(page.getByRole('combobox',{name:'Elegir cuaderno',exact:true})).toBeVisible();
-  await page.locator('#btnOpen').click();
-  await expect(page.locator('.original-open-row')).toHaveCount(1);
-  await expect(page.locator('.original-open-row')).toContainText('Conservar');
+  await expect(page.getByRole('heading',{name:'Mis cuadernos'})).toBeVisible();
+  await expect(page.locator('.cuaderno-home-card')).toHaveCount(1);
+  await expect(page.locator('.cuaderno-home-card')).toHaveCount(1);
+  await expect(page.locator('.cuaderno-home-card')).toContainText('Conservar');
 });

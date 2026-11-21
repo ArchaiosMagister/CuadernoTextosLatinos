@@ -433,3 +433,84 @@ test('una repetición falsa inyectada no supera la validación contra el banco',
   await assert.rejects(e.commit(db,fake,LATER),/no está justificada/);
   assert.equal((await db.loadEdition(ed.id))!.revision,1);
 });
+
+
+test('fase 5: una palabra de origen manual queda protegida aunque el legado no marcara locked',async()=>{
+  const ed=corpus(),q=choice(ed),manual={...slot('slot.prefix.1','valor docente',true),locked:false};
+  q.options[2]!.slots[0]=manual;
+  const valid=validateEdition(ed),e=engine(),targetSlot=target(valid,'prefix');
+  assert.equal(e.previewSlot(valid,targetSlot).status,'locked');
+  assert.throws(()=>e.prepareSlot(valid,targetSlot),/bloqueada|protegida/);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:2,seed:0});
+  assert.equal(plan.assignments[0]!.items[0]!.candidateId,null);
+  const db=repo();
+  await db.commitEdition(valid.id,0,{command:'create',targetId:valid.id,timestamp:NOW},()=>valid);
+  const saved=await e.commit(db,plan,LATER);
+  assert.deepEqual(choice(saved.edition).options[2]!.slots[0],manual);
+  assert.deepEqual(saved.edition.placements[1],valid.placements[1]);
+  assert.doesNotThrow(()=>e.prepareSlot(valid,targetSlot,'prefix.3',0,true));
+});
+
+test('fase 5: una decisión morfológica manual desbloqueada exige consentimiento expreso',()=>{
+  const ed=withMorph(corpus());
+  const q=ed.placements[0]!.questions.find(x=>x.kind==='morphology')!;
+  if(q.kind!=='morphology')throw Error('Morfología ausente');
+  q.words[0]!.reviewState='manual';
+  q.words[0]!.locked=false;
+  const clean=validateEdition(ed),e=engine();
+  const targetMorph={placementId:'place.1',questionId:q.id,wordId:'morph.word',expectedRevision:1};
+  assert.equal(e.previewMorph(clean,targetMorph).status,'locked');
+  assert.throws(()=>e.prepareMorph(clean,targetMorph,'morphology.1'),/manual protegido/);
+  assert.doesNotThrow(()=>e.prepareMorph(clean,targetMorph,'morphology.1',true));
+});
+
+test('fase 5: la misma palabra entre categorías distintas cuenta como uso previo',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(x=>x.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('p.otro','prefix-0')];
+  const eligible=[
+    record('latinism',300,{value:'prefix-0'}),
+    record('latinism',301,{value:'término nuevo'}),
+  ];
+  const e=engine(eligible),valid=validateEdition(ed),t=target(valid,'latinism');
+  const candidate=e.previewSlot(valid,t);
+  assert.deepEqual(candidate.candidates.map(x=>x.value),['término nuevo']);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'latinism'),desiredCount:1,seed:0});
+  assert.equal(e.bank.findVerified(plan.assignments[0]!.items[0]!.candidateId!)!.value,'término nuevo');
+  const scarce=engine([eligible[0]!]).previewSlot(valid,t);
+  assert.deepEqual(scarce.candidates.map(x=>x.value),['prefix-0']);
+});
+
+
+test('las preguntas y los apartados desactivados no agotan los términos nuevos del cuaderno',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('active-used','prefix-0')];
+  other.options.find(o=>o.kind==='latinism')!.slots=[slot('inactive-use','prefix-1')];
+  other.options.find(o=>o.kind==='latinism')!.enabled=false;
+  const e=engine([record('prefix',0),record('prefix',1)]);
+  const valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:1,seed:0});
+  assert.equal(e.bank.findVerified(plan.assignments[0]!.items[0]!.candidateId!)!.value,'prefix-1');
+  other.options.find(o=>o.kind==='latinism')!.enabled=true;
+  other.enabled=false;
+  // La pregunta entera desactivada tampoco reserva ninguna de sus palabras.
+  const inactive=validateEdition(ed);
+  assert.deepEqual(e.previewSlot(inactive,target(inactive,'prefix')).candidates
+    .map(c=>c.value).sort(),['prefix-0','prefix-1']);
+});
+
+test('si hay otra palabra inédita, nunca se repite una ya usada; agotado el banco, se admite la reutilización',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('used','prefix-0')];
+  const rows=[record('prefix',0),record('prefix',1)];
+  const e=engine(rows),valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const exhausted=engine([rows[0]!]).previewSlot(valid,t);
+  assert.deepEqual(exhausted.candidates.map(c=>c.value),['prefix-0']);
+});

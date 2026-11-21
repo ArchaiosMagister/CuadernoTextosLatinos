@@ -12,6 +12,15 @@ async function list(dir) {
   return result;
 }
 
+const collatinus = 'dist/examinator-cuadernos/collatinus/';
+const engineHash = createHash('sha256');
+for (const asset of ['datos.js', 'incluidos.js', 'shim.js', 'motor.js']) {
+  engineHash.update(await readFile(collatinus + asset));
+}
+const worker = await readFile(collatinus + 'worker.js', 'utf8');
+await writeFile(collatinus + 'worker.js', worker.replace('__COLLATINUS_VERSION__',
+  engineHash.digest('hex').slice(0, 24)));
+
 const paths = (await list('dist')).sort();
 if (!paths.some(p => p.includes('library/catalog.json'))
   || !paths.some(p => p.includes('library/works/'))) {
