@@ -49,3 +49,25 @@ test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de
   await card.getByRole('button',{name:'Cerrar ficha'}).click();
   await expect(card).toHaveCount(0);
 });
+
+
+test.describe('lectura táctil en iPad',()=>{
+  test.use({hasTouch:true,viewport:{width:820,height:1180}});
+  test('una pulsación táctil abre y permite cerrar la tarjeta',async({page})=>{
+    await addLatin(page,'Gallia est omnis divisa in partes tres.');
+    const latin=page.locator('.edition-preview .edition-latin').first();
+    await expect(latin).toBeVisible();
+    const point=await latin.evaluate(paragraph=>{
+      const text=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT).nextNode();
+      if(!text)throw Error('No hay palabras latinas.');
+      const range=document.createRange();range.setStart(text,0);range.setEnd(text,6);
+      const rect=range.getBoundingClientRect();
+      return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
+    });
+    await page.touchscreen.tap(point.x,point.y);
+    const card=page.getByRole('dialog',{name:/Lematización de/});
+    await expect(card).toBeVisible();
+    await card.getByRole('button',{name:'Cerrar ficha'}).click();
+    await expect(card).toHaveCount(0);
+  });
+});
