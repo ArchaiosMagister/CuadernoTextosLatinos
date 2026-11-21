@@ -1763,7 +1763,7 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-lexi
   /* No reducir las áreas táctiles ni provocar zoom en Safari/iPhone. */
   #editor .cuaderno-home {gap:12px;}
   #editor .cuaderno-home-heading .cuaderno-home-actions button,
-  #editor .cuaderno-home-card-actions button {min-height:42px;}
+  #editor .cuaderno-home .cuaderno-home-card-actions button {min-height:42px;}
   #editor .cuaderno-home-bank .cuaderno-bank-control input,
   #editor .cuaderno-home-bank .cuaderno-bank-control select {
     height:44px;min-height:44px;font-size:16px;
