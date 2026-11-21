@@ -95,18 +95,27 @@ function sharedPassage(a: Word[], b: Word[]): { from: number; count: number } {
   for (let j = 0; j <= b.length - window; j++) {
     const key = b.slice(j, j + window).map(word => word.value).join('\u0001');
     const positions = index.get(key) ?? [];
-    if (positions.length < 40) positions.push(j);
+    // No truncar las posiciones: una coincidencia de 8 palabras puede
+    // empezar tras 40 apariciones de una fórmula repetida en una obra.
+    positions.push(j);
     index.set(key, positions);
   }
   let bestFrom = 0;
   let best = 0;
+  const upperBound = Math.min(a.length, b.length);
   for (let i = 0; i <= a.length - window; i++) {
+    if (a.length - i <= best) break;
     const key = a.slice(i, i + window).map(word => word.value).join('\u0001');
     for (const start of index.get(key) ?? []) {
+      if (Math.min(a.length - i, b.length - start) <= best) continue;
       let length = window;
       while (i + length < a.length && start + length < b.length
         && a[i + length]!.value === b[start + length]!.value) length++;
-      if (length > best) { best = length; bestFrom = i; }
+      if (length > best) {
+        best = length;
+        bestFrom = i;
+        if (best === upperBound) return { from: bestFrom, count: best };
+      }
     }
   }
   return { from: bestFrom, count: best };
