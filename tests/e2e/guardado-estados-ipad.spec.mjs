@@ -91,4 +91,7 @@ test('iPad: navegación y acciones siguen cómodas y hay foco visible',async({pa
   await expect(card.getByRole('button',{name:'Hacer copia'})).toBeVisible();
   expect(await card.getByRole('button',{name:'Hacer copia'})
     .evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(40);
+  await page.setViewportSize({width:390,height:844});
+  expect(await card.getByRole('button',{name:'Hacer copia'})
+    .evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(42);
 });
