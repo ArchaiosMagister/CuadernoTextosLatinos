@@ -6,7 +6,7 @@ test('Examinator original como base: cabecera, biblioteca original y cuaderno pe
   const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto('/examinator-cuadernos/');
-  await expect(page.locator('header .brand')).toHaveText('Examinator');
+  await expect(page.locator('header .brand')).toHaveText('Cuadernos Latinos');
   await expect(page.locator('main#main > #editor')).toBeVisible();
   await expect(page.locator('main#main > #preview')).toBeHidden();
   await expect(page.locator('#editor .card h3')).toHaveText('Cuaderno de textos latinos');

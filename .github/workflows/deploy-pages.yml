@@ -516,6 +516,7 @@ jobs:
                 grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/index.html")
                 grep -q '<title>Cuaderno de textos latinos</title>' /tmp/cuaderno-public
+                grep -q '<span class="brand">Cuadernos Latinos</span>' /tmp/cuaderno-public
                 grep -q 'rel="manifest" href="./manifest.webmanifest"' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/manifest.webmanifest")
                 grep -q '"name": "Cuaderno de textos latinos"' /tmp/cuaderno-public
