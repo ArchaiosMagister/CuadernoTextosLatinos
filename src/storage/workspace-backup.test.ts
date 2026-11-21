@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
-import { createEdition, createPlacement } from '../core/edition-factory.js';
+import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
+import { notebookTexts } from '../core/editor-operations.js';
+import { validateCorpus } from '../core/validation.js';
+import type { CorpusV1, LatinText } from '../core/model.js';
 import { editPlacementText } from '../core/edition-operations.js';
 import { emptyCorpus } from '../core/model.js';
 import { createBackup } from '../core/backup.js';
 import { WorkspaceRepository, WorkspaceConflictError, validateWorkspaceSnapshot } from './workspace-repository.js';
 import {
-  WorkspaceBackupError, createNotebookBackup, readNotebookBackup, createWorkspaceBackup, prepareWorkspaceRestore,
+  WorkspaceBackupError, combineNotebookCorpora, importNotebookDependencies,
+  createNotebookBackup, readNotebookBackup, createWorkspaceBackup, prepareWorkspaceRestore,
   readWorkspaceBackup, restoreWorkspaceBackup,
 } from './workspace-backup.js';
 
@@ -202,4 +206,59 @@ test('la copia integral portátil conserva el banco histórico y el historial ed
   assert.deepEqual(snapshot.editions,[saved]);
   assert.deepEqual(snapshot.history,local.history);
   assert.deepEqual(await ws.snapshot(),local);
+});
+
+
+test('la biblioteca combinada conserva revisiones vinculadas a cuadernos históricos y editoriales',()=>{
+  const original:LatinText={id:'doc.hist',title:'Original',latin:'Roma antiqua erat.',
+    source:{author:'Eutropio',work:'Breviarium',reference:'1.1'},tagIds:[],
+    createdAt:NOW,updatedAt:NOW};
+  const updated:LatinText={...original,title:'Editado',latin:'Roma magna erat.',updatedAt:LATER};
+  const historical:CorpusV1={...emptyCorpus(),texts:[updated],
+    textRevisions:[{id:'rev.hist',text:original}],
+    notebooks:[{id:'book.hist',title:'Cuaderno histórico',textIds:['doc.hist'],
+      retainedTexts:[{textId:'doc.hist',revisionId:'rev.hist'}]}]};
+  const editorial:CorpusV1={...emptyCorpus(),texts:[{...original,id:'doc.ed'}],
+    textRevisions:[{id:'rev.ed',text:{...original,id:'doc.ed'}}],
+    notebooks:[{id:'book.ed',title:'Cuaderno editorial',textIds:['doc.ed'],
+      retainedTexts:[{textId:'doc.ed',revisionId:'rev.ed'}]}]};
+  const joined=combineNotebookCorpora(editorial,historical);
+  assert.doesNotThrow(()=>validateCorpus(joined));
+  assert.equal(joined.textRevisions?.length,2);
+  assert.equal(notebookTexts(joined,joined.notebooks.find(book=>book.id==='book.hist')!)[0]!.latin,
+    'Roma antiqua erat.');
+  assert.equal(notebookTexts(joined,joined.notebooks.find(book=>book.id==='book.ed')!)[0]!.latin,
+    'Roma antiqua erat.');
+  const conflicting:CorpusV1={...emptyCorpus(),
+    textRevisions:[{id:'rev.hist',text:{...original,latin:'Texto incompatible'}}]};
+  assert.throws(()=>combineNotebookCorpora(conflicting,historical),/Colisión de versiones/);
+});
+
+test('importar copia no reutiliza ID de fuente o etiqueta ocupado por el corpus local',()=>{
+  const incomingTag={id:'custom.same',label:'Etiqueta de origen',kind:'custom' as const,parentId:null};
+  const localTag={...incomingTag,label:'Etiqueta local'};
+  const incoming:LatinText={id:'doc.same',title:'Texto original',latin:'Gallia est omnis divisa.',
+    source:{author:'César',work:'Bellum Gallicum',reference:'1.1'},
+    tagIds:['custom.same'],createdAt:NOW,updatedAt:NOW};
+  const localText:LatinText={...incoming,title:'Otro pasaje',latin:'Roma magna est.'};
+  const dependencies:CorpusV1={...emptyCorpus(),texts:[incoming],tags:[incomingTag]};
+  const local:CorpusV1={...emptyCorpus(),texts:[localText],tags:[localTag]};
+  const historical:CorpusV1={...emptyCorpus(),texts:[incoming],tags:[incomingTag]};
+  let item=0;
+  const placement=placementFromCorpus(incoming,'place.1',NOW,()=>'item.'+(++item));
+  const book=createEdition({id:'ed.import',legacyNotebookId:null,title:'Importado',
+    timestamp:NOW,placements:[placement]});
+  const restored=importNotebookDependencies(book,dependencies,local,historical);
+  const importedPlacement=restored.edition.placements[0]!;
+  const importedId=importedPlacement.source.sourceId!;
+  const importedTagId=importedPlacement.grammaticalTagIds[0]!;
+  assert.notEqual(importedId,'doc.same');
+  assert.notEqual(importedTagId,'custom.same');
+  assert.equal(restored.corpus.texts.find(text=>text.id===importedId)?.latin,incoming.latin);
+  assert.deepEqual(restored.corpus.texts.find(text=>text.id===importedId)?.tagIds,[importedTagId]);
+  assert.equal(restored.corpus.tags.find(tag=>tag.id===importedTagId)?.label,'Etiqueta de origen');
+  assert.equal(restored.corpus.texts.find(text=>text.id==='doc.same')?.latin,localText.latin);
+  assert.equal(restored.corpus.tags.find(tag=>tag.id==='custom.same')?.label,localTag.label);
+  assert.doesNotThrow(()=>validateCorpus(restored.corpus));
+  assert.doesNotThrow(()=>validateCorpus(combineNotebookCorpora(restored.corpus,historical)));
 });
