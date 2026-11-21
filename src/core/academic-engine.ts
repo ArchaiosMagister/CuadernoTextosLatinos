@@ -25,6 +25,13 @@ export function generatedAcademicValue(kind:AcademicSlotKindV1,value:string):str
   return value.replace(/^(\s*)(\p{L})/u,(_match,spaces:string,first:string)=>
     spaces+first.toLocaleLowerCase('es'));
 }
+/** Adaptar también cuadernos anteriores: la edición manual nunca pierde su grafía.
+ * La misma función alimenta los campos docentes, la hoja PDF y Word.
+ */
+export function displayedAcademicSlotValue(kind:AcademicSlotKindV1,
+  slot:Pick<QuestionWordSlotV1,'value'|'origin'>):string {
+  return slot.origin==='generated'?generatedAcademicValue(kind,slot.value):slot.value;
+}
 const choose = <T>(items: readonly T[], seed: number): T => items[((seed % items.length) + items.length) % items.length]!;
 function checkSeed(seed: number): void {
   if (!Number.isSafeInteger(seed) || seed < 0) fail('La semilla de selección debe ser un entero no negativo');

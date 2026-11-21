@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { VerifiedAcademicBankV1, AcademicBankError, type AcademicBankRecordV1 } from './academic-bank.js';
-import { AcademicQuestionEngineV1, AcademicEngineError } from './academic-engine.js';
+import { AcademicQuestionEngineV1, AcademicEngineError, displayedAcademicSlotValue } from './academic-engine.js';
 import { createEdition, createPlacement } from './edition-factory.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
 import { WorkspaceRepository, WorkspaceConflictError } from '../storage/workspace-repository.js';
@@ -65,6 +65,12 @@ async function create(db:WorkspaceRepository):Promise<NotebookEditionV1> {
   const e=corpus();await db.commitEdition(e.id,0,{command:'create',targetId:e.id,timestamp:NOW},()=>e);return e;
 }
 
+test('los prefijos ya generados se muestran en minúscula incluso en cuadernos anteriores, pero no los manuales',()=>{
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'generated',value:'Antifaz'}),'antifaz');
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'generated',value:'Ínterdependencia'}),'ínterdependencia');
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'manual',value:'Antifaz'}),'Antifaz');
+  assert.equal(displayedAcademicSlotValue('phonetics',{origin:'generated',value:'Aurum'}),'Aurum');
+});
 test('los prefijos importados conservan su grafía, pero se proponen y generan en minúscula',async()=>{
   const originals=[
     record('prefix',200,{value:'Antifaz'}),

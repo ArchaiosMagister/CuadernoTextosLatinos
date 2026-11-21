@@ -9,6 +9,7 @@ import {extraLatinSpacingPt} from '../core/latin-spacing.js';
 import type { NotebookEditionV1, TextPlacementV1, QuestionV1, PageFormatV1, NotebookCoverV1 } from '../core/edition-model.js';
 import { validateEdition, checkEditionReadiness } from '../core/edition-validation.js';
 import { questionDisplayText } from '../core/edition-operations.js';
+import {displayedAcademicSlotValue} from '../core/academic-engine.js';
 import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
 import { zipStore } from './zip-store.js';
 
@@ -147,7 +148,7 @@ function questions(p:TextPlacementV1,f:PageFormatV1):string{
           optionRuns+=run(' ');
           option.slots.forEach((slot,index)=>{
             if(index)optionRuns+=run(', ');
-            optionRuns+=run(slot.value,{italic:true});
+            optionRuns+=run(displayedAcademicSlotValue(option.kind,slot),{italic:true});
           });
           optionRuns+=run('.');
         }

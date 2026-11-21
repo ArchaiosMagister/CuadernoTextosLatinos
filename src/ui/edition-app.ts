@@ -23,6 +23,7 @@ import { WorkspaceConflictError, WorkspaceRepository, type EditionSnapshotV1 } f
 import { prepareLegacyMigration, executeLegacyMigration, type LegacyMigrationPlanV1 } from '../storage/workspace-migration.js';
 import { createWorkspaceBackup } from '../storage/workspace-backup.js';
 import { createAcademicControls } from './academic-controls.js';
+import {displayedAcademicSlotValue} from '../core/academic-engine.js';
 import { createOfflineTeacherBankV1 } from '../core/academic-teacher-bank.js';
 import { splitInlineItalics, splitLatinOmissions } from '../core/edition-inline-formatting.js';
 import {placementGrammarTags,GRAMMAR_CATALOGUE,GRAMMAR_GROUP_IDS,matchesGrammarTag} from '../core/grammar-tags.js';
@@ -169,7 +170,7 @@ function paperFor(edition:NotebookEditionV1,p:TextPlacementV1,index:number,total
           row.append(document.createTextNode(' '));
           option.slots.forEach((slot,index)=>{
             if(index)row.append(document.createTextNode(', '));
-            row.append(node('em','',slot.value));
+            row.append(node('em','',displayedAcademicSlotValue(option.kind,slot)));
           });
           row.append(document.createTextNode('.'));
         }
@@ -1132,7 +1133,7 @@ export function createEditionPane(options:{
           const rows=node('div','edition-option-rows');
           for(const [slotIndex,slot] of o.slots.entries()){
             const word=node('div','edition-inline-edit edition-qword-row');
-            word.append(textField('Palabra',slot.value,value=>{
+            word.append(textField('Palabra',displayedAcademicSlotValue(o.kind,slot),value=>{
               apply((e,at)=>editSlotManual(e,p.id,q.id,o.id,slot.id,value,at));
             }));
             academics.renderSlot(word,p,q,o,slot.id,slotIndex);
