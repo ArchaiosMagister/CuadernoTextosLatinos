@@ -59,7 +59,7 @@ test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente e
       new URL('./',location.href).href))),{timeout:30000}).toBe(true);
   await bank.getByRole('button',{name:'Buscar actualizaciones'}).click();
   await expect(bank.locator('[data-pwa-status]'))
-    .toContainText(/actualizada|nueva versi[oó]n|descargando|no se ha podido/i,{timeout:20000});
+    .toContainText(/actualizada|nueva versi[oó]n|descargando|sin conexi[oó]n|no se ha podido/i,{timeout:20000});
   // El botón de instalación manual permanece disponible en Safari/WebKit.
   const help=bank.locator('[data-pwa-install]');
   await expect(help).toBeVisible();
