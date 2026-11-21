@@ -14,7 +14,8 @@ export function morphTypeFromAnalysis(analysis:string|null|undefined,pos='',indM
   const a=(analysis??'').toLocaleLowerCase('es').trim();
   const p=pos.toLocaleLowerCase('es').trim();
   const im=indMorph.toLocaleLowerCase('es').trim();
-  if(/(?:^|\W)(?:inv\.|invariable|preposición|conjunción|adverbio|interjección)(?:\W|$)/u.test(a+' '+im) ||
+  const invariable=/\b(?:invariable|preposición|conjunción|adverbio|interjección)\b|\b(?:inv|prep|adv|conj|interj)\./u;
+  if(invariable.test(a+' '+im) ||
     /^(?:i|r|c|d|prep|adv|conj|interj)$/u.test(p))return null;
   if(/\b(?:numeral|num\.|ordinal|cardinal)\b/u.test(a+' '+im+' '+p) ||
     /^num/u.test(p))return 'numeral';
