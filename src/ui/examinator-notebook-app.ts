@@ -1533,8 +1533,15 @@ function renderHome():HTMLElement{
   actions.append(button('Importar cuaderno',()=>restore.click(),'hbtn'),restore);
   heading.append(actions);home.append(heading);
   const pwaArea=el('section','cuaderno-home-pwa');
-  pwaArea.append(el('strong','','Instalación y actualizaciones'),
-    createCuadernoPwaControls(()=>composer.flush()));
+  const pwaControls=createCuadernoPwaControls(()=>composer.flush());
+  const pwaDetails=el('details','cuaderno-home-pwa-details');
+  pwaDetails.append(el('summary','','Instalación y actualizaciones'));
+  // Contraer solo las acciones: el aviso de estado permanece visible fuera
+  // del desplegable, conservando el panel y sus controladores originales.
+  const pwaButtons=pwaControls.querySelector<HTMLElement>('.cuaderno-pwa-actions');
+  if(pwaButtons)pwaDetails.append(pwaButtons);
+  pwaControls.prepend(pwaDetails);
+  pwaArea.append(pwaControls);
   home.append(pwaArea);
   const grid=el('div','cuaderno-home-grid');
   const saved=notebooks.filter(n=>n.edition.id!==WORKING_EDITION_ID)
