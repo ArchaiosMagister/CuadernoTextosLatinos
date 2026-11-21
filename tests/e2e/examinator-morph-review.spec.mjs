@@ -27,6 +27,7 @@ test('revisar un análisis ya verificado informa junto a la palabra y evita una 
 
 test('la forma ambigua exige selección explícita, sin elegir en silencio la primera lectura',async({page})=>{
   const morph=await createNotebook(page,'dux.');
+  await page.locator('.edition-menu-nav').getByRole('button',{name:'Texto',exact:true}).click();
   const area=page.locator('.edition-menu-text textarea').first();
   await area.evaluate(node=>{node.focus();node.setSelectionRange(0,3);});
   await page.getByRole('button',{name:'Subrayar palabra seleccionada'}).click();
