@@ -1566,19 +1566,74 @@ function renderHome():HTMLElement{
   home.append(sync);
 
   const bank=el('section','cuaderno-home-bank');
+  bank.setAttribute('aria-label','Banco de textos propios');
   const bankHeading=el('div','cuaderno-home-bank-heading');
-  bankHeading.append(el('h4','','Banco de textos propios'),
-    el('p','small muted',corpus.texts.length+(corpus.texts.length===1?' texto distinto':' textos distintos')));
+  const bankHeadingCopy=el('div','cuaderno-bank-heading-copy');
+  bankHeadingCopy.append(el('span','cuaderno-bank-eyebrow','ARCHIVO DE TEXTOS'),
+    el('h4','','Banco de textos propios'),
+    el('p','small muted','Consulta, ordena y edita tus pasajes sin abrir un cuaderno.'));
+  bankHeading.append(bankHeadingCopy,
+    el('span','cuaderno-bank-total',corpus.texts.length+
+      (corpus.texts.length===1?' texto distinto':' textos distintos')));
   bank.append(bankHeading);
-  const bankActions=el('div','cuaderno-home-actions');
+  const bankActions=el('div','cuaderno-home-actions cuaderno-bank-main-actions');
   bankActions.append(button('Pegar en el banco',()=>pasteText('bank'),'hbtn primary'),
     button('Importar Word al banco',()=>importWord('bank'),'hbtn'),
     button('Auditar textos repetidos',openDuplicateAudit,'hbtn'));
   bank.append(bankActions);
+
+  // Ordenar y filtrar solo la vista: nunca reordenar el corpus persistido.
+  const bankCollator=new Intl.Collator('es',{numeric:true,sensitivity:'base'});
   const search=el('input');search.type='search';
-  search.placeholder='Buscar por texto, autor u obra';
+  search.placeholder='Título, latín, autor, obra o referencia…';
   search.setAttribute('aria-label','Buscar en banco de textos propios');
-  bank.append(search);
+  const authorSelect=el('select');
+  authorSelect.setAttribute('aria-label','Filtrar textos por autor');
+  const authorChoices=[...new Set(corpus.texts.map(t=>t.source.author?.trim()??'').filter(Boolean))]
+    .sort(bankCollator.compare);
+  const allAuthors=el('option','','Todos los autores');
+  allAuthors.value='all';authorSelect.append(allAuthors);
+  for(const author of authorChoices){
+    const option=el('option','',author);option.value=author;authorSelect.append(option);
+  }
+  if(corpus.texts.some(t=>!t.source.author?.trim())){
+    const option=el('option','','Sin autor indicado');option.value='__missing_author__';
+    authorSelect.append(option);
+  }
+  const sortSelect=el('select');
+  sortSelect.setAttribute('aria-label','Ordenar textos del banco');
+  for(const [value,label] of [
+    ['author-asc','Autor: A–Z'],['author-desc','Autor: Z–A'],
+    ['work-asc','Obra: A–Z'],['title-asc','Título: A–Z'],
+  ] as const){
+    const option=el('option','',label);option.value=value;sortSelect.append(option);
+  }
+  const viewSelect=el('select');
+  viewSelect.setAttribute('aria-label','Vista del banco de textos');
+  for(const [value,label] of [
+    ['all','Lista y etiquetas'],['list','Solo lista general'],
+    ['tags','Solo categorías'],
+  ] as const){
+    const option=el('option','',label);option.value=value;viewSelect.append(option);
+  }
+  const bankToolbar=el('div','cuaderno-bank-toolbar');
+  const bankField=(name:string,control:HTMLInputElement|HTMLSelectElement,style:string):HTMLElement=>{
+    const label=el('label','cuaderno-bank-control '+style);
+    label.append(el('span','',name),control);return label;
+  };
+  bankToolbar.append(bankField('Buscar',search,'cuaderno-bank-search'),
+    bankField('Autor',authorSelect,''),
+    bankField('Ordenar por',sortSelect,''),
+    bankField('Ver',viewSelect,''));
+  const resetBankFilters=button('Restablecer vista',()=>{
+    search.value='';authorSelect.value='all';sortSelect.value='author-asc';
+    viewSelect.value='all';populate();
+  },'tbtn cuaderno-bank-reset');
+  bankToolbar.append(resetBankFilters);bank.append(bankToolbar);
+  const bankResultCount=el('p','cuaderno-bank-result-count');
+  bankResultCount.setAttribute('role','status');
+  bankResultCount.setAttribute('aria-live','polite');
+  bank.append(bankResultCount);
   const protectedIds=protectedBankSourceIds();
   const selectedForRemoval=new Set<string>();
   const bulk=el('div','cuaderno-bank-bulk');
@@ -1595,8 +1650,27 @@ function renderHome():HTMLElement{
   const removeSelected=button('Quitar seleccionados',()=>removeBankTexts([...selectedForRemoval]),'tbtn');
   function currentResults():LatinText[]{
     const needle=foldLatin(search.value.trim());
-    return corpus.texts.filter(t=>foldLatin(
-      [t.title,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')).includes(needle));
+    const chosenAuthor=authorSelect.value;
+    const compare=(a:string,b:string)=>bankCollator.compare(a,b);
+    const compareFilled=(a:string,b:string,reverse=false):number=>
+      a?(b?(reverse?-compare(a,b):compare(a,b)):-1):(b?1:0);
+    return corpus.texts.filter(t=>{
+      const author=t.source.author?.trim()??'';
+      if(chosenAuthor==='__missing_author__'&&author)return false;
+      if(chosenAuthor!=='all'&&chosenAuthor!=='__missing_author__'&&author!==chosenAuthor)return false;
+      return !needle||foldLatin(
+        [t.title,t.latin,t.source.author??'',t.source.work??'',t.source.reference??''].join(' ')
+      ).includes(needle);
+    }).sort((a,b)=>{
+      const authorA=a.source.author?.trim()??'',authorB=b.source.author?.trim()??'';
+      const workA=a.source.work?.trim()??'',workB=b.source.work?.trim()??'';
+      const authorOrder=compareFilled(authorA,authorB,sortSelect.value==='author-desc');
+      const workOrder=compareFilled(workA,workB);
+      const titleOrder=compare(a.title,b.title);
+      if(sortSelect.value==='title-asc')return titleOrder||authorOrder||workOrder||compare(a.id,b.id);
+      if(sortSelect.value==='work-asc')return workOrder||authorOrder||titleOrder||compare(a.id,b.id);
+      return authorOrder||workOrder||titleOrder||compare(a.id,b.id);
+    });
   }
   function updateSelection():void{
     selectionCount.textContent=selectedForRemoval.size+
@@ -1625,7 +1699,16 @@ function renderHome():HTMLElement{
       // Selección siempre visible aunque los detalles de la fuente estén cerrados.
       // El título despliega el latín; la casilla solo cambia la selección.
       const rowSummary=el('summary','cuaderno-home-text-heading');
-      rowSummary.append(el('span','',text.title));
+      const source=[text.source.author,text.source.work,text.source.reference]
+        .filter(Boolean).join(' · ');
+      const titleGroup=el('span','cuaderno-home-text-heading-info');
+      titleGroup.append(el('strong','',text.title));
+      titleGroup.append(el('span','cuaderno-home-text-source',
+        source||'Autor y obra sin indicar'));
+      const excerpt=text.latin.replace(/\s+/g,' ').trim();
+      if(excerpt)titleGroup.append(el('span','cuaderno-home-text-snippet',
+        excerpt.slice(0,115)+(excerpt.length>115?'…':'')));
+      rowSummary.append(titleGroup);
       const selection=el('label','cuaderno-home-select'),checkbox=el('input','cuaderno-bank-select');
       checkbox.type='checkbox';checkbox.value=text.id;
       checkbox.setAttribute('aria-label','Seleccionar para quitar: '+text.title);
@@ -1640,9 +1723,15 @@ function renderHome():HTMLElement{
       selection.append(checkbox,el('span','','Seleccionar'));
       if(checkbox.disabled)selection.title='Protegido: se utiliza en un cuaderno histórico';
       rowSummary.append(selection);row.append(rowSummary);
-      const origin=[text.source.author,text.source.work,text.source.reference].filter(Boolean).join(' · ');
-      if(origin)row.append(el('p','small muted',origin));
       row.append(el('p','cuaderno-home-latin',text.latin));
+      if(text.tagIds.length){
+        const chips=el('div','grammar-chips cuaderno-bank-row-tags');
+        for(const tagId of text.tagIds.slice(0,6)){
+          const tag=catalogue.find(item=>item.id===tagId);
+          if(tag)chips.append(el('span','grammar-chip',tag.label));
+        }
+        if(chips.childElementCount)row.append(chips);
+      }
       const actions=el('div','cuaderno-home-text-actions');
       const remove=button('Quitar del banco',()=>removeBankText(text),'tbtn');
       if(protectedIds.has(text.id)){
@@ -1657,35 +1746,49 @@ function renderHome():HTMLElement{
   }
   function populate():void{
     listing.replaceChildren();
-    const needle=foldLatin(search.value.trim());
     const matching=currentResults();
-    selectedButton.textContent=needle?'Seleccionar resultados ('+matching.length+')':
+    const isFiltered=Boolean(search.value.trim())||authorSelect.value!=='all';
+    bankResultCount.textContent='Mostrando '+matching.length+' de '+corpus.texts.length+
+      (corpus.texts.length===1?' texto':' textos')+' · '+(
+        viewSelect.value==='tags'?'clasificados por etiquetas':
+        viewSelect.value==='list'?'lista ordenada':'lista y etiquetas');
+    selectedButton.textContent=isFiltered?'Seleccionar resultados ('+matching.length+')':
       'Seleccionar todo el banco ('+matching.length+')';
+    resetBankFilters.disabled=!isFiltered&&sortSelect.value==='author-asc'&&viewSelect.value==='all';
     updateSelection();
+    if(!matching.length){
+      listing.append(el('p','cuaderno-bank-empty',
+        corpus.texts.length?'No hay textos que coincidan con estos filtros.':'El banco está vacío. Añade o importa un texto para empezar.'));
+      return;
+    }
     const addLazyRows=(group:HTMLDetailsElement,texts:typeof corpus.texts):void=>{
       const items=el('div','cuaderno-home-category-items');group.append(items);
-      const update=():void=>{
+      let visible=40;
+      const update=(force=false):void=>{
         items.replaceChildren();
-        if(group.open)appendTextRows(items,texts);
+        if(!group.open&&!force)return;
+        appendTextRows(items,texts.slice(0,visible));
+        if(visible<texts.length)items.append(button(
+          'Mostrar más textos ('+(texts.length-visible)+' restantes)',()=>{
+            visible+=40;update();
+          },'hbtn cuaderno-bank-show-more'));
       };
-      group.addEventListener('toggle',update);
-      // Pintar los controles solo en la categoría abierta. De lo contrario
-      // «Todos» y «Sin etiquetar» creaban dos casillas para una misma fuente.
-      // Al abrir con el puntero se cargan antes del toggle diferido de WebKit.
+      group.addEventListener('toggle',()=>update());
+      // Pintar inmediatamente en WebKit al abrir, antes del toggle diferido.
       const summary=group.querySelector(':scope > summary');
-      summary?.addEventListener('click',()=>{
-        items.replaceChildren();
-        if(!group.open)appendTextRows(items,texts);
-      });
+      summary?.addEventListener('click',()=>{if(!group.open)update(true);});
       if(group.open)update();
     };
-    const all=el('details','cuaderno-home-category');
-    if(needle)all.open=true;
-    all.append(el('summary','','Todos los textos ('+matching.length+')'));
-    addLazyRows(all,matching);listing.append(all);
+    if(viewSelect.value!=='tags'){
+      const all=el('details','cuaderno-home-category cuaderno-bank-all');
+      all.open=Boolean(search.value.trim());
+      all.append(el('summary','','Todos los textos ('+matching.length+')'));
+      addLazyRows(all,matching);listing.append(all);
+      if(viewSelect.value==='list')return;
+    }
     const makeCategory=(tag:typeof catalogue[number],depth:number):HTMLDetailsElement|null=>{
       const texts=matching.filter(t=>matchesGrammarFilters(idsFor(t.id),[tag.id],catalogue));
-      if(!texts.length)return null; // ocultar etiquetas vacías, sin perderlas del catálogo
+      if(!texts.length)return null;
       const group=el('details','cuaderno-home-category');
       if(depth)group.classList.add('cuaderno-home-subcategory');
       group.append(el('summary','',tag.label+' ('+texts.length+')'));
@@ -1706,6 +1809,9 @@ function renderHome():HTMLElement{
     addLazyRows(untagged,without);listing.append(untagged);
   }
   search.addEventListener('input',populate);
+  authorSelect.addEventListener('change',populate);
+  sortSelect.addEventListener('change',populate);
+  viewSelect.addEventListener('change',populate);
   populate();bank.append(listing);
   home.append(bank);
   return home;
