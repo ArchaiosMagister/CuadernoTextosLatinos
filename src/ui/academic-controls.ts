@@ -17,6 +17,9 @@ import { teacherPreverbBases, teacherAuditRecord } from '../core/academic-teache
 import { choosePreverbBases,preverbBaseKeyForForm,preverbStatement,type PreverbSelection } from '../core/preverb-selection.js';
 import {validateEdition} from '../core/edition-validation.js';
 import {morphologyOccurrencesFreshFirst} from '../core/academic-repetition.js';
+import type {CollatinusGrammarToken} from '../core/collatinus-grammar.js';
+import {MORPH_TYPES,MORPH_LABELS,morphTypeFromAnalysis,type MorphType} from '../core/morph-categories.js';
+import {applyMorphologyChoices,removeMorphologyWord,selectMorphologyForPlacement} from '../core/morph-selection-collatinus.js';
 import type { AcademicSlotKindV1 } from '../core/academic-bank.js';
 import type { EditionSnapshotV1 } from '../storage/workspace-repository.js';
 import { WorkspaceRepository } from '../storage/workspace-repository.js';
@@ -34,6 +37,11 @@ type PlanPending = {
   type:'plan';label:string;plan:AcademicPlanV1;details:string[];
 };
 type Pending = CandidatePending|PlanPending;
+type ContextReading = {key:string;label:string;lemmaId:string;analysis:string;category:MorphType};
+type ContextMorphReview = {
+  wordId:string;placementId:string;questionId:string;revision:number;baseline:string;
+  rows:ContextReading[];selected:string;
+};
 type Bindings = {
   snapshot:()=>EditionSnapshotV1|null;
   flush:()=>Promise<boolean>;
@@ -79,7 +87,7 @@ function rangeInParagraph(p:HTMLElement,selection:Selection):{start:number;end:n
 }
 
 export function createAcademicControls(repository:WorkspaceRepository,bind:Bindings,
-  options:{autoApply?:boolean}={}){
+  options:{autoApply?:boolean;onAnalyzeMorphology?:(latin:string)=>Promise<CollatinusGrammarToken[]>}={}){
   // El banco congelado no se modifica y se instancia únicamente cuando se abre un control.
   let services:ReturnType<typeof createOfflineTeacherBankV1>|null=null;
   let engine:AcademicQuestionEngineV1|null=null,selector:AcademicMorphTokenSelectorV1|null=null;
@@ -94,6 +102,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
   let pending:Pending|null=null;
+  let contextMorphReview:ContextMorphReview|null=null;
   let morphNotice:{wordId:string;message:string;error:boolean}|null=null;
   let paperRange:RangeTarget|null=null;
   let working=false;
@@ -106,7 +115,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     }
     return {report:services,engine:engine!,selector:selector!};
   }
-  function clear():void{pending=null;paperRange=null;morphNotice=null;}
+  function clear():void{pending=null;contextMorphReview=null;paperRange=null;morphNotice=null;}
   function reject(error:unknown):void{bind.status('Propuesta no aplicada: '+summary(error),true);}
   function current(){
     const state=bind.snapshot();
@@ -318,6 +327,109 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
     });
   }
+
+  async function fillMorphology(placementId:string,replaceWordId:string|null=null):Promise<void>{
+    if(!options.onAnalyzeMorphology){
+      bind.status('El análisis contextual de Collatinus no está disponible en esta edición.',true);
+      return;
+    }
+    await withSaved(async state=>{
+      const p=state.edition.placements.find(p=>p.id===placementId);
+      if(!p)throw new Error('Texto latino no encontrado.');
+      const rows=await options.onAnalyzeMorphology!(p.text.latin);
+      const selected=selectMorphologyForPlacement(state.edition,placementId,rows,replaceWordId);
+      if(!selected.length){
+        bind.status(replaceWordId?'No quedan alternativas de la misma categoría para sustituir esta palabra.':
+          'No se han encontrado más tipos distintos de palabra con análisis contextual. No se han repetido categorías.');
+        return;
+      }
+      const at=new Date().toISOString();
+      const changed=await repository.commitEdition(state.edition.id,state.revision,{
+        command:'ui.morphology-contextual-categories',targetId:replaceWordId??placementId,timestamp:at,
+      },original=>{
+        if(!original)throw new Error('El cuaderno ya no existe.');
+        return applyMorphologyChoices(original,placementId,selected,at,replaceWordId);
+      });
+      contextMorphReview=null;
+      bind.saved(changed);
+      const q=changed.edition.placements.find(p=>p.id===placementId)?.questions.find(q=>q.kind==='morphology');
+      bind.status('Morfología: '+(q?.kind==='morphology'?q.words.length:0)+
+        '/4 tipos distintos seleccionados. Los análisis de Collatinus quedan pendientes de revisión docente.');
+    });
+  }
+  function removeMorphWord(p:TextPlacementV1,wordId:string,locked:boolean):void{
+    const permitted=window.confirm(locked?
+      'La forma está protegida por una decisión docente. ¿Autorizas retirar exclusivamente esta aparición y su subrayado?':
+      '¿Quitar esta aparición y su subrayado del texto? Las demás palabras permanecerán intactas.');
+    if(!permitted)return;
+    void withSaved(async s=>{
+      const at=new Date().toISOString();
+      const saved=await repository.commitEdition(s.edition.id,s.revision,{
+        command:'ui.remove-morphology-appearance',targetId:wordId,timestamp:at,
+      },original=>{
+        if(!original)throw new Error('El cuaderno ya no existe.');
+        return removeMorphologyWord(original,p.id,wordId,at,locked);
+      });
+      bind.saved(saved);
+      bind.status('Aparición retirada. Puedes seleccionar otra categoría.');
+    });
+  }
+  async function confirmContextMorph():Promise<void>{
+    const review=contextMorphReview;
+    if(!review||!review.selected)return;
+    await withSaved(async state=>{
+      if(state.revision!==review.revision||JSON.stringify(state.edition)!==review.baseline)
+        throw new Error('El cuaderno cambió desde la propuesta. Vuelve a revisar esta aparición.');
+      const choice=review.rows.find(row=>row.key===review.selected);
+      if(!choice)throw new Error('Análisis contextual no disponible.');
+      const at=new Date().toISOString();
+      const changed=await repository.commitEdition(state.edition.id,state.revision,{
+        command:'ui.confirm-collatinus-morphology',targetId:review.wordId,timestamp:at,
+      },edition=>{
+        if(!edition)throw new Error('El cuaderno ya no existe.');
+        const p=edition.placements.find(p=>p.id===review.placementId);
+        const q=p?.questions.find(q=>q.id===review.questionId);
+        if(!p||!q||q.kind!=='morphology')throw new Error('La pregunta cambió.');
+        const existing=q.words.find(w=>w.id===review.wordId);
+        if(!existing||existing.locked)throw new Error('La aparición no existe o está protegida.');
+        const collision=q.words.some(w=>w.id!==existing.id&&
+          (w.schoolCategory??morphTypeFromAnalysis(w.analysis))===choice.category);
+        if(collision)throw new Error('Otra aparición ya utiliza esa categoría gramatical.');
+        return validateEdition({...edition,updatedAt:at,placements:edition.placements.map(x=>x.id===p.id?
+          {...x,questions:x.questions.map(item=>item.id===q.id?
+            {...q,words:q.words.map(w=>w.id===existing.id?{...w,
+              lemmaId:choice.lemmaId,analysis:choice.analysis,schoolCategory:choice.category,
+              reviewState:'manual' as const}:w)}:item)}:x)});
+      });
+      contextMorphReview=null;morphNotice=null;
+      bind.saved(changed);
+      bind.status('Interpretación revisada y guardada como decisión docente; no es una verificación automática de Collatinus.');
+    });
+  }
+  function renderContextMorphReview():HTMLElement|null{
+    const review=contextMorphReview;
+    if(!review)return null;
+    const box=el('section','edition-academic-review edition-morph-inline-review');
+    box.setAttribute('aria-label','Lecturas contextuales de Collatinus');
+    box.append(el('h4','','Elegir lectura de Collatinus'),
+      el('p','hint','La primera lectura es la propuesta contextual; confirma la interpretación correcta. No se considera verificada automáticamente.'));
+    const label=el('label','edition-field');
+    label.append(el('span','edition-field-label','Análisis morfológico'));
+    const select=el('select','field-control');
+    const initial=el('option','','Elige una interpretación');initial.value='';select.append(initial);
+    for(const item of review.rows){
+      const option=el('option','',item.label+' · '+MORPH_LABELS[item.category]);
+      option.value=item.key;select.append(option);
+    }
+    select.value=review.selected;
+    select.addEventListener('change',()=>{if(contextMorphReview===review)review.selected=select.value;});
+    label.append(select);box.append(label);
+    const actions=el('div','edition-inline-edit');
+    actions.append(button('Confirmar lectura',confirmContextMorph),
+      button('Cancelar',()=>{contextMorphReview=null;bind.repaint();}));
+    box.append(actions);return box;
+  }
+
   function requestMorph(p:TextPlacementV1,q:Morph,wordId:string):void{
     void withSaved(async s=>{
       morphNotice=null;
@@ -328,6 +440,31 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         .find(x=>x.id===q.id&&x.kind==='morphology');
       const currentWord=word?.kind==='morphology'?word.words.find(w=>w.id===wordId):null;
       if(!currentWord)throw new Error('La aparición morfológica ya no existe.');
+      if(currentWord.locked){
+        const message='Este análisis manual está protegido. No se ha modificado nada.';
+        morphNotice={wordId,message,error:false};bind.repaint();bind.status(message);return;
+      }
+      if(options.onAnalyzeMorphology&&currentWord.provenance?.provider.startsWith('Collatinus')){
+        const placement=s.edition.placements.find(x=>x.id===p.id);
+        const mark=placement?.text.markup.find(m=>m.id===currentWord.markId);
+        if(!placement||!mark)throw new Error('El subrayado ya no coincide con el texto.');
+        const tokens=await options.onAnalyzeMorphology(placement.text.latin);
+        const token=tokens.find(t=>t.s===mark.startUtf16&&t.e===mark.endUtf16&&t.w===currentWord.surface);
+        const available=(token?.cands??[]).flatMap(candidate=>candidate.morphos.map((analysis,index)=>{
+          const cat=morphTypeFromAnalysis(analysis,candidate.pos,candidate.im);
+          return cat?{key:String(candidate.lid)+':'+index,label:candidate.lemma+' · '+analysis,
+            lemmaId:candidate.lemma,analysis,category:cat}:null;
+        }).filter((x):x is ContextReading=>x!==null));
+        if(!available.length){
+          const message='Collatinus no ofrece lecturas clasificables para esta aparición.';
+          morphNotice={wordId,message,error:false};bind.repaint();bind.status(message);return;
+        }
+        contextMorphReview={wordId,placementId:p.id,questionId:q.id,revision:s.revision,
+          baseline:JSON.stringify(s.edition),rows:available,selected:''};
+        pending=null;bind.repaint();
+        bind.status('Elige el análisis contextual de «'+currentWord.surface+'» y confirma la lectura.');
+        return;
+      }
       let view:ReturnType<AcademicQuestionEngineV1['previewMorph']>;
       try {
         view=service().engine.previewMorph(s.edition,target);
@@ -642,20 +779,48 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   }
   function renderMorph(section:HTMLElement,p:TextPlacementV1,q:Morph):void{
     const ui=el('div','edition-academic-morph');
+    const selectedTypes=new Set(q.words.map(w=>w.schoolCategory??morphTypeFromAnalysis(w.analysis))
+      .filter((x):x is MorphType=>x!==null));
+    ui.append(el('h4','','Cuatro apariciones · cuatro tipos distintos ('+q.words.length+'/4)'));
+    const legend=el('div','edition-morph-category-legend');
+    legend.setAttribute('aria-label','Tipos gramaticales disponibles');
+    for(const type of MORPH_TYPES){
+      const badge=el('span','edition-morph-category',MORPH_LABELS[type]);
+      badge.dataset.category=type;
+      badge.dataset.selected=String(selectedTypes.has(type));
+      badge.title=selectedTypes.has(type)?'Tipo ya utilizado en este texto':'Tipo disponible';
+      legend.append(badge);
+    }
+    ui.append(legend);
     if(q.words.length){
-      ui.append(el('h4','','Apariciones verificadas'));
       for(const word of q.words){
         const line=el('div','edition-academic-morph-row');
-        line.append(el('span','',word.surface+' · '+(word.analysis??'Pendiente')+
+        const type=word.schoolCategory??morphTypeFromAnalysis(word.analysis);
+        const tag=el('span','edition-morph-category',type?MORPH_LABELS[type]:'Sin clasificar');
+        if(type)tag.dataset.category=type;
+        line.append(tag,el('span','',word.surface+' · '+(word.analysis??'Pendiente')+
+          (word.reviewState==='needs-review'?' · propuesta Collatinus pendiente de revisión':'')+
           (word.locked?' · manual protegida':'')));
         const revisit=button('Revisar análisis',()=>requestMorph(p,q,word.id));
         revisit.setAttribute('aria-label','Revisar análisis de '+word.surface);
         line.append(revisit);
+        if(options.onAnalyzeMorphology){
+          const another=button('Otra',()=>{void fillMorphology(p.id,word.id);});
+          another.setAttribute('aria-label','Otra palabra en lugar de '+word.surface);
+          line.append(another);
+        }
+        const remove=button('Quitar',()=>removeMorphWord(p,word.id,word.locked));
+        remove.setAttribute('aria-label','Quitar aparición de '+word.surface);
+        line.append(remove);
         ui.append(line);
         if(morphNotice?.wordId===word.id){
           const notice=el('p','edition-morph-feedback',morphNotice.message);
           notice.setAttribute('role',morphNotice.error?'alert':'status');
           ui.append(notice);
+        }
+        if(contextMorphReview?.wordId===word.id){
+          const contextual=renderContextMorphReview();
+          if(contextual)ui.append(contextual);
         }
         if(pending?.type==='candidate'&&pending.kind==='morph'&&
           (pending.target as AcademicMorphTargetV1).wordId===word.id){
@@ -667,8 +832,15 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         }
       }
     }
-    ui.append(el('p','hint',
-      'Para añadir una aparición, selecciona una palabra completa en el campo Texto latino o sobre la hoja A4. Solo se admiten análisis individuales elegibles.'));
+    if(options.onAnalyzeMorphology){
+      const complete=button('Completar hasta cuatro tipos',()=>{void fillMorphology(p.id);});
+      complete.disabled=q.words.length>=4;
+      ui.append(complete,el('p','hint',
+        'Solo se seleccionan formas presentes en este pasaje. No se repiten tipos; si faltan categorías, se dejan huecos. Los análisis contextuales de Collatinus necesitan confirmación docente.'));
+    }else{
+      ui.append(el('p','hint',
+        'Para añadir una aparición, selecciona una palabra completa en el campo Texto latino o sobre la hoja A4. Solo se admiten análisis individuales elegibles.'));
+    }
     section.append(ui);
   }
   function renderTextSelect(p:TextPlacementV1,area:HTMLTextAreaElement):HTMLElement{
@@ -744,8 +916,11 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
             optionId:preverb.id,selection:picked}:undefined);
       }
     });
-    // Seleccionar automáticamente hasta dos formas con análisis individual
-    // inequívoco, evitando repetirlas en otros textos del cuaderno.
+    if(options.onAnalyzeMorphology){
+      await fillMorphology(placementId);
+      return;
+    }
+    // Para el editor clásico se conserva el selector individual anterior.
     await withSaved(async first=>{
       const p=first.edition.placements.find(x=>x.id===placementId);
       const question=p?.questions.find(q=>q.kind==='morphology');
