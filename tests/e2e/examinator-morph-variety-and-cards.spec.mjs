@@ -47,6 +47,9 @@ async function firstWordPoint(page){
     if(scroller instanceof HTMLElement)scroller.scrollTop=Math.max(0,scroller.scrollTop-130);
     const second=candidate();
     if('x' in second)return second;
+    // WebKit puede retargetear al papel A4 o al vocabulario adyacente.
+    // El lector verifica geométricamente el token en el punto pulsado.
+    if(second.first?.point)return second.first.point;
     throw Error('No se encontró una palabra visible y pulsable: '+
       JSON.stringify({before:first,after:second,
         scrollTop:scroller?.scrollTop,
