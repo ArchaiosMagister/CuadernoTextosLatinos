@@ -94,6 +94,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   const rulesEnabled=new Set<string>();
   const replaceGroups=new Set<string>();
   let pending:Pending|null=null;
+  let morphNotice:{wordId:string;message:string;error:boolean}|null=null;
   let paperRange:RangeTarget|null=null;
   let working=false;
   const allRules=Array.from({length:20},(_,i)=>'N'+String(i+1).padStart(2,'0'));
@@ -105,7 +106,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
     }
     return {report:services,engine:engine!,selector:selector!};
   }
-  function clear():void{pending=null;paperRange=null;}
+  function clear():void{pending=null;paperRange=null;morphNotice=null;}
   function reject(error:unknown):void{bind.status('Propuesta no aplicada: '+summary(error),true);}
   function current(){
     const state=bind.snapshot();
@@ -319,14 +320,43 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
   }
   function requestMorph(p:TextPlacementV1,q:Morph,wordId:string):void{
     void withSaved(async s=>{
+      morphNotice=null;
       const target:AcademicMorphTargetV1={
         placementId:p.id,questionId:q.id,wordId,expectedRevision:s.revision,
       };
-      const view=service().engine.previewMorph(s.edition,target);
+      const word=s.edition.placements.find(x=>x.id===p.id)?.questions
+        .find(x=>x.id===q.id&&x.kind==='morphology');
+      const currentWord=word?.kind==='morphology'?word.words.find(w=>w.id===wordId):null;
+      if(!currentWord)throw new Error('La aparición morfológica ya no existe.');
+      let view:ReturnType<AcademicQuestionEngineV1['previewMorph']>;
+      try {
+        view=service().engine.previewMorph(s.edition,target);
+      }catch(error){
+        const message='No se puede revisar esta aparición: '+summary(error);
+        morphNotice={wordId,message,error:true};
+        bind.repaint();bind.status(message,true);return;
+      }
+      if(!view.candidates.length){
+        const message='No hay análisis verificados disponibles para «'+currentWord.surface+
+          '». No se ha modificado nada.';
+        morphNotice={wordId,message,error:false};
+        bind.repaint();bind.status(message);return;
+      }
+      const only=view.candidates.length===1?view.candidates[0]:null;
+      if(only&&currentWord.reviewState==='verified'&&!currentWord.locked&&
+        only.lemmaId===currentWord.lemmaId&&only.analysis===currentWord.analysis){
+        const message='«'+currentWord.surface+
+          '» ya tiene su único análisis verificado. No hay una interpretación alternativa en el banco.';
+        morphNotice={wordId,message,error:false};
+        bind.repaint();bind.status(message);return;
+      }
+      // Ni siquiera en el modo automático elegir arbitrariamente la primera
+      // lectura: cada aparición se revisa y confirma en su propio panel.
       const rows=candidateRows('morphology',view.candidates);
-      if(autoApply)await chooseCandidateDirect('morph',target,rows,view.status==='locked');
-      else showCandidate('morph','Reanalizar únicamente esta aparición',target,
+      showCandidate('morph','Revisar análisis de «'+currentWord.surface+'»',target,
         rows,view.status==='locked',JSON.stringify(s.edition),s.revision);
+      bind.status('Revisa el análisis de «'+currentWord.surface+
+        '» debajo de su aparición y confirma tu elección.');
     });
   }
   function requestGroup(p:TextPlacementV1,q:Choice,o:ChoiceOptionV1):void{
@@ -427,8 +457,22 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           const plan=selector.prepare(e,original.target as MorphTokenTargetV1,original.chosen);
           next=await selector.commit(repository,plan,new Date().toISOString());
         }else if(original.kind==='morph'){
-          const plan=engine.prepareMorph(e,original.target as AcademicMorphTargetV1,
-            original.chosen,original.replaceLocked);
+          const target=original.target as AcademicMorphTargetV1;
+          const placement=e.placements.find(p=>p.id===target.placementId);
+          const question=placement?.questions.find(q=>q.id===target.questionId);
+          const word=question?.kind==='morphology'?
+            question.words.find(w=>w.id===target.wordId):null;
+          const selected=engine.previewMorph(e,target).candidates
+            .find(row=>row.id===original.chosen);
+          if(word&&selected&&word.reviewState==='verified'&&
+            word.lemmaId===selected.lemmaId&&word.analysis===selected.analysis){
+            const message='Ese análisis ya estaba confirmado para «'+word.surface+
+              '». No se han modificado los datos.';
+            pending=null;
+            morphNotice={wordId:word.id,message,error:false};
+            bind.repaint();bind.status(message);return;
+          }
+          const plan=engine.prepareMorph(e,target,original.chosen,original.replaceLocked);
           next=await engine.commit(repository,plan,new Date().toISOString());
         }else{
           const plan=engine.prepareSlot(e,original.target as AcademicSlotTargetV1,
@@ -436,13 +480,16 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           next=await engine.commit(repository,plan,new Date().toISOString());
         }
       }
-      pending=null;paperRange=null;replaceGroups.clear();
+      pending=null;morphNotice=null;paperRange=null;replaceGroups.clear();
       bind.saved(next);
       bind.status('Propuesta confirmada y guardada con historial. Revisión '+next.revision+'.');
     });
   }
-  function review():HTMLElement|null{
+  function review(inlineMorph=false):HTMLElement|null{
     if(!pending)return null;
+    const morphCandidate=pending.type==='candidate'&&pending.kind==='morph';
+    // El panel morfológico aparece junto a la palabra, no lejos en la cabecera.
+    if(morphCandidate!==inlineMorph)return null;
     const box=el('section','edition-academic-review');
     box.setAttribute('aria-label','Revisar propuesta académica');
     box.append(el('h3','',pending.label),
@@ -601,8 +648,23 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         const line=el('div','edition-academic-morph-row');
         line.append(el('span','',word.surface+' · '+(word.analysis??'Pendiente')+
           (word.locked?' · manual protegida':'')));
-        line.append(button('Reanalizar aparición',()=>requestMorph(p,q,word.id)));
+        const revisit=button('Revisar análisis',()=>requestMorph(p,q,word.id));
+        revisit.setAttribute('aria-label','Revisar análisis de '+word.surface);
+        line.append(revisit);
         ui.append(line);
+        if(morphNotice?.wordId===word.id){
+          const notice=el('p','edition-morph-feedback',morphNotice.message);
+          notice.setAttribute('role',morphNotice.error?'alert':'status');
+          ui.append(notice);
+        }
+        if(pending?.type==='candidate'&&pending.kind==='morph'&&
+          (pending.target as AcademicMorphTargetV1).wordId===word.id){
+          const inline=review(true);
+          if(inline){
+            inline.classList.add('edition-morph-inline-review');
+            ui.append(inline);
+          }
+        }
       }
     }
     ui.append(el('p','hint',
