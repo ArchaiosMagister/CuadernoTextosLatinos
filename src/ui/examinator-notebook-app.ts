@@ -1591,8 +1591,10 @@ function renderHome():HTMLElement{
   authorSelect.setAttribute('aria-label','Filtrar textos por autor');
   const authorChoices=[...new Set(corpus.texts.map(t=>t.source.author?.trim()??'').filter(Boolean))]
     .sort(bankCollator.compare);
-  for(const [value,label] of [['all','Todos los autores'],...authorChoices.map(author=>[author,author])]){
-    const option=el('option','',label);option.value=value;authorSelect.append(option);
+  const allAuthors=el('option','','Todos los autores');
+  allAuthors.value='all';authorSelect.append(allAuthors);
+  for(const author of authorChoices){
+    const option=el('option','',author);option.value=author;authorSelect.append(option);
   }
   if(corpus.texts.some(t=>!t.source.author?.trim())){
     const option=el('option','','Sin autor indicado');option.value='__missing_author__';
