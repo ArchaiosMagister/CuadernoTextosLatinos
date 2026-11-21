@@ -1,9 +1,10 @@
 import {
-  type EditorSessionV1, type EditableTextV1,
+  type EditorSessionV1, type EditableTextV1, type GrammarAnchorV1,
   type MorphWordV1, type NotebookEditionV1, type QuestionV1,
   type QuestionWordSlotV1, type TextPlacementV1, type VocabularyEntryV1,
 } from './edition-model.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
+import {morphTypeFromAnalysis} from './morph-categories.js';
 
 /** Operaciones puras: no escriben IndexedDB, no actualizan HTML ni consumen bancos. */
 export class EditionOperationError extends Error {
@@ -67,6 +68,24 @@ export function movePlacement(e:NotebookEditionV1,id:string,toIndex:number,at:st
   return validateEdition({...e,updatedAt:at,placements:next});
 }
 
+function reanchorGrammarSpan<T extends GrammarAnchorV1>(span:T,previous:string,latin:string):T{
+  if(span.reviewRequired)return span;
+  if(latin.slice(span.startUtf16,span.endUtf16)===span.exact
+    &&fingerprintForMark(latin,span.startUtf16,span.endUtf16)===span.textFingerprint)return span;
+  const start=latin.indexOf(span.exact);
+  if(start<0||previous.indexOf(span.exact)!==span.startUtf16
+    ||previous.indexOf(span.exact,span.startUtf16+1)!==-1||latin.indexOf(span.exact,start+1)!==-1)
+    return {...span,reviewRequired:true};
+  const end=start+span.exact.length;
+  const wordChar=/[\p{L}\p{M}]/u;
+  const joinsWord=(text:string,position:number)=>wordChar.test(text[position-1]??'')
+    &&wordChar.test(text[position]??'');
+  if(joinsWord(latin,start)!==joinsWord(previous,span.startUtf16)
+    ||joinsWord(latin,end)!==joinsWord(previous,span.endUtf16))
+    return {...span,reviewRequired:true};
+  return {...span,startUtf16:start,endUtf16:end,textFingerprint:fingerprintForMark(latin,start,end)};
+}
+
 /** El título, autor, cita y latín de esta aparición son independientes del Corpus original. */
 export function editPlacementText(e:NotebookEditionV1, placementId:string,
   key:'title'|'author'|'work'|'reference'|'latin',value:string|null,at:string):NotebookEditionV1 {
@@ -82,14 +101,7 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
       if(p.text.markup.some(mark=>mark.endUtf16>newLatin.length)){
         fail('La edición recorta un subrayado fuera del texto. Revisa o retira primero las marcas afectadas.');
       }
-      if((p.grammaticalSpans??[]).some(span=>span.endUtf16>newLatin.length)){
-        fail('La edición recorta un fragmento gramatical. Retira antes su etiqueta de fragmento.');
-      }
-      const spans=(p.grammaticalSpans??[]).map(span=>({...span,
-        reviewRequired:span.reviewRequired
-          ||newLatin.slice(span.startUtf16,span.endUtf16)!==span.exact
-          ||fingerprintForMark(newLatin,span.startUtf16,span.endUtf16)!==span.textFingerprint,
-      }));
+      const spans=(p.grammaticalSpans??[]).map(span=>reanchorGrammarSpan(span,p.text.latin,newLatin));
       editedText.markup=p.text.markup.map(m=>({...m,
         reviewRequired:m.reviewRequired
           || newLatin.slice(m.startUtf16,m.endUtf16)!==m.exact
@@ -98,6 +110,7 @@ export function editPlacementText(e:NotebookEditionV1, placementId:string,
       const marksInReview=new Set(editedText.markup.filter(m=>m.reviewRequired).map(m=>m.id));
       return {...p,text:editedText,
         ...(p.grammaticalSpans?{grammaticalSpans:spans}:{}),
+        ...(p.grammarReview?{grammarReview:p.grammarReview.map(item=>reanchorGrammarSpan(item,p.text.latin,newLatin))}:{}),
         questions:p.questions.map(q=>q.kind==='morphology'
         ? {...q,words:q.words.map(w=>marksInReview.has(w.markId)&&w.reviewState==='verified'
           ? {...w,reviewState:'needs-review' as const}:w)} : q)};
@@ -167,11 +180,13 @@ export function editQuestionStatement(e:NotebookEditionV1,placementId:string,que
   },at);
 }
 export function editVocabulary(e:NotebookEditionV1,placementId:string,vocabularyId:string,
-  field:'lemma'|'headword'|'meaning'|'note'|'included',value:string|boolean|null,at:string):NotebookEditionV1 {
+  field:'lemma'|'headword'|'meaning'|'note'|'included'|'glossesSeparated',
+  value:string|boolean|null,at:string):NotebookEditionV1 {
   return replacePlacement(e,placementId,p=>{
     if(!p.vocabulary.some(w=>w.id===vocabularyId))fail('Entrada de vocabulario inexistente');
     return {...p,vocabulary:p.vocabulary.map(w=>w.id===vocabularyId
-      ? {...w,[field]:value,origin:'manual' as const,locked:true,reviewState:'manual' as const}:w)};
+      ? field==='included'?{...w,included:Boolean(value)}
+      : {...w,[field]:value,origin:'manual' as const,locked:true,reviewState:'manual' as const}:w)};
   },at);
 }
 
@@ -209,7 +224,13 @@ export function regenerateMorph(e:NotebookEditionV1,placementId:string,questionI
     const mark=p.text.markup.find(m=>m.id===existing.markId)!;
     if(mark.reviewRequired)fail('La marca necesita revisión antes de regenerar');
     return {...p,questions:p.questions.map(item=>item.id!==questionId?item:{...q,
-      words:q.words.map(w=>w.id!==morphWordId?w:{...w,...candidate,locked:false})})};
+      words:q.words.map(w=>{
+        if(w.id!==morphWordId)return w;
+        const {schoolCategory:previousCategory,...rest}=w;
+        void previousCategory;
+        const nextCategory=morphTypeFromAnalysis(candidate.analysis);
+        return {...rest,...candidate,...(nextCategory?{schoolCategory:nextCategory}:{}),locked:false};
+      })})};
   },at);
 }
 

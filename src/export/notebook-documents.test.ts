@@ -68,11 +68,15 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
   assert.match(xml,/De bello Gallico/);
   assert.match(xml,/Rōma/);
   assert.match(xml,/ăcĭes, –ēī/);
-  assert.match(xml,/línea de batalla/);
+  assert.match(xml,/<w:t xml:space="preserve">: ‘línea de batalla’<\/w:t>/);
   assert.match(xml,/w:u w:val="single"/);
   assert.match(xml,/w:i\/>/);
   assert.match(xml,/Elige dos de estas cuatro preguntas \(2p\.\):/);
   assert.match(xml,/w:w="11906" w:h="16838"/);
+  assert.match(xml,/w:footer="709"/);
+  assert.match(entries.get('word/styles.xml')!,/w:line="273" w:lineRule="exact"/);
+  assert.match(xml,/w:line="312" w:lineRule="exact"/);
+  assert.match(xml,/w:after="60"/);
   assert.match(xml,/<w:tblW w:w="\d+" w:type="dxa"\/>/);
   assert.match(xml,/<w:tblGrid><w:gridCol w:w="\d+"\/><\/w:tblGrid>/);
   assert.match(xml,/<w:t xml:space="preserve">Vocabulario<\/w:t>/);
@@ -80,6 +84,45 @@ test('DOCX produce un paquete OOXML legible, con fuentes y número de páginas',
   assert.match(entries.get('word/footer1.xml')!,/NUMPAGES/);
   assert.match(entries.get('word/footer1.xml')!,/PAGE/);
   assert.equal((xml.match(/w:pageBreakBefore/g)??[]).length,0);
+});
+test('Word imprime prefijos generados en minúscula y respeta los manuales',()=>{
+  const edition=fixture(),placement=edition.placements[0]!;
+  const question=placement.questions.find(x=>x.kind==='choice');
+  assert.ok(question&&question.kind==='choice');
+  const prefix=question.options.find(o=>o.kind==='prefix');
+  assert.ok(prefix);
+  prefix.slots=[{
+    id:'pref.generated',value:'antifaz',origin:'generated',locked:false,
+    proposedLemmaId:null,provenance:{provider:'test',recordId:'ge.prefix.1',
+      bankRevision:'fixture',decisionId:null},
+  },{
+    id:'pref.manual',value:'Ámbito personal',origin:'manual',locked:true,
+    proposedLemmaId:null,provenance:null,
+  }];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/>antifaz</);
+  assert.match(xml,/>Ámbito personal</);
+  assert.doesNotMatch(xml,/>Antifaz</);
+  assert.equal(JSON.stringify(edition),before);
+});
+test('Word conserva ligaduras y glosas separadas sin alterar el modelo',()=>{
+  const edition=fixture(),p=edition.placements[0]!;
+  p.vocabulary=[{
+    id:'voc.oe',lemma:'poena',headword:'pœna, –æ',meaning:'pena | castigo',
+    note:'f.',included:true,order:0,provenance:null,
+    reviewState:'manual',origin:'manual',locked:true,glossesSeparated:true,
+  },{
+    id:'voc.ae',lemma:'caelum',headword:'cælum, –ī',meaning:'cielo',note:null,
+    included:true,order:1,provenance:null,reviewState:'needs-review',
+    origin:'generated',locked:false,collatinusSource:true,
+  }];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/pœna, –æ/);
+  assert.match(xml,/cælum, –ī/);
+  assert.match(xml,/‘pena’ ‘castigo’/);
+  assert.equal(JSON.stringify(edition),before);
 });
 test('Cada texto posterior empieza en nueva página sin modificar la edición',()=>{
   const edition=fixture(),original=JSON.stringify(edition);
@@ -130,4 +173,38 @@ test('DOCX incluye exclusivamente preguntas: no exporta derivados-respuesta ni a
   assert.doesNotMatch(xml,/RESPUESTA_OCULTA/);
   assert.doesNotMatch(xml,/ANALISIS_OCULTO/);
   assert.match(xml,/Rōma/);
+});
+
+test('La edición Word separa Texto N de autor/obra/capítulo y respeta fuente común',()=>{
+  const edition=fixture();
+  edition.placements[0]!.text.title='Texto 1';
+  edition.format.fontFamily='Georgia';
+  const archive=files(createNotebookDocx(edition));
+  const document=archive.get('word/document.xml')!;
+  const parsed=new DOMParser().parseFromString(document,'text/xml');
+  const paragraphs=Array.from(parsed.getElementsByTagName('w:p'));
+  const paragraphText=(item:Element)=>item.textContent??'';
+  const heading=paragraphs.findIndex(x=>paragraphText(x).includes('Texto 1'));
+  assert.ok(heading>=0,'título editorial presente');
+  assert.equal(paragraphText(paragraphs[heading]!), 'Texto 1');
+  assert.match(paragraphText(paragraphs[heading+1]!),/Julio César.*De bello Gallico.*I 24/);
+  assert.doesNotMatch(paragraphText(paragraphs[heading+1]!),/Texto 1/);
+  assert.match(archive.get('word/styles.xml')!,/w:ascii="Georgia"/);
+});
+
+
+test('Word imprime […] en redonda, conservando cursiva latina y subrayados',()=>{
+  const edition=fixture(),p=edition.placements[0]!;
+  p.text.latin='Rōma […] et Gallia [...] bello [ … ] capta sunt.';
+  // Se mantiene un subrayado de morfología real antes de la omisión.
+  p.text.markup=[{id:'mark.1',kind:'morph-underline',startUtf16:0,endUtf16:4,
+    exact:'Rōma',textFingerprint:fingerprintForMark(p.text.latin,0,4),reviewRequired:false}];
+  const before=JSON.stringify(edition);
+  const xml=files(createNotebookDocx(edition)).get('word/document.xml')!;
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[…]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[\.\.\.\]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:t xml:space="preserve">\[ … \]<\/w:t><\/w:r>/);
+  assert.match(xml,/<w:r><w:rPr><w:i\/><\/w:rPr><w:t xml:space="preserve"> et Gallia <\/w:t><\/w:r>/);
+  assert.match(xml,/w:u w:val="single"/);
+  assert.equal(JSON.stringify(edition),before);
 });

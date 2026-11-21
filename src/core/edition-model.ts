@@ -57,12 +57,15 @@ export interface EditableTextV1 {
   markup: TextMarkV1[];
 }
 
+import type {MorphType} from './morph-categories.js';
 export interface MorphWordV1 {
   id: EntityId;
   markId: EntityId;
   surface: string;
   lemmaId: string | null;
   analysis: string | null;
+  /** Opcional para preservar cuadernos anteriores: categoría docente sin pistas en PDF. */
+  schoolCategory?: MorphType;
   provenance: EvidenceV1 | null;
   reviewState: 'verified' | 'needs-review' | 'manual';
   locked: boolean;
@@ -83,6 +86,8 @@ export interface ChoiceOptionV1 {
   enabled: boolean;
   statement: EditableFieldV1;
   slots: QuestionWordSlotV1[];
+  preverbBaseIds?: [string, string];
+  preverbBasesProtected?: boolean;
 }
 
 export type QuestionKindV1 = 'translation' | 'syntax' | 'morphology' | 'choice';
@@ -117,6 +122,11 @@ export interface VocabularyEntryV1 {
   reviewState: 'verified' | 'needs-review' | 'manual';
   origin: 'generated' | 'manual';
   locked: boolean;
+  /** Misma opción de glosas independientes que Examinator2; falta en V1 antiguo. */
+  glossesSeparated?: boolean;
+  /** Etiqueta de procedencia; no implica verificación filológica individual. */
+  collatinusSource?: boolean;
+  collatinusProper?: boolean;
 }
 
 export interface ReviewFlagV1 {
@@ -134,15 +144,30 @@ export interface SourceLinkV1 {
 
 /** Fragmento gramatical anclado a offsets UTF-16, con revisión tras editar el latín.
  * Campo opcional en ediciones V1: las copias históricas permanecen sin cambios. */
-export interface GrammarSpanV1 {
-  id: EntityId;
+export interface GrammarSpanEvidenceV1 {
+  tagId: string;
+  engine: string;
+  rule: string;
+  evidence: string[];
+}
+
+export interface GrammarAnchorV1 {
   startUtf16: number;
   endUtf16: number;
   exact: string;
   textFingerprint: string;
-  tagIds: string[];
   reviewRequired: boolean;
 }
+
+export interface GrammarSpanV1 extends GrammarAnchorV1 {
+  id: EntityId;
+  tagIds: string[];
+  evidence?: GrammarSpanEvidenceV1[];
+}
+
+export type GrammarReviewDecisionV1 = GrammarAnchorV1 & (
+  {kind:'rejected';tagId:string} | {kind:'reading';lid:number;morpho:string}
+);
 
 export interface TextPlacementV1 {
   id: EntityId;
@@ -150,10 +175,27 @@ export interface TextPlacementV1 {
   text: EditableTextV1;
   questions: QuestionV1[];
   vocabulary: VocabularyEntryV1[];
+  /** Las opciones antiguas se interpretan como «elegir» y «modelo». */
+  vocabularySelectionMode?: 'elegir' | 'todo';
+  vocabularyQuantityMode?: 'modelo' | 'todas' | 'largas' | 'ninguna';
   grammaticalTagIds: string[];
   /** Omisión deliberada en documentos anteriores a las etiquetas de fragmento. */
   grammaticalSpans?: GrammarSpanV1[];
+  grammarReview?: GrammarReviewDecisionV1[];
   reviewFlags: ReviewFlagV1[];
+}
+
+/** Portada opcional; no se modifica el esquema ni los cuadernos existentes. */
+export interface NotebookCoverV1 {
+  title: string;
+  subtitle: string;
+  course: string;
+  studentLabel: string;
+  groupLabel: string;
+  imageDataUrl: string;
+  imageCredit: string;
+  colorMode: 'color' | 'gray' | 'mono';
+  reflection: boolean;
 }
 
 export interface NotebookEditionV1 {
@@ -166,6 +208,7 @@ export interface NotebookEditionV1 {
   updatedAt: string;
   format: PageFormatV1;
   placements: TextPlacementV1[];
+  cover?: NotebookCoverV1;
 }
 
 /** El control de sesión NO forma parte de la copia académica. */

@@ -1,3 +1,4 @@
+import {renderGrammarEditor} from './grammar-editor.js';
 /**
  * Flujo notebook-first de CuadernoTextosLatinos.
  * Convive con la interfaz previa mientras se valida en ?nuevo=1.
@@ -8,7 +9,7 @@ import {foldLatin,searchWorks,findCitation,
 import {readReaderSelection,type ReaderFragment} from './reader-selection.js';
 import {upsertText,type TextDraft} from '../core/editor-operations.js';
 import {createBackup} from '../core/backup.js';
-import {allGrammarTags,findTagByLabel,GRAMMAR_GROUP_IDS,
+import {allGrammarTags,findTagByLabel,
   matchesGrammarTag,isCustomTagLabelValid} from '../core/grammar-tags.js';
 import {summarizeNotebook} from '../core/notebook-overview.js';
 import {onlineSearchUrl,parseOnlineSearch,onlinePageUrl,parseOnlinePage,
@@ -216,94 +217,12 @@ export function mountNotebookApp(root:HTMLElement):void{
     }catch(e){notice('No se ha registrado la etiqueta: '+String(e),true);}finally{busy=false;}
   }
   function tagsPanel(placement:TextPlacementV1):HTMLElement{
-    const detail=el('details','simple-grammar');detail.open=tagsOpen;
-    detail.addEventListener('toggle',()=>{tagsOpen=detail.open;});
-    detail.append(el('summary','','Etiquetas gramaticales ('+placement.grammaticalTagIds.length+')'));
-    const body=el('div','simple-grammar-body');
-    body.append(el('p','hint','Etiquetas manuales del texto actual. No modifican las demás apariciones.'));
-    const all=allGrammarTags(corpus!.corpus);
-    const children=(parent:string,host:HTMLElement,depth=0):void=>{
-      for(const tag of all.filter(t=>t.parentId===parent)){
-        const row=el('label','simple-tag-option');
-        row.style.paddingLeft=(Math.min(depth,4)*12+5)+'px';
-        const cb=el('input');cb.type='checkbox';cb.checked=placement.grammaticalTagIds.includes(tag.id);
-        cb.setAttribute('aria-label',tag.label);
-        cb.addEventListener('change',()=>{
-          const next=new Set(placement.grammaticalTagIds);
-          if(cb.checked)next.add(tag.id);else next.delete(tag.id);
-          void saveTags([...next]);
-        });
-        row.append(cb,el('span','',tag.label));host.append(row);
-        if(depth<5)children(tag.id,host,depth+1);
-      }
-    };
-    for(const groupId of GRAMMAR_GROUP_IDS){
-      const group=all.find(t=>t.id===groupId);
-      if(!group)continue;
-      const details=el('details','simple-tag-group');
-      details.open=placement.grammaticalTagIds.some(id=>matchesGrammarTag(id,groupId,all));
-      details.append(el('summary','',group.label));
-      const list=el('div','simple-tag-group-list');children(groupId,list);
-      details.append(list);body.append(details);
-    }
-    const custom=all.filter(t=>t.kind==='custom');
-    if(custom.length){
-      const group=el('details','simple-tag-group');
-      group.append(el('summary','','Personalizadas'));
-      for(const tag of custom){
-        const row=el('label','simple-tag-option'),cb=el('input');
-        cb.type='checkbox';cb.checked=placement.grammaticalTagIds.includes(tag.id);
-        cb.addEventListener('change',()=>{
-          const next=new Set(placement.grammaticalTagIds);
-          if(cb.checked)next.add(tag.id);else next.delete(tag.id);
-          void saveTags([...next]);
-        });
-        row.append(cb,el('span','',tag.label));group.append(row);
-      }
-      body.append(group);
-    }
-    const own=el('div','simple-new-tag'),input=el('input','field-control');
-    input.placeholder='Nueva etiqueta personalizada';
-    input.setAttribute('aria-label','Nueva etiqueta gramatical');
-    own.append(input,button('Añadir',()=>addCustomTag(input.value)));
-    body.append(own);
-    const fragments=el('details','notebook-fragments');
-    fragments.append(el('summary','','Etiquetar fragmentos del texto ('+
-      (placement.grammaticalSpans?.length??0)+')'));
-    const segment=el('div','notebook-fragment-editor');
-    segment.append(el('p','hint','Selecciona una expresión latina dentro del campo siguiente y elige su construcción gramatical.'));
-    const area=el('textarea','field-control');
-    area.readOnly=true;area.rows=6;area.value=placement.text.latin;
-    area.setAttribute('aria-label','Seleccionar fragmento latino');
-    const choose=el('select','field-control');
-    choose.setAttribute('aria-label','Construcción del fragmento');
-    for(const tag of all){
-      const option=el('option','',tag.label);option.value=tag.id;choose.append(option);
-    }
-    const add=button('Etiquetar selección',async()=>{
-      const start=area.selectionStart,end=area.selectionEnd;
-      if(!choose.value||end<=start){notice('Selecciona primero un fragmento latino.',true);return;}
-      if(await composer.addGrammarSpan(start,end,choose.value)){
-        await reload();tagsOpen=true;render();
-        notice('Etiqueta de fragmento guardada sin modificar las preguntas.');
-      }else notice('No se ha podido guardar la etiqueta de fragmento.',true);
-    },'btn btn-primary');
-    segment.append(area,choose,add);
-    const saved=el('div','notebook-fragment-items');
-    for(const span of placement.grammaticalSpans??[]){
-      const row=el('div','notebook-fragment-row');
-      const names=span.tagIds.map(id=>all.find(t=>t.id===id)?.label??id);
-      row.append(el('span','',span.exact+' · '+names.join(', ')+
-        (span.reviewRequired?' · Revisar anclaje':'')));
-      row.append(button('Quitar',async()=>{
-        if(!await composer.removeGrammarSpan(span.id))return;
-        await reload();tagsOpen=true;render();
-        notice('Etiqueta de fragmento retirada; texto y preguntas intactos.');
-      }));
-      saved.append(row);
-    }
-    segment.append(saved);fragments.append(segment);
-    body.append(fragments);detail.append(body);return detail;
+    return renderGrammarEditor(placement,corpus!.corpus,{
+      open:tagsOpen,toggle:open=>{tagsOpen=open;},
+      saveTags,addCustomTag,notice,
+      addSpan:composer.addGrammarSpan,removeSpan:composer.removeGrammarSpan,
+      updated:async()=>{await reload();tagsOpen=true;render();},
+    });
   }
   function summaryCard(edition:EditionSnapshotV1):HTMLElement{
     const card=el('section','simple-grammar-summary');

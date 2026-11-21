@@ -30,6 +30,11 @@ async function examinadorIncludes() {
   vm.runInNewContext(source, context, { timeout: 12000, filename: 'Examinator2-incluidos.js' });
   // Eutropio forma parte de datos.js del Examinator2 del docente.
   const originalData = await download(RAW_EXAMINATOR + 'js/datos.js');
+  // Exactamente los archivos que alimentan el Collatinus de Examinator2,
+  // empaquetados en un directorio que no modifica la copia original.
+  await mkdir('dist/examinator-cuadernos/collatinus',{recursive:true});
+  await writeFile('dist/examinator-cuadernos/collatinus/datos.js',originalData);
+  await writeFile('dist/examinator-cuadernos/collatinus/incluidos.js',source);
   vm.runInNewContext(originalData, context, { timeout: 20000, filename: 'Examinator2-datos.js' });
   const files = Object.entries(context.EXDATA).filter(([key]) => key.startsWith('/app/data/incluidos/') && key.endsWith('.json'));
   const selected = [];
@@ -48,6 +53,7 @@ async function examinadorIncludes() {
       levels: data.levels || [],
       lines: data.lines.filter((line) => line.t && line.c).map((line) => ({
         c: String(line.c), t: clean(line.t), k: line.k || 'p',
+        ...(line.s ? {s:clean(line.s)} : {}),
       })),
       source: data.source || REPO_SOURCE,
       license: data.license || 'Texto incorporado en Examinator2; fuente original citada en FUENTES.md',
@@ -55,11 +61,40 @@ async function examinadorIncludes() {
       provenance: 'Examinator2',
     });
   }
+  // Catálogo EXACTO que usa Examinator2 (motor: biblioteca.json).
+  // Las obras que no son locales se descargan solo al elegirlas, nunca en masa.
+  const rawBibliography = Object.entries(context.EXDATA)
+    .find(([key]) => key.endsWith('/biblioteca.json'))?.[1];
+  if (typeof rawBibliography !== 'string') throw new Error('El catálogo de Perseus de Examinator2 no está incluido en datos.js.');
+  const originalCatalogue = JSON.parse(rawBibliography);
+  if (!Array.isArray(originalCatalogue.obras) || typeof originalCatalogue.raw !== 'string'
+    || originalCatalogue.obras.length < 25) {
+    throw new Error('Catálogo Perseus de Examinator2 incompleto.');
+  }
+  const remote = originalCatalogue.obras.map((item, index) => {
+    if (!Array.isArray(item) || item.length < 7 || item.some((value) => typeof value !== 'string')) {
+      throw new Error('Ficha bibliográfica incompatible en Examinator2: ' + index);
+    }
+    const [urn, path, author, title, genre, latin, description] = item;
+    if (!urn || !path || !author || !title || !genre || !latin || !/^[a-zA-Z0-9._-]+$/.test(urn)
+      || path.includes('..') || /^https?:/i.test(path)) {
+      throw new Error('Ficha bibliográfica inválida en Examinator2: ' + index);
+    }
+    return {urn,path,author,title,genre,latin,description};
+  });
+  const baseUrl = new URL(originalCatalogue.raw);
+  if (baseUrl.protocol !== 'https:' || baseUrl.hostname !== 'raw.githubusercontent.com'
+    || !baseUrl.pathname.startsWith('/PerseusDL/canonical-latinLit/')) {
+    throw new Error('La URL bibliográfica del catálogo no procede de PerseusDL.');
+  }
+  if (new Set(remote.map(x => x.urn)).size !== remote.length) {
+    throw new Error('Obras con URN duplicada en Examinator2.');
+  }
   if (!selected.some((work) => work.author === 'Julio César')
     || !selected.some((work) => work.author === 'Eutropio')) {
     throw new Error('Los tres autores no están cubiertos: faltan obras de César o Eutropio en Examinator2.');
   }
-  return selected;
+  return {selected, remote, baseUrl:baseUrl.href};
 }
 
 const latinLives = [
@@ -129,7 +164,8 @@ async function nepote() {
   return texts.sort((a,b) => a.urn.localeCompare(b.urn));
 }
 
-const works = [...await examinadorIncludes(), ...await nepote()];
+const {selected:included,remote:examinatorRemote,baseUrl:examinatorBase} = await examinadorIncludes();
+const works = [...included, ...await nepote()];
 if (new Set(works.map((w) => w.urn)).size !== works.length) throw new Error('Obras duplicadas en la biblioteca.');
 if (!['Julio César','Eutropio','Cornelio Nepote'].every((author) => works.some((w) => w.author === author))) {
   throw new Error('No están incorporados los tres autores obligatorios.');
@@ -153,5 +189,9 @@ for (const work of works) {
   await writeFile(filename, JSON.stringify(work));
 }
 await writeFile('dist/library/catalog.json', JSON.stringify({ version: 1, works: catalogue }));
+await writeFile('dist/library/examinator-catalog.json',JSON.stringify({
+  version:1, source:'Examinator2 / Perseus Digital Library',baseUrl:examinatorBase,
+  entries:examinatorRemote,
+}));
 console.log('Biblioteca offline: ' + works.length + ' obras, ' + works.reduce((n,w)=>n+w.lines.length,0) + ' pasajes: '
   + [...new Set(works.map(w=>w.author))].join(', '));

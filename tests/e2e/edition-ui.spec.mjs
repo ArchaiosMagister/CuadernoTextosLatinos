@@ -53,7 +53,7 @@ test('interfaz editorial: editor manual no altera pregunta ni apartados vecinos'
   await page.getByRole('button',{name:'+ Cuaderno'}).click();
   await page.getByRole('button',{name:'Formato'}).click();
   await expect(page.getByRole('spinbutton',{name:'Tamaño del texto (pt)'})).toHaveValue('10.5');
-  await expect(page.getByRole('spinbutton',{name:'Interlineado (pt)'})).toHaveValue('13.5');
+  await expect(page.getByRole('spinbutton',{name:'Espacio adicional entre líneas (pt)'})).toHaveValue('3');
   await page.getByRole('button',{name:'Copia JSON'}).click();
   await expect(page.locator('.edition-save-state')).toContainText('Copia editorial JSON v2 preparada');
 });

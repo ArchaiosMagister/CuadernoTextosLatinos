@@ -17,7 +17,8 @@ test('motor académico WebKit: candidata verificada, CAS, recarga y deshacer sin
     const q=ed.placements[0].questions.find(x=>x.kind==='choice');
     const opt=q.options.find(x=>x.kind==='prefix');
     opt.slots=[{id:'word.1',value:'palabra-original',proposedLemmaId:null,
-      origin:'manual',locked:false,provenance:null}];
+      origin:'generated',locked:false,provenance:{provider:'test-e2e',
+        recordId:'slot.initial',bankRevision:'test.rev',decisionId:null}}];
     const dbName='academic-e2e-'+crypto.randomUUID();
     sessionStorage.setItem('academic-e2e-database',dbName);
     const repo=new WorkspaceRepository(dbName);

@@ -9,6 +9,8 @@ import {
   type TextSource,
 } from './model.js';
 
+import type {ParsedTeacherDocx} from './docx-import.js';
+
 type RecordValue = Record<string, unknown>;
 
 function invalid(path: string, detail: string): never {
@@ -24,7 +26,7 @@ function record(value: unknown, path: string, keys: readonly string[], optional:
     if (!keys.includes(key) && !optional.includes(key)) invalid(`${path}.${key}`, 'campo desconocido');
   }
   for (const key of keys) {
-    if (!Object.hasOwn(item, key)) invalid(`${path}.${key}`, 'campo obligatorio ausente');
+    if (!optional.includes(key) && !Object.hasOwn(item, key)) invalid(`${path}.${key}`, 'campo obligatorio ausente');
   }
   return item;
 }
@@ -76,10 +78,62 @@ function source(value: unknown, path: string): TextSource {
   };
 }
 
+
+/** Guarda sólo el resultado OOXML reconocido; rechaza marcas corruptas y campos ajenos.
+ * El contenido original importado viaja con la fuente en los respaldos del banco. */
+function teacherDocx(value:unknown,path:string,latin:string):ParsedTeacherDocx {
+  const x=record(value,path,['title','author','work','reference','latin','underlines',
+    'vocabulary','lexical','preverbBases','warnings']);
+  const rawLatin=nonBlank(x.latin,path+'.latin',200_000);
+  if(rawLatin!==latin)invalid(path+'.latin','el DOCX no coincide con el pasaje');
+  const meta=source({author:x.author,work:x.work,reference:x.reference},path+'.source');
+  const title=nonBlank(x.title,path+'.title',250);
+  if(!Array.isArray(x.underlines)||x.underlines.length>3000)
+    invalid(path+'.underlines','lista de subrayados inválida');
+  const underlines=x.underlines.map((entry:unknown,i:number)=>{
+    const p=path+'.underlines['+i+']';
+    const row=record(entry,p,['startUtf16','endUtf16','exact']);
+    const start=row.startUtf16,end=row.endUtf16,exact=row.exact;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+      (start as number)<0||(end as number)<=(start as number)||(end as number)>latin.length||
+      typeof exact!=='string'||exact!==latin.slice(start as number,end as number))
+      invalid(p,'anclaje de subrayado incompatible con el latín');
+    return {startUtf16:start as number,endUtf16:end as number,exact:exact as string};
+  });
+  if(!Array.isArray(x.vocabulary)||x.vocabulary.length>3000)
+    invalid(path+'.vocabulary','lista de vocabulario inválida');
+  const vocabulary=x.vocabulary.map((entry:unknown,i:number)=>{
+    const p=path+'.vocabulary['+i+']',row=record(entry,p,['headword','meaning']);
+    const headword=nonBlank(row.headword,p+'.headword',500);
+    const meaning=row.meaning===null?null:nonBlank(row.meaning,p+'.meaning',2000);
+    return {headword,meaning};
+  });
+  const lexical=record(x.lexical,path+'.lexical',['preverb','phonetics','prefix','latinism']);
+  const parts={} as ParsedTeacherDocx['lexical'];
+  for(const kind of ['preverb','phonetics','prefix','latinism'] as const){
+    const list=lexical[kind];
+    if(!Array.isArray(list)||list.length>3000)invalid(path+'.lexical.'+kind,'lista inválida');
+    parts[kind]=list.map((item:unknown,i:number)=>nonBlank(item,path+'.lexical.'+kind+'['+i+']',500));
+  }
+  let preverbBases:ParsedTeacherDocx['preverbBases']=null;
+  if(x.preverbBases!==null){
+    if(!Array.isArray(x.preverbBases)||x.preverbBases.length!==2)
+      invalid(path+'.preverbBases','se necesitan exactamente dos bases');
+    preverbBases=[
+      nonBlank(x.preverbBases[0],path+'.preverbBases[0]',500),
+      nonBlank(x.preverbBases[1],path+'.preverbBases[1]',500),
+    ];
+  }
+  if(!Array.isArray(x.warnings)||x.warnings.length>100)
+    invalid(path+'.warnings','avisos inválidos');
+  const warnings=x.warnings.map((item:unknown,i:number)=>nonBlank(item,path+'.warnings['+i+']',2000));
+  return {title,...meta,latin:rawLatin,underlines,vocabulary,lexical:parts,preverbBases,warnings};
+}
+
 function text(value: unknown, path: string): LatinText {
   const data = record(value, path, [
     'id', 'title', 'latin', 'source', 'tagIds', 'createdAt', 'updatedAt',
-  ], ['notes', 'vocabulary', 'reviewed']);
+  ], ['notes', 'vocabulary', 'reviewed', 'teacherDocx']);
   const createdAt = timestamp(data.createdAt, `${path}.createdAt`);
   const updatedAt = timestamp(data.updatedAt, `${path}.updatedAt`);
   if (updatedAt < createdAt) invalid(path, 'updatedAt es anterior a createdAt');
@@ -106,6 +160,8 @@ function text(value: unknown, path: string): LatinText {
     ...(Object.hasOwn(data, 'notes') && { notes: nonBlank(data.notes, `${path}.notes`, 20_000) }),
     ...(vocabulary && { vocabulary }),
     ...(typeof data.reviewed === 'boolean' && { reviewed: data.reviewed }),
+    ...(data.teacherDocx === undefined?{}:{teacherDocx:teacherDocx(data.teacherDocx, path+'.teacherDocx',
+      nonBlank(data.latin, path+'.latin', 200_000))}),
   };
 }
 

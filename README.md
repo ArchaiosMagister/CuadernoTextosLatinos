@@ -1,8 +1,10 @@
 # Cuaderno de textos latinos
 
-**Fase 2 — banco, lector y editor de textos.**
+**[Abrir el Cuaderno oficial](https://archaiosmagister.github.io/CuadernoTextosLatinos/)**
 
-Webapp independiente para seleccionar pasajes de autores latinos, conservar textos propios y preparar cuadernos con varios textos. El selector se inspira directamente en la **biblioteca de [Examinator2](https://github.com/ArchaiosMagister/examinator2)** del docente: listado lateral, búsqueda por autor u obra, lector con citas, navegación por referencia y selección de pasajes.
+Selecciona pasajes de autores latinos, conserva textos propios y prepara cuadernos con preguntas, vocabulario y exportación Word/PDF. Collatinus propone análisis de morfología, vocabulario y etiquetas que el docente puede revisar.
+
+La portada oficial abre la versión que antes se ofrecía como experimental. Los cuadernos de esa versión se abren en el mismo navegador y perfil donde se guardaron. Para acceder a los datos de la versión anterior, usa el [editor anterior](https://archaiosmagister.github.io/CuadernoTextosLatinos/cuaderno-clasico.html) o la [recuperación de la primera prueba](https://archaiosmagister.github.io/CuadernoTextosLatinos/recuperar-prueba/).
 
 ## Biblioteca incluida sin conexión
 
@@ -24,8 +26,6 @@ Se podrá ampliar el catálogo de otros autores mediante consulta online en otra
 - Persistencia IndexedDB versionada y transaccional, con protección de conflictos.
 - Copias JSON verificables con SHA-256 y restauración con vista previa.
 - Comprobaciones unitarias y pruebas de navegador WebKit.
-
-**No implementado todavía:** etiquetado gramatical, generación Word/PDF, preguntas, sincronización entre dispositivos ni edición colaborativa.
 
 ## Compilar y probar
 

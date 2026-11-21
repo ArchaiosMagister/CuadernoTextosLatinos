@@ -95,12 +95,14 @@ test('motor real con lista docente restringe candidatos por base, apartado y est
   const preverb=q.options[0]!;
   const preview=engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:preverb.id,
     slotId:preverb.slots[0]!.id,sourceForm:'mitto',expectedRevision:0});
-  assert.equal(preview.status,'ready');
+  // La fuente aporta dos candidatos verificados, pero la entrada manual del
+  // cuaderno no se sustituye sin autorización expresa.
+  assert.equal(preview.status,'locked');
   assert.equal(preview.candidates.length,2);
   assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:preverb.id,
     slotId:preverb.slots[0]!.id,sourceForm:'sero',expectedRevision:0}).status,'no-candidates');
   assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:preverb.id,
-    slotId:preverb.slots[0]!.id,sourceForm:'sero, -ere, -rui, sertum',expectedRevision:0}).status,'ready');
+    slotId:preverb.slots[0]!.id,sourceForm:'sero, -ere, -rui, sertum',expectedRevision:0}).status,'locked');
   const anotherSlot=q.options[3]!.slots[0]!;
   assert.equal(engine.previewSlot(book,{placementId:'p1',questionId:q.id,optionId:q.options[3]!.id,
     slotId:anotherSlot.id,expectedRevision:0}).candidates.length,1);

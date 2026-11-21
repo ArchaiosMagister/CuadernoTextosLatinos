@@ -4,6 +4,7 @@
  */
 import type { NotebookEditionV1, QuestionV1, TextPlacementV1 } from './edition-model.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
+import {morphTypeFromAnalysis} from './morph-categories.js';
 import { type AcademicBankRecordV1, VerifiedAcademicBankV1 } from './academic-bank.js';
 import type { WorkspaceRepository, EditionSnapshotV1 } from '../storage/workspace-repository.js';
 
@@ -99,7 +100,9 @@ export class AcademicMorphTokenSelectorV1 {
         const {startUtf16:start,endUtf16:end,markId,wordId}=plan.target;
         const mark={id:markId,kind:'morph-underline' as const,startUtf16:start,endUtf16:end,
           exact:surface,textFingerprint:fingerprintForMark(placement.text.latin,start,end),reviewRequired:false};
+        const schoolCategory=morphTypeFromAnalysis(row.analysis);
         const word={id:wordId,markId:mark.id,surface,lemmaId:row.lemmaId,analysis:row.analysis,
+          ...(schoolCategory?{schoolCategory}:{}),
           provenance:row.evidence,reviewState:'verified' as const,locked:false};
         const changed={...placement,text:{...placement.text,markup:[...placement.text.markup,mark]},
           questions:placement.questions.map(q=>q.id===question.id?{...question,words:[...question.words,word]}:q)};
