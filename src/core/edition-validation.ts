@@ -1,3 +1,4 @@
+import {MORPH_TYPES} from './morph-categories.js';
 import {
   EDITION_SCHEMA_VERSION, TEMPLATE_POINTS_HUNDREDTHS,
   type ChoiceOptionV1, type EditableFieldV1, type EditableTextV1,
@@ -131,13 +132,15 @@ function text(input: unknown,path: string): EditableTextV1 {
     markup:array(d.markup,`${path}.markup`,3000).map((v,i)=>mark(v,`${path}.markup[${i}]`,latin))};
 }
 function morphWord(input: unknown,path: string):MorphWordV1 {
-  const d=object(input,path,['id','markId','surface','lemmaId','analysis','provenance','reviewState','locked']);
+  const d=object(input,path,['id','markId','surface','lemmaId','analysis','provenance','reviewState','locked'],['schoolCategory']);
   const reviewState=choice(d.reviewState,`${path}.reviewState`,['verified','needs-review','manual']);
   const provenance=evidence(d.provenance,`${path}.provenance`);
   if(reviewState==='verified'&&!provenance)fail(path,'forma verificada sin evidencia');
   return {id:id(d.id,`${path}.id`),markId:id(d.markId,`${path}.markId`),
     surface:str(d.surface,`${path}.surface`,200_000),lemmaId:nullable(d.lemmaId,`${path}.lemmaId`),
-    analysis:nullable(d.analysis,`${path}.analysis`,3000),provenance,reviewState,locked:flag(d.locked,`${path}.locked`)};
+    analysis:nullable(d.analysis,`${path}.analysis`,3000),
+    ...(d.schoolCategory===undefined?{}:{schoolCategory:choice(d.schoolCategory,`${path}.schoolCategory`,MORPH_TYPES)}),
+    provenance,reviewState,locked:flag(d.locked,`${path}.locked`)};
 }
 function slot(input: unknown,path: string):QuestionWordSlotV1 {
   const d=object(input,path,['id','value','proposedLemmaId','origin','locked','provenance']);
