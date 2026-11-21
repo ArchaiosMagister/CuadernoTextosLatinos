@@ -66,15 +66,21 @@ function extractLast(s:string,pattern:RegExp):string|null {
   const match=s.match(pattern);
   return match?.[1]?.trim()??null;
 }
+// Referencias de libro/capítulo: III, VI 23, VI 23 (bis), 10, LXI 4–5 y 1.2.3.
+// Compartir la regla entre la detección de la cita y su descomposición evita
+// rechazar documentos perfectamente legibles solo por su numeración.
+const SOURCE_REFERENCE=
+  /\s+((?:[IVXLCDM]+(?:\s+\d+(?:\s*[-–]\s*\d+)?)?|\d+(?:[.\s]\d+)*(?:\s*[-–]\s*\d+)?)(?:\s*\((?:bis|ter|quater)\))?)\s*$/iu;
+const ADAPTED_AUTHOR_PREFIX=/^(?:adaptad[oa]\s+de(?:l)?|adaptaci[oó]n\s+de(?:l)?)\s+/iu;
 function parseSource(p:Paragraph):{author:string|null;work:string|null;reference:string|null} {
   const comma=p.text.indexOf(',');
   if(comma<0)return {author:p.text.trim()||null,work:null,reference:null};
-  const author=p.text.slice(0,comma).trim()||null;
+  // «Adaptado de» califica el pasaje, no forma parte del nombre del autor.
+  const author=p.text.slice(0,comma).trim().replace(ADAPTED_AUTHOR_PREFIX,'').trim()||null;
   const remainder=p.text.slice(comma+1).trim();
-  const roman=/\s+([IVXLCDM]+(?:\s+\d+(?:\s*[-–]\s*\d+)?)?|\d+(?:\s*[-–]\s*\d+)?)$/iu;
-  const match=remainder.match(roman);
+  const match=remainder.match(SOURCE_REFERENCE);
   const work=(match?remainder.slice(0,match.index).trim():remainder)||null;
-  const reference=match?.[1]?.replace(/\s*([–-])\s*/gu,'$1')??null;
+  const reference=match?.[1]?.replace(/\s+/gu,' ').replace(/\s*([–-])\s*/gu,'$1')??null;
   return {author,work,reference};
 }
 function normalizeGreekQuotes(s:string):string{return s.trim();}
@@ -169,16 +175,19 @@ export function parseTeacherDocumentXml(xml:string,parse:(xml:string)=>Document 
   if(vocabIdx<3||questionIdx<=vocabIdx)throw Error('El DOCX no sigue la estructura de texto latino, vocabulario y preguntas.');
   // La referencia precede al latín; puede haber más de un párrafo latino.
   const sourceIdx=ps.findIndex((p,i)=>i>=2&&i<vocabIdx-1&&
-    p.text.length<250&&p.text.includes(',')&&
-    /\s+(?:[IVXLCDM]+\s+\d+(?:\s*[-–]\s*\d+)?|\d+(?:\s*[-–]\s*\d+)?)\s*$/iu.test(p.text));
-  if(sourceIdx<2)throw Error('No se reconoce autor, obra y referencia.');
+    p.text.length<250&&p.text.includes(',')&&SOURCE_REFERENCE.test(p.text));
+  if(sourceIdx<2)throw Error('No se reconoce la referencia bibliográfica. Se admiten, por ejemplo, «Milcíades III», «De bello Gallico V 22» y «Breviarium VI 23 (bis)».');
   const source=ps[sourceIdx]!,title=ps[sourceIdx-1]!;
   const body=importLatin(ps.slice(sourceIdx+1,vocabIdx));
+  if(/^texto(?:\s+latino)?[\s.:…]*$/iu.test(body.latin))
+    throw Error('El documento contiene el marcador «Texto», pero no un pasaje latino. Completa el Word antes de importarlo.');
   if(!body.latin||body.latin.length>200_000)throw Error('El pasaje latino está vacío o excede el límite.');
   const vocab=ps.slice(vocabIdx+1,questionIdx);
   const vocabulary=vocab.map(parseWordValues).filter((x):x is ImportedVocabulary=>x!==null);
   const lexical=parseLexical(ps.slice(questionIdx+1));
   const review=[...lexical.warnings];
+  if(ADAPTED_AUTHOR_PREFIX.test(source.text.split(',')[0]??''))
+    review.push('El Word indica que es un pasaje adaptado. Se ha separado esta indicación del nombre del autor.');
   if(vocab.some(p=>isPlaceholder(p.text)))review.push('El vocabulario contiene letras o huecos: no se importarán como lemas.');
   if(!vocabulary.length)review.push('No hay entradas reales de vocabulario: el editor permitirá completarlas sin inventar significados.');
   if(!body.underlines.length)review.push('No se detectaron subrayados; revisar la morfología.');
