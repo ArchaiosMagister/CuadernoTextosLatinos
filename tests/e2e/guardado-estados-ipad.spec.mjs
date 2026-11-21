@@ -68,7 +68,7 @@ test('iPad: navegación y acciones siguen cómodas y hay foco visible',async({pa
   expect(await pwa.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(40);
   const bankEntry=page.locator('.cuaderno-home-bank');
   await expect(bankEntry).toBeVisible();
-  const source=bankEntry.locator('.cuaderno-home-bank input[type="search"]');
+  const source=bankEntry.locator('input[type="search"]');
   await expect(source).toBeVisible();
   const metrics=await page.locator('#editor .cuaderno-bank-toolbar').evaluate(node=>({
     inputHeights:[...node.querySelectorAll('input,select')].map(el=>Math.round(el.getBoundingClientRect().height)),
