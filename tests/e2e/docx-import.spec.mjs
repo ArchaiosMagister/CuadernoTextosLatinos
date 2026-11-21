@@ -260,3 +260,35 @@ test('Banco propio: importa varios DOCX sin cuaderno y conserva marcas y vocabul
     return saved?.edition.placements[0]?.grammaticalTagIds.includes('gram.voz.pasiva');
   })).toBe(true);
 });
+
+
+test('Banco propio: omite DOCX inválidos y guarda los archivos posteriores',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  const chooser=page.waitForEvent('filechooser');
+  await bank.getByRole('button',{name:'Importar Word al banco'}).click();
+  const docx=(name,xml)=>({name,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(xml)});
+  await (await chooser).setFiles([
+    docx('primero.docx',documentXml()),
+    docx('glosa-larga.docx',documentXml().replace('Finito igitur','Postremo igitur')
+      .replaceAll('Egipto','a'.repeat(2001))),
+    {name:'dañado.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer:Buffer.from('No es un DOCX')},
+    docx('último.docx',documentXml().replace('Finito igitur','Denique igitur')),
+  ]);
+  await page.getByRole('button',{name:'Guardar 3 textos en el banco'}).click();
+  const report=page.locator('.modal').filter({hasText:'Resultado de la importación Word'});
+  await expect(report).toContainText('2 archivos guardados · 2 omitidos');
+  const failures=report.locator('.word-import-errors li');
+  await expect(failures).toHaveText([/dañado\.docx/,/glosa-larga\.docx.*meaning.*2000/]);
+  await report.getByRole('button',{name:'Cerrar',exact:true}).click();
+  await expect(bank).toContainText('2 textos distintos');
+  await page.reload();
+  await expect(bank).toContainText('2 textos distintos');
+  const texts=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    return (await new IndexedDbCorpusRepository().load()).corpus.texts.map(text=>text.latin);
+  });
+  expect(texts).toEqual([expect.stringContaining('Finito igitur'),expect.stringContaining('Denique igitur')]);
+});
