@@ -66,7 +66,7 @@ export function applyMorphologyChoices(
     if(!Number.isSafeInteger(choice.start)||!Number.isSafeInteger(choice.end)||
       placement.text.latin.slice(choice.start,choice.end)!==choice.surface ||
       choice.end<=choice.start)throw new Error('La propuesta no coincide con el texto actual.');
-    const letter=/[\\p{L}\\p{M}]/u;
+    const letter=/[\p{L}\p{M}]/u;
     if((choice.start>0&&letter.test(placement.text.latin[choice.start-1]!))||
       (choice.end<placement.text.latin.length&&letter.test(placement.text.latin[choice.end]!)))
       throw new Error('La propuesta no abarca una palabra latina completa.');
