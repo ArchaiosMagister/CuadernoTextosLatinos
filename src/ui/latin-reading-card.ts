@@ -27,31 +27,52 @@ function textRange(paragraph:HTMLElement,start:number,end:number):Range|null{
   return r;
 }
 function hitAt(x:number,y:number,root:HTMLElement):Hit|null{
+  // En Safari el cursor obtenido por caretPositionFromPoint puede ser el de
+  // un nodo vecino, especialmente si el texto está subrayado o tiene zoom.
+  // Comprobamos el rectángulo de cada token: el punto debe estar dentro de
+  // las letras reales y no en el margen ni en el espacio entre palabras.
+  const element=document.elementFromPoint(x,y);
+  const paragraph=element?.closest<HTMLElement>('.edition-latin');
+  if(!paragraph||!root.contains(paragraph))return null;
+  const latin=paragraph.textContent??'';
   const doc=document as Document&{
     caretRangeFromPoint?:(x:number,y:number)=>Range|null;
     caretPositionFromPoint?:(x:number,y:number)=>{offsetNode:Node;offset:number}|null;
   };
-  // Safari puede devolver un intervalo en el párrafo cuando la posición de
-  // texto sí está disponible. Preferimos la posición exacta, como en el lector.
-  const exact=doc.caretPositionFromPoint?.(x,y);
-  const native=exact?null:doc.caretRangeFromPoint?.(x,y);
-  const pos=exact??(native?{offsetNode:native.startContainer,offset:native.startOffset}:null);
-  if(!pos)return null;
-  const origin=pos.offsetNode.nodeType===Node.ELEMENT_NODE?
-    pos.offsetNode as Element:pos.offsetNode.parentElement;
-  const paragraph=origin?.closest<HTMLElement>('.edition-latin');
-  if(!paragraph||!root.contains(paragraph))return null;
-  const prefix=document.createRange();prefix.selectNodeContents(paragraph);
-  try{prefix.setEnd(pos.offsetNode,pos.offset);}catch{return null;}
-  const latin=paragraph.textContent??'',offset=prefix.toString().length;
-  const hit=latinWordAtOffset(latin,offset);
-  if(!hit)return null;
-  const range=textRange(paragraph,hit.start,hit.end);
-  if(!range)return null;
-  const box=range.getBoundingClientRect();
-  // No mostrar una ficha si el puntero está realmente en espacio en blanco.
-  if(x<box.left-3||x>box.right+3||y<box.top-3||y>box.bottom+3)return null;
-  return {paragraph,start:hit.start,end:hit.end,word:hit.word,rect:box};
+  const pos=doc.caretPositionFromPoint?.(x,y)??(()=>{
+    const r=doc.caretRangeFromPoint?.(x,y);
+    return r?{offsetNode:r.startContainer,offset:r.startOffset}:null;
+  })();
+  let preferred:ReturnType<typeof latinWordAtOffset>=null;
+  if(pos){
+    const prefix=document.createRange();prefix.selectNodeContents(paragraph);
+    try{
+      prefix.setEnd(pos.offsetNode,pos.offset);
+      preferred=latinWordAtOffset(latin,prefix.toString().length);
+    }catch{/* Usar la búsqueda geométrica. */}
+  }
+  function exact(start:number,end:number,word:string):Hit|null{
+    const range=textRange(paragraph!,start,end);
+    if(!range)return null;
+    for(const box of Array.from(range.getClientRects())){
+      if(box.width>0&&box.height>0&&x>=box.left-4&&x<=box.right+4&&
+        y>=box.top-4&&y<=box.bottom+4){
+        return {paragraph:paragraph!,start,end,word,rect:box};
+      }
+    }
+    return null;
+  }
+  if(preferred){
+    const hit=exact(preferred.start,preferred.end,preferred.word);
+    if(hit)return hit;
+  }
+  for(const item of latin.matchAll(WORD)){
+    const start=item.index!,end=start+item[0].length;
+    if(preferred?.start===start)continue;
+    const hit=exact(start,end,item[0]);
+    if(hit)return hit;
+  }
+  return null;
 }
 function el<K extends keyof HTMLElementTagNameMap>(tag:K,cls='',content=''):HTMLElementTagNameMap[K]{
   const item=document.createElement(tag);
