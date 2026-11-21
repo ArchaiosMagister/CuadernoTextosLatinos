@@ -19,35 +19,39 @@ async function firstWordPoint(page){
   const latin=page.locator('.edition-preview .edition-latin').first();
   await expect(latin).toBeVisible();
   await latin.scrollIntoViewIfNeeded();
-  const point=await latin.evaluate(paragraph=>{
-    const walk=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
-    let node=walk.nextNode(),match;
-    while(node){
-      match=(node.textContent??'').match(/[\p{L}][\p{L}\p{M}]*/u);
-      if(match)break;
-      node=walk.nextNode();
+  return latin.evaluate(paragraph=>{
+    function candidate(){
+      const walk=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
+      let node;
+      let first=null;
+      while((node=walk.nextNode())){
+        const text=node.textContent??'';
+        for(const m of text.matchAll(/[\p{L}][\p{L}\p{M}]*/gu)){
+          const range=document.createRange();
+          range.setStart(node,m.index);range.setEnd(node,m.index+m[0].length);
+          for(const rect of range.getClientRects()){
+            if(rect.width<=0||rect.height<=0)continue;
+            const point={x:rect.x+rect.width/2,y:rect.y+rect.height/2};
+            const actual=document.elementFromPoint(point.x,point.y);
+            if(actual?.closest('.edition-latin')===paragraph)return point;
+            if(!first)first={point,target:actual?.outerHTML.slice(0,220)??''};
+          }
+        }
+      }
+      return {first};
     }
-    if(!node||!match)throw Error('No hay palabras latinas en la hoja.');
-    const offset=(node.textContent??'').indexOf(match[0]);
-    const range=document.createRange();
-    range.setStart(node,offset);range.setEnd(node,offset+match[0].length);
-    const rect=range.getBoundingClientRect();
-    if(rect.width<=0||rect.height<=0)throw Error('La palabra no está maquetada en pantalla.');
-    return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
+    const first=candidate();
+    if('x' in first)return first;
+    // Tras el scroll de Playwright, evitar que una barra fija cubra el texto.
+    const scroller=paragraph.closest('.edition-preview-stack');
+    if(scroller instanceof HTMLElement)scroller.scrollTop=Math.max(0,scroller.scrollTop-130);
+    const second=candidate();
+    if('x' in second)return second;
+    throw Error('No se encontró una palabra visible y pulsable: '+
+      JSON.stringify({before:first,after:second,
+        scrollTop:scroller?.scrollTop,
+        viewport:{width:innerWidth,height:innerHeight}}));
   });
-  const probe=await page.evaluate(({x,y})=>{
-    const elem=document.elementFromPoint(x,y),paragraph=document.querySelector('.edition-preview .edition-latin');
-    return {point:{x,y},hit:elem?.outerHTML.slice(0,280)??null,
-      hitLatin:Boolean(elem?.closest('.edition-latin')),
-      paragraphRect:paragraph?.getBoundingClientRect().toJSON()??null,
-      paragraphText:paragraph?.textContent?.slice(0,100)??null,
-      modalCount:document.querySelectorAll('.modal-bg').length,
-      viewport:[window.innerWidth,window.innerHeight],
-      paper:paragraph?.closest('.edition-paper')?.getBoundingClientRect().toJSON()??null};
-  },point);
-  console.log('LEXICAL_HIT_PROBE',JSON.stringify(probe));
-  expect(probe.hitLatin,JSON.stringify(probe)).toBe(true);
-  return point;
 }
 
 test('cuatro palabras de tipos diferentes en el menú docente; la hoja conserva solo los subrayados',async({page})=>{
