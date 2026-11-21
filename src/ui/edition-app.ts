@@ -1,5 +1,6 @@
 import { conflictsWithGrammarForm } from '../core/grammar-tags.js';
 import type { LatinText } from '../core/model.js';
+import type {CollatinusGrammarToken} from '../core/collatinus-grammar.js';
 /**
  * Primera interfaz de composición editorial.
  * Usa exclusivamente NotebookEditionV1 y WorkspaceRepository: la hoja es una proyección,
@@ -245,6 +246,7 @@ export function createEditionPane(options:{
   findCorpusSource?:(id:string)=>Promise<LatinText|undefined>;
   onAnalyzeVocabulary?:(latin:string,quantity:VocabularyQuantityMode)=>
     Promise<CollatinusVocabularyCandidate[]>;
+  onAnalyzeMorphology?:(latin:string)=>Promise<CollatinusGrammarToken[]>;
 }={}):{
   element:HTMLElement;
   open:()=>Promise<void>;
@@ -298,7 +300,7 @@ export function createEditionPane(options:{
       paint();
     },
     status:setMessage,repaint:paint,
-  },{autoApply});
+  },{autoApply,onAnalyzeMorphology:options.onAnalyzeMorphology});
   document.addEventListener('selectionchange',()=>{
     const pages=element.querySelector<HTMLElement>('.edition-paper-pages');
     if(pages)academics.savePaperSelection(pages);
