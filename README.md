@@ -6,6 +6,25 @@ Selecciona pasajes de autores latinos, conserva textos propios y prepara cuadern
 
 La portada oficial abre la versión que antes se ofrecía como experimental. Los cuadernos de esa versión se abren en el mismo navegador y perfil donde se guardaron. Para acceder a los datos de la versión anterior, usa el [editor anterior](https://archaiosmagister.github.io/CuadernoTextosLatinos/cuaderno-clasico.html) o la [recuperación de la primera prueba](https://archaiosmagister.github.io/CuadernoTextosLatinos/recuperar-prueba/).
 
+## Instalar como aplicación (PWA)
+
+El Cuaderno oficial puede instalarse en el escritorio o en la pantalla de inicio del
+móvil y conserva la biblioteca preparada para trabajar sin conexión.
+
+- **Android y navegadores de escritorio compatibles:** usa «Instalar aplicación»
+  cuando aparezca, o el menú de instalación del navegador.
+- **iPhone/iPad con Safari:** «Compartir» → «Añadir a pantalla de inicio».
+- Desde «Mis cuadernos» y desde el menú «Más» del editor puedes elegir
+  **Buscar actualizaciones**. Si hay una versión nueva, el control cambia a
+  **Aplicar actualización**: después de confirmar, el editor intenta guardar
+  los cambios pendientes y solo entonces permite activar la nueva versión.
+  Los formularios de importación o edición sin confirmar deben cerrarse o
+  guardarse antes. En otras pestañas no se fuerza una recarga.
+
+La instalación y la comprobación remota requieren HTTPS y conexión inicial.
+Las actualizaciones del código no eliminan los datos de IndexedDB, pero es
+conveniente mantener copias JSON de los cuadernos importantes.
+
 ## Biblioteca incluida sin conexión
 
 La compilación distribuye en archivos estáticos **dos obras de Julio César, el Breviarium de Eutropio y veinticinco vidas de Cornelio Nepote**. Se parte de los textos que el docente ya había integrado en Examinator2 (César y Eutropio) y de la edición TEI de Perseus (Nepote). Se conservan la referencia editorial y la procedencia.

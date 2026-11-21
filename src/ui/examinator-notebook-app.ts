@@ -3,6 +3,7 @@ import type {GrammarReviewDecisionV1} from '../core/edition-model.js';
 import {fingerprintForMark} from '../core/edition-validation.js';
 import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGrammarCandidate,type CollatinusGrammarProposal} from '../core/collatinus-grammar.js';
 import {renderGrammarEditor} from './grammar-editor.js';
+import {createCuadernoPwaControls,startCuadernoPwa} from './pwa-controls.js';
 import type {CorpusV1,GrammarTag,LatinText} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
 import {InvalidCorpusError} from '../core/errors.js';
@@ -1525,6 +1526,10 @@ function renderHome():HTMLElement{
   });
   actions.append(button('Importar cuaderno',()=>restore.click(),'hbtn'),restore);
   heading.append(actions);home.append(heading);
+  const pwaArea=el('section','cuaderno-home-pwa');
+  pwaArea.append(el('strong','','Instalación y actualizaciones'),
+    createCuadernoPwaControls(()=>composer.flush()));
+  home.append(pwaArea);
   const grid=el('div','cuaderno-home-grid');
   const saved=notebooks.filter(n=>n.edition.id!==WORKING_EDITION_ID)
     .sort((a,b)=>b.edition.updatedAt.localeCompare(a.edition.updatedAt));
@@ -2014,6 +2019,13 @@ function wireHeaderLayout():void{
     return button;
   };
   const brand=header.querySelector('.brand');
+  if(brand instanceof HTMLElement){
+    const mark=document.createElement('img');
+    mark.src=new URL('../examinator-cuadernos/icons/icon.svg',import.meta.url).href;
+    mark.width=27;mark.height=27;mark.alt='';
+    mark.className='cuaderno-pwa-brand-icon';
+    brand.prepend(mark);
+  }
   const nav=el('div','cuaderno-header-nav');
   nav.id='cuadernoHeaderNavigation';
   const home=get('btnOpen');
@@ -2059,7 +2071,7 @@ function wireHeaderLayout():void{
   more.hidden=true;
   const setting=get('btnSettings');
   setting.textContent='Formato y ajustes';
-  more.append(setting);
+  more.append(setting,createCuadernoPwaControls(()=>composer.flush()));
   moreTrigger.addEventListener('click',()=>{
     more.hidden=!more.hidden;
     moreTrigger.setAttribute('aria-expanded',String(!more.hidden));
@@ -2151,12 +2163,7 @@ void (async()=>{
     await composer.open();
     wireButtons();
     await script(new URL('./js/library.js',document.baseURI).href);
-    if('serviceWorker' in navigator&&window.isSecureContext){
-      const worker=new URL('../examinator-cuadernos/service-worker.js',import.meta.url);
-      void navigator.serviceWorker.register(worker).catch(error=>{
-        console.warn('No se pudo preparar el cuaderno experimental para usarlo sin conexión:',error);
-      });
-    }
+    void startCuadernoPwa();
     // Inicio siempre desde Mis cuadernos, sin reabrir automáticamente el último.
     composer.closeEdition();currentId=null;render();
   }catch(e){
