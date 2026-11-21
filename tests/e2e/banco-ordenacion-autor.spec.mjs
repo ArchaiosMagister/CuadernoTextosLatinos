@@ -21,6 +21,12 @@ test('Banco de textos: ordenar por autor, filtrar y conservar los datos original
     return (await new IndexedDbCorpusRepository().load()).corpus.texts
       .map(text=>({id:text.id,title:text.title,author:text.source.author}));
   });
+  // El modal inicia una escritura asíncrona. Esperar a que las tres
+  // fuentes estén persistidas antes de tomar la fotografía de referencia.
+  await expect(bank.locator('.cuaderno-bank-result-count')).toContainText('3 textos');
+  await expect.poll(async()=>(await stored()).length,{
+    timeout:15000,message:'Los tres textos deben estar confirmados en IndexedDB',
+  }).toBe(3);
   const initial=await stored();
   const sort=bank.getByRole('combobox',{name:'Ordenar textos del banco'});
   const author=bank.getByRole('combobox',{name:'Filtrar textos por autor'});
