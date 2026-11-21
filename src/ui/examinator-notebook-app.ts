@@ -5,6 +5,7 @@ import {proposeCollatinusGrammar,type CollatinusGrammarToken,type CollatinusGram
 import {renderGrammarEditor} from './grammar-editor.js';
 import type {CorpusV1,GrammarTag,LatinText} from '../core/model.js';
 import {validateCorpus} from '../core/validation.js';
+import {InvalidCorpusError} from '../core/errors.js';
 /**
  * Primera conexión funcional de CuadernoTextosLatinos sobre el DOM y la
  * biblioteca originales de Examinator2. No recrea sus plantillas ni su CSS.
@@ -754,7 +755,7 @@ function openBankTextEditor(source:LatinText):void{
  * subrayados y glosario; añadirlo a un cuaderno no modifica esta fuente. */
 async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx,reviewedBatch=false):Promise<void>{
   const clean={...input,title:input.title.trim(),latin:input.latin.trim()};
-  if(!clean.title||!clean.latin)throw Error('El título y el pasaje latino son obligatorios.');
+  if(!clean.title||!clean.latin)throw new InvalidCorpusError('El título y el pasaje latino son obligatorios.');
   const saved=await repo.load();
   const match=saved.corpus.texts.find(t=>t.latin===clean.latin
     &&t.source.author===(clean.author.trim()||null)
@@ -770,6 +771,7 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx,revi
   const next=normalized?validateCorpus({...updated,texts:updated.texts.map(t=>t.id===id
     ?{...t,teacherDocx:normalized}:t)}):updated;
   await repo.save(next,saved.revision);
+  if(reviewedBatch)return;
   await reload();render();
   M.toast(match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
 }
@@ -1027,6 +1029,7 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
   const panel=el('div','word-review');
   const pending=[...documents];
   let importing=false;
+  let savedToBank=0;
   const failuresList=el('ul','word-import-errors');
   for(const problem of failures)failuresList.append(el('li','',problem));
   if(failures.length)panel.append(failuresList);
@@ -1088,14 +1091,23 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
     if(importing)return false;
     importing=true;
     try{
-      if(pending.some(({data})=>!data.title)){
+      if(!toBank&&pending.some(({data})=>!data.title)){
         M.toast('Introduce un título para cada texto.');return false;
       }
       while(pending.length){
         const {data,file}=pending[0]!;
         if(toBank){
-          await writeSource(()=>saveBankText({title:data.title,latin:data.latin,
-            author:data.author??'',work:data.work??'',reference:data.reference??''},data,true));
+          try{
+            await writeSource(()=>saveBankText({title:data.title,latin:data.latin,
+              author:data.author??'',work:data.work??'',reference:data.reference??''},data,true));
+            savedToBank++;
+          }catch(error){
+            if(!(error instanceof InvalidCorpusError))throw error;
+            const problem=file+' · '+error.message;
+            failures.push(problem);
+            failuresList.append(el('li','',problem));
+            if(!failuresList.isConnected)panel.prepend(failuresList);
+          }
         }else{
           const placement=await writeSource(async()=>{
             if(currentId!==editionId)throw Error('Vuelve al cuaderno donde elegiste los archivos.');
@@ -1108,9 +1120,16 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
         if(pending.length)cards.get(data)?.remove();
       }
       await reload();render();
-      M.toast(toBank?documents.length+' textos Word guardados en el banco.':
-        (documents.length===1?'Word añadido y guardado en el cuaderno.':
-        documents.length+' textos añadidos y guardados en el cuaderno.'));
+      if(toBank&&failures.length){
+        const report=el('div');
+        report.append(el('p','',savedToBank+' archivos guardados · '+failures.length+' omitidos.'));
+        report.append(el('h3','','Archivos para revisión manual'),failuresList);
+        M.modal('Resultado de la importación Word',report,[{label:'Cerrar',primary:true}]);
+      }else{
+        M.toast(toBank?savedToBank+' textos Word guardados en el banco.':
+          (documents.length===1?'Word añadido y guardado en el cuaderno.':
+          documents.length+' textos añadidos y guardados en el cuaderno.'));
+      }
     }catch(error){
       await reload();render();M.toast(String(error),8000);return false;
     }finally{importing=false;}
