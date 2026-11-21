@@ -326,13 +326,8 @@ export function validateEdition(input:unknown):NotebookEditionV1 {
       register(q,path+'.questions');
       if(q.kind==='morphology'){
         const found=new Set<string>();
-        const schoolCategories=new Set<string>();
         for(const w of q.words){
           register(w,path+'.questions.words');
-          if(w.schoolCategory){
-            if(schoolCategories.has(w.schoolCategory))fail(path+'.questions.words','categoría morfológica duplicada');
-            schoolCategories.add(w.schoolCategory);
-          }
           const mark=p.text.markup.find(m=>m.id===w.markId&&m.kind==='morph-underline');
           if(!mark)fail(path+'.questions.words','markId inexistente o ajeno a morfología');
           if(w.surface!==mark.exact)fail(path+'.questions.words','la forma no coincide con la marca');
