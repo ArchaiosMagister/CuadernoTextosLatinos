@@ -191,7 +191,12 @@ function dependencySubset(edition:NotebookEditionV1, corpus:CorpusV1):CorpusV1 {
   for(const text of texts)for(const id of text.tagIds)include(id);
   for(const placement of edition.placements){
     for(const id of placement.grammaticalTagIds)include(id);
-    for(const span of placement.grammaticalSpans??[])for(const id of span.tagIds)include(id);
+    for(const span of placement.grammaticalSpans??[]){
+      for(const id of span.tagIds)include(id);
+      for(const evidence of span.evidence??[])include(evidence.tagId);
+    }
+    for(const decision of placement.grammarReview??[])
+      if(decision.kind==='rejected')include(decision.tagId);
   }
   return validateCorpus({...emptyCorpus(),texts,tags:[...tags.values()]});
 }
@@ -287,6 +292,8 @@ export function importNotebookDependencies(edition:NotebookEditionV1, dependenci
     source:{...p.source,sourceId:p.source.kind==='corpus'&&p.source.sourceId
       ?sourceIds.get(p.source.sourceId)??p.source.sourceId:p.source.sourceId},
     grammaticalTagIds:p.grammaticalTagIds.map(resolveTag),
+    ...(p.grammarReview?{grammarReview:p.grammarReview.map(decision=>decision.kind==='rejected'
+      ?{...decision,tagId:resolveTag(decision.tagId)}:decision)}:{}),
     ...(p.grammaticalSpans?{grammaticalSpans:p.grammaticalSpans.map(span=>({
       ...span,tagIds:span.tagIds.map(resolveTag),
       ...(span.evidence?{evidence:span.evidence.map(item=>({...item,tagId:resolveTag(item.tagId)}))}:{}),
