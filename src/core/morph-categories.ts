@@ -42,7 +42,7 @@ export function morphChoiceFromToken(token:CollatinusGrammarToken,latin:string):
   const category=morphTypeFromAnalysis(token.sel.morpho,candidate.pos,candidate.im);
   if(!category)return null;
   return {surface:token.w,start:token.s,end:token.e,key:token.w.normalize('NFC').toLocaleLowerCase('es'),
-    category,lemmaId:candidate.lemma,analysis:token.sel.morpho,source:'collatinus'};
+    category,lemmaId:candidate.lemma,analysis:token.sel.morpho,source:'collatinus',candidateId:String(candidate.lid)};
 }
 /** Selección sin categorías duplicadas, sin tocar marcas existentes ni términos reservados
  * hasta agotar las alternativas nuevas. A igualdad se favorecen los tipos menos
