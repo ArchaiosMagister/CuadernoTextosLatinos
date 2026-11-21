@@ -103,7 +103,11 @@ test('Collatinus propone automáticamente un análisis de cada subrayado y admit
   await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
   const morph=page.locator('.edition-question-panel[data-kind="morphology"]');
   await expect(morph.locator('.edition-academic-morph-row')).toHaveCount(4,{timeout:30000});
-  const row=morph.locator('.edition-academic-morph-row').filter({hasText:'lectura contextual propuesta'}).first();
+  const rowIndex=await morph.locator('.edition-academic-morph-row').evaluateAll(
+    rows=>rows.findIndex(row=>row.textContent.includes('lectura contextual propuesta')));
+  expect(rowIndex).toBeGreaterThanOrEqual(0);
+  // Mantener el mismo índice: tras confirmar la revisión cambia su etiqueta.
+  const row=morph.locator('.edition-academic-morph-row').nth(rowIndex);
   await expect(row).toBeVisible();
   const initial=await row.innerText();
   expect(initial).not.toContain('Pendiente');
