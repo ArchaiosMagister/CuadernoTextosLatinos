@@ -658,7 +658,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
           ui.append(notice);
         }
         if(pending?.type==='candidate'&&pending.kind==='morph'&&
-          pending.target.wordId===word.id){
+          (pending.target as AcademicMorphTargetV1).wordId===word.id){
           const inline=review(true);
           if(inline){
             inline.classList.add('edition-morph-inline-review');
