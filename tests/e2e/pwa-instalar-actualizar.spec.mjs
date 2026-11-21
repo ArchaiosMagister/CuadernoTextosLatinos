@@ -31,6 +31,13 @@ test('PWA: manifiesto e iconos PNG instalables en la ruta real del cuaderno',asy
       expect(png.readUInt32BE(20)).toBe(size);
     }
   }
+  const decoded=await page.evaluate(async()=>new Promise((resolve,reject)=>{
+    const icon=new Image();
+    icon.onload=()=>resolve([icon.naturalWidth,icon.naturalHeight]);
+    icon.onerror=()=>reject(new Error('El icono PNG no se puede decodificar'));
+    icon.src=new URL('./icons/icon-192.png',location.href).href;
+  }));
+  expect(decoded).toEqual([192,192]);
   const apple=await page.request.get('/examinator-cuadernos/icons/apple-touch-icon.png');
   expect(apple.ok()).toBe(true);
   expect((await apple.body()).readUInt32BE(16)).toBe(180);
@@ -45,6 +52,9 @@ test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente e
   expect(source).toContain('const MANUAL_UPDATES = true');
   expect(source).toContain("event.data.type === 'APPLY_UPDATE'");
   expect(source).toContain('if (!MANUAL_UPDATES) await self.skipWaiting()');
+  await expect.poll(()=>page.evaluate(async()=>
+    Boolean(await navigator.serviceWorker.getRegistration(
+      new URL('./',location.href).href))),{timeout:30000}).toBe(true);
   await bank.getByRole('button',{name:'Buscar actualizaciones'}).click();
   await expect(bank.locator('[data-pwa-status]'))
     .toContainText(/actualizada|nueva versi[oó]n|descargando|no se ha podido/i,{timeout:20000});
@@ -55,7 +65,7 @@ test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente e
   await expect(bank.locator('[data-pwa-status]')).toContainText(/navegador|Safari/i);
   page.once('dialog',dialog=>dialog.accept('Prueba PWA'));
   await page.locator('#btnNew').click();
-  await expect(page.locator('.edition-paper')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-has-editor','true');
   await page.getByRole('button',{name:'Más',exact:true}).click();
   const more=page.locator('#cuadernoMoreTools');
   await expect(more.getByRole('button',{name:'Buscar actualizaciones'})).toBeVisible();
