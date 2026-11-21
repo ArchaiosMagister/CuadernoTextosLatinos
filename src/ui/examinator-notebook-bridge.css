@@ -1787,7 +1787,8 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-lexi
 @media screen and (min-width:601px) and (max-width:1050px) {
   /* iPad vertical: objetivos táctiles sin ensanchar la navegación de cinco menús. */
   #editor .edition-menu-nav .btn {min-height:38px;}
-  #editor .cuaderno-home-card-actions button {min-height:40px;}
+  /* Superar la regla de botones .hbtn/.tbtn del grupo .cuaderno-home. */
+  #editor .cuaderno-home .cuaderno-home-card-actions button {min-height:40px;}
   #editor .cuaderno-home-text-heading .cuaderno-home-select {min-height:40px;}
   #editor .cuaderno-home-pwa-details>summary {
     display:flex;align-items:center;min-height:40px;padding:4px 0;
