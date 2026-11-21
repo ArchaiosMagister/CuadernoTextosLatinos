@@ -10,28 +10,34 @@ async function addLatin(page,latin){
   await modal.getByRole('textbox',{name:'Texto latino'}).fill(latin);
   await modal.getByRole('button',{name:'Añadir al cuaderno'}).click();
   await expect(page.locator('.edition-counter')).toContainText('Texto 1 de 1');
-  // El editor puede renderizar la hoja antes de que se cierre el diálogo asíncrono.
-  await expect(page.locator('.modal-bg')).toHaveCount(0);
+  // El contador puede actualizarse antes de que el guardado asíncrono
+  // cierre «Pegar texto latino». No probar tarjetas detrás del diálogo.
+  await expect(page.locator('.modal-bg')).toHaveCount(0,{timeout:30000});
 }
 
-async function firstLatinWordPoint(latin){
-  return latin.evaluate(paragraph=>{
-    const walker=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
-    let node;
-    while((node=walker.nextNode())){
-      const match=/[\p{L}][\p{L}\p{M}]*/u.exec(node.textContent??'');
-      if(!match)continue; // Puede haber nodos de texto vacíos antes del primer subrayado.
-      const range=document.createRange();
-      range.setStart(node,match.index);range.setEnd(node,match.index+match[0].length);
-      for(const rect of range.getClientRects()){
-        if(rect.width<=0||rect.height<=0)continue;
-        const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
-        const found=document.elementFromPoint(x,y);
-        if(found&&paragraph.contains(found))return {x,y,word:match[0]};
-      }
+async function firstWordPoint(page){
+  const latin=page.locator('.edition-preview .edition-latin').first();
+  await expect(latin).toBeVisible();
+  const point=await latin.evaluate(paragraph=>{
+    const walk=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
+    let node=walk.nextNode(),match;
+    while(node){
+      match=(node.textContent??'').match(/[\p{L}][\p{L}\p{M}]*/u);
+      if(match)break;
+      node=walk.nextNode();
     }
-    throw Error('No se encontró ninguna palabra latina visible y accesible.');
+    if(!node||!match)throw Error('No hay palabras latinas en la hoja.');
+    const offset=(node.textContent??'').indexOf(match[0]);
+    const range=document.createRange();
+    range.setStart(node,offset);range.setEnd(node,offset+match[0].length);
+    const rect=range.getBoundingClientRect();
+    if(rect.width<=0||rect.height<=0)throw Error('La palabra no está maquetada en pantalla.');
+    return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
   });
+  const target=await page.evaluate(({x,y})=>
+    Boolean(document.elementFromPoint(x,y)?.closest('.edition-latin')),point);
+  expect(target).toBe(true);
+  return point;
 }
 
 test('cuatro palabras de tipos diferentes en el menú docente; la hoja conserva solo los subrayados',async({page})=>{
@@ -49,13 +55,9 @@ test('cuatro palabras de tipos diferentes en el menú docente; la hoja conserva 
   await expect(page.locator('.edition-paper .edition-latin .edition-underlined')).toHaveCount(4);
 });
 
-test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de la hoja exportable',async({page})=>{
+test('clic sobre una palabra latina abre ficha Collatinus sin contaminar el A4',async({page})=>{
   await addLatin(page,'Gallia est omnis divisa in partes tres.');
-  const latin=page.locator('.edition-preview .edition-latin').first();
-  await expect(latin).toBeVisible();
-  await latin.scrollIntoViewIfNeeded();
-  // Seleccionar un token visible, no un nodo de texto vacío ni un margen A4.
-  const point=await firstLatinWordPoint(latin);
+  const point=await firstWordPoint(page);
   await page.mouse.click(point.x,point.y);
   const card=page.getByRole('dialog',{name:/Lematización de/});
   await expect(card).toBeVisible();
@@ -66,15 +68,11 @@ test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de
   await expect(card).toHaveCount(0);
 });
 
-
 test.describe('lectura táctil en iPad',()=>{
   test.use({hasTouch:true,viewport:{width:820,height:1180}});
   test('una pulsación táctil abre y permite cerrar la tarjeta',async({page})=>{
     await addLatin(page,'Gallia est omnis divisa in partes tres.');
-    const latin=page.locator('.edition-preview .edition-latin').first();
-    await expect(latin).toBeVisible();
-  await latin.scrollIntoViewIfNeeded();
-    const point=await firstLatinWordPoint(latin);
+    const point=await firstWordPoint(page);
     await page.touchscreen.tap(point.x,point.y);
     const card=page.getByRole('dialog',{name:/Lematización de/});
     await expect(card).toBeVisible();
