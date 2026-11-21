@@ -31,7 +31,16 @@ test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de
   await addLatin(page,'Gallia est omnis divisa in partes tres.');
   const latin=page.locator('.edition-preview .edition-latin').first();
   await expect(latin).toBeVisible();
-  await latin.click({position:{x:18,y:9}});
+  // Pulsar sobre el primer término real; un desplazamiento fijo puede caer en la sangría A4.
+  const point=await latin.evaluate(paragraph=>{
+    const walk=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
+    const first=walk.nextNode();
+    if(!first)throw Error('El párrafo no contiene texto.');
+    const range=document.createRange();range.setStart(first,0);range.setEnd(first,6);
+    const rect=range.getBoundingClientRect();
+    return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
+  });
+  await page.mouse.click(point.x,point.y);
   const card=page.getByRole('dialog',{name:/Lematización de/});
   await expect(card).toBeVisible();
   await expect(card.locator('.edition-lexical-card-body')).not.toContainText('Consultando Collatinus',{timeout:20000});
