@@ -341,7 +341,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       // verificado (p. ej., dux NOM/VOC) NO se elige sin intervención docente.
       const verified=[] as import('../core/morph-categories.js').MorphChoice[];
       const ambiguousStarts=new Set<number>();
-      for(const match of p.text.latin.matchAll(/[\\p{L}\\p{M}]+/gu)){
+      for(const match of p.text.latin.matchAll(/[\p{L}\p{M}]+/gu)){
         const records=service().report.bank.verified('morphology',match[0]);
         if(records.length>1){ambiguousStarts.add(match.index!);continue;}
         const record=records[0];
