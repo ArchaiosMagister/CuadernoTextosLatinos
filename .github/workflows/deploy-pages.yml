@@ -288,7 +288,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: ed321d631099ba73cf07e31fbbf3a8e84cd9be06
+          ref: 88db0a31eee84b007253cc862c3f9d26356dd016
           path: cuaderno-original-pr28
           persist-credentials: false
       - name: Compilar la adaptación de Examinator2 para cuadernos
@@ -388,6 +388,10 @@ jobs:
           assert (destination/'core/academic-repetition.js').is_file()
           engine=(destination/'core/academic-engine.js').read_text()
           assert "q.enabled && q.kind === 'choice'" in engine, 'Los ejercicios inactivos agotan el repertorio'
+          control=(destination/'ui/academic-controls.js').read_text()
+          assert 'Revisar análisis' in control, 'Falta revisión morfológica visible'
+          assert 'No hay análisis verificados disponibles' in control, 'Falta aviso si no hay análisis'
+
 
           def replace(rel,before,after):
             target=destination/rel
