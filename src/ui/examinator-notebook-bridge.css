@@ -1654,3 +1654,98 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-lexi
 @media print{
   .cuaderno-home-pwa,.cuaderno-pwa-controls,.cuaderno-pwa-brand-icon{display:none!important;}
 }
+
+
+/* Retoques de portada y menús: exclusivamente presentación en pantalla.
+   Se mantienen las funciones, las cinco secciones, los temas y la hoja A4. */
+@media screen {
+  /* 1. Jerarquía editorial de Inicio */
+  #editor .cuaderno-home {gap:15px;}
+  #editor .cuaderno-home>h3 {
+    font-size:1.02rem;font-weight:650;letter-spacing:.005em;color:var(--ink-2);
+  }
+  #editor .cuaderno-home-heading {
+    gap:9px 14px;padding-bottom:9px;border-bottom:1px solid var(--rule-2);
+  }
+  #editor .cuaderno-home-heading>h4 {font-size:1.15rem;line-height:1.3;}
+  #editor .cuaderno-home-heading .cuaderno-home-actions {gap:6px;}
+
+  /* 2. Tarjetas más legibles, sin alterar botones ni comportamiento */
+  #editor .cuaderno-home-grid {gap:11px;}
+  #editor .cuaderno-home-card {
+    gap:8px;padding:14px;border-radius:11px;
+    box-shadow:0 1px 2px rgba(0,0,0,.045);
+  }
+  #editor .cuaderno-home-card h5 {
+    font-size:1rem;line-height:1.35;font-weight:700;color:var(--ink);
+  }
+  #editor .cuaderno-home-card>p.small {
+    font-size:.79rem;line-height:1.4;color:var(--ink-2);
+  }
+  #editor .cuaderno-home-card-actions {margin-top:auto;padding-top:5px;gap:6px;}
+  #editor .cuaderno-home-card-actions button {
+    min-height:34px;border-radius:7px;padding:6px 10px;font-size:.82rem;
+  }
+
+  /* 3. Solo los botones PWA se contraen; su aviso sigue siempre visible */
+  #editor .cuaderno-home-pwa {display:block;padding:8px 12px;}
+  #editor .cuaderno-home-pwa .cuaderno-pwa-controls {display:grid;gap:3px;}
+  #editor .cuaderno-home-pwa-details>summary {
+    cursor:pointer;color:var(--ink);font-size:.82rem;font-weight:650;
+    line-height:1.45;padding:3px 0;
+  }
+  #editor .cuaderno-home-pwa-details[open]>.cuaderno-pwa-actions {
+    margin-top:7px;padding-top:7px;border-top:1px solid var(--rule-2);
+  }
+  #editor .cuaderno-home-pwa .cuaderno-pwa-status {
+    max-width:100%;margin:0;font-size:.74rem;line-height:1.4;
+  }
+
+  /* 4. Misma altura y ritmo para todos los filtros del banco */
+  #editor .cuaderno-bank-toolbar {gap:8px;align-items:end;}
+  #editor .cuaderno-bank-control {gap:4px;line-height:1.3;}
+  #editor .cuaderno-home-bank .cuaderno-bank-control input,
+  #editor .cuaderno-home-bank .cuaderno-bank-control select {
+    height:39px;min-height:39px;border-radius:7px;padding:7px 9px;
+  }
+  #editor .cuaderno-bank-reset {height:39px;min-height:39px;border-radius:7px;}
+  #editor .cuaderno-bank-bulk {margin-top:3px;border-top:1px solid var(--rule-2);}
+  #editor .cuaderno-bank-main-actions {gap:7px;padding-bottom:12px;}
+
+  /* 5. Diferenciar título, referencia y muestra sin cambiar el listado */
+  #editor .cuaderno-home-category-items {gap:6px;}
+  #editor .cuaderno-home-text {border-radius:9px;}
+  #editor .cuaderno-home-text>summary {padding:10px 0;gap:9px;}
+  #editor .cuaderno-home-text-heading-info {gap:3px;}
+  #editor .cuaderno-home-text-heading-info strong {
+    font-size:.95rem;font-weight:700;line-height:1.4;
+  }
+  #editor .cuaderno-home-text-source {font-size:.8rem;line-height:1.4;}
+  #editor .cuaderno-home-text-snippet {font-size:.82rem;line-height:1.45;}
+  #editor .cuaderno-home-text-heading .cuaderno-home-select {
+    align-self:center;min-height:32px;
+  }
+
+  /* 6. Estado activo inequívoco de las cinco pestañas */
+  #editor .edition-menu-nav .btn[aria-current='page'] {
+    font-weight:750;border-color:var(--accent);
+    box-shadow:inset 0 -3px 0 var(--accent);
+  }
+  #editor .edition-menu-nav .btn[aria-current='false'] {font-weight:500;}
+  #editor .edition-menu-nav .btn:focus-visible,
+  #editor .cuaderno-home-pwa-details>summary:focus-visible {
+    outline:2px solid var(--accent);outline-offset:2px;
+  }
+}
+@media screen and (max-width:600px) {
+  /* No reducir las áreas táctiles ni provocar zoom en Safari/iPhone. */
+  #editor .cuaderno-home {gap:12px;}
+  #editor .cuaderno-home-heading .cuaderno-home-actions button,
+  #editor .cuaderno-home-card-actions button {min-height:42px;}
+  #editor .cuaderno-home-bank .cuaderno-bank-control input,
+  #editor .cuaderno-home-bank .cuaderno-bank-control select {
+    height:44px;min-height:44px;font-size:16px;
+  }
+  #editor .cuaderno-bank-reset {height:44px;min-height:44px;}
+  #editor .cuaderno-home-pwa-details>summary {padding:7px 0;min-height:34px;}
+}
