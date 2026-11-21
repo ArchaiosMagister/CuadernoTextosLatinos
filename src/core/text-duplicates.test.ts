@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { findPossibleDuplicates } from './text-duplicates.js';
+import { findPossibleDuplicates, normalizedLatinKey } from './text-duplicates.js';
 import type { LatinText } from './model.js';
 
 const passage = 'Helvetii cum omnibus suis carris secuti impedimenta in unum locum contulerunt; ipsi confertissima acie reiecto nostro equitatu phalange facta successerunt.';
@@ -66,4 +66,18 @@ test('normaliza capítulos escritos con IV y cifras arábigas', () => {
     author: 'Caesar', work: 'Bellum Gallicum', reference: '4.24',
   });
   assert.equal(matches[0]?.kind, 'citation');
+});
+
+
+test('normaliza igual las vocales con cantidad precompuesta y con macrón combinante',()=>{
+  const composed='Māgnus exercitus Rōmānus in castra rediit; dūx milites laudāvit.';
+  const decomposed=composed.normalize('NFD');
+  assert.notEqual(composed,decomposed);
+  assert.equal(normalizedLatinKey(composed),normalizedLatinKey(decomposed));
+  const source={...original,latin:composed};
+  const matches=findPossibleDuplicates([source],{
+    latin:decomposed,author:'Otro',work:'Otro libro',reference:'2.3',
+  });
+  assert.equal(matches[0]?.kind,'identical');
+  assert.equal(matches[0]?.sharedWords,9);
 });

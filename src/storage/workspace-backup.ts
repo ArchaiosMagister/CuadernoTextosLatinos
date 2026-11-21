@@ -157,11 +157,21 @@ const NOTEBOOK_BACKUP_FORMAT = 'cuaderno-textos-latinos-notebook';
 
 /** La copia restaurada amplía el banco del dispositivo respetando sus entradas históricas. */
 export function combineNotebookCorpora(editorial:CorpusV1,historical:CorpusV1):CorpusV1{
+  // Las versiones retenidas son necesarias para los cuadernos históricos.
+  // No basta con combinar texts: retainedTexts apunta a textRevisions.
+  const revisions=new Map<string,NonNullable<CorpusV1['textRevisions']>[number]>();
+  for(const revision of [...(editorial.textRevisions??[]),...(historical.textRevisions??[])]){
+    const existing=revisions.get(revision.id);
+    if(existing&&JSON.stringify(existing.text)!==JSON.stringify(revision.text))
+      throw new WorkspaceBackupError('Colisión de versiones conservadas: '+revision.id);
+    revisions.set(revision.id,revision);
+  }
   return {
     schemaVersion:historical.schemaVersion,
     texts:[...new Map([...editorial.texts,...historical.texts].map(text=>[text.id,text])).values()],
     tags:[...new Map([...editorial.tags,...historical.tags].map(tag=>[tag.id,tag])).values()],
     notebooks:[...new Map([...editorial.notebooks,...historical.notebooks].map(book=>[book.id,book])).values()],
+    ...(revisions.size?{textRevisions:[...revisions.values()]}:{}),
   };
 }
 
@@ -181,7 +191,12 @@ function dependencySubset(edition:NotebookEditionV1, corpus:CorpusV1):CorpusV1 {
   for(const text of texts)for(const id of text.tagIds)include(id);
   for(const placement of edition.placements){
     for(const id of placement.grammaticalTagIds)include(id);
-    for(const span of placement.grammaticalSpans??[])for(const id of span.tagIds)include(id);
+    for(const span of placement.grammaticalSpans??[]){
+      for(const id of span.tagIds)include(id);
+      for(const evidence of span.evidence??[])include(evidence.tagId);
+    }
+    for(const decision of placement.grammarReview??[])
+      if(decision.kind==='rejected')include(decision.tagId);
   }
   return validateCorpus({...emptyCorpus(),texts,tags:[...tags.values()]});
 }
@@ -225,8 +240,12 @@ export async function readNotebookBackup(json: string): Promise<NotebookBackup |
 export function importNotebookDependencies(edition:NotebookEditionV1, dependencies:CorpusV1,
   local:CorpusV1, historical:CorpusV1):{edition:NotebookEditionV1;corpus:CorpusV1}{
   const corpus=structuredClone(local);
+  const localTags=new Map(local.tags.map(t=>[t.id,t]));
+  const historicalTags=new Map(historical.tags.map(t=>[t.id,t]));
+  const catalogueTags=new Map(GRAMMAR_CATALOGUE.map(t=>[t.id,t]));
   const knownTags=new Map([...local.tags,...historical.tags,...GRAMMAR_CATALOGUE].map(t=>[t.id,t]));
-  const knownTexts=new Map([...local.texts,...historical.texts].map(t=>[t.id,t]));
+  const localTexts=new Map(local.texts.map(t=>[t.id,t]));
+  const historicalTexts=new Map(historical.texts.map(t=>[t.id,t]));
   const incomingTags=new Map(dependencies.tags.map(tag=>[tag.id,tag]));
   const tagIds=new Map<string,string>();
   function resolveTag(id:string):string{
@@ -235,10 +254,13 @@ export function importNotebookDependencies(edition:NotebookEditionV1, dependenci
     const tag=incomingTags.get(id);
     if(!tag)return id;
     const item={...tag,parentId:tag.parentId?resolveTag(tag.parentId):null};
-    const existing=knownTags.get(id);
-    if(existing&&JSON.stringify(existing)!==JSON.stringify(item)){
+    // No dejar que la precedencia del banco histórico o del catálogo oculte
+    // un ID ocupado por una definición distinta en el corpus editorial.
+    const conflicts=[localTags.get(id),historicalTags.get(id),catalogueTags.get(id)]
+      .some(existing=>existing&&JSON.stringify(existing)!==JSON.stringify(item));
+    if(conflicts){
       if(item.kind==='catalogue')throw new WorkspaceBackupError('Definición de catálogo incompatible: '+id);
-      item.id='custom.'+crypto.randomUUID();
+      do{item.id='custom.'+crypto.randomUUID();}while(knownTags.has(item.id));
     }
     if(!knownTags.has(item.id)){
       corpus.tags.push(item);
@@ -254,8 +276,14 @@ export function importNotebookDependencies(edition:NotebookEditionV1, dependenci
   const sourceIds=new Map<string,string>();
   for(const text of dependencies.texts){
     const item={...text,tagIds:text.tagIds.map(resolveTag)};
-    const existing=knownTexts.get(text.id);
-    if(existing&&JSON.stringify(existing)!==JSON.stringify(item))item.id='doc.'+crypto.randomUUID();
+    // Un texto con el mismo ID puede ser diferente en cualquiera de las
+    // dos bibliotecas. Comparar solo el último Map ocultaba colisiones locales.
+    const conflicts=[localTexts.get(text.id),historicalTexts.get(text.id)]
+      .some(existing=>existing&&JSON.stringify(existing)!==JSON.stringify(item));
+    if(conflicts){
+      do{item.id='doc.'+crypto.randomUUID();}
+      while(localTexts.has(item.id)||historicalTexts.has(item.id)||corpus.texts.some(t=>t.id===item.id));
+    }
     if(!corpus.texts.some(t=>t.id===item.id))corpus.texts.push(item);
     sourceIds.set(text.id,item.id);
   }
@@ -264,6 +292,8 @@ export function importNotebookDependencies(edition:NotebookEditionV1, dependenci
     source:{...p.source,sourceId:p.source.kind==='corpus'&&p.source.sourceId
       ?sourceIds.get(p.source.sourceId)??p.source.sourceId:p.source.sourceId},
     grammaticalTagIds:p.grammaticalTagIds.map(resolveTag),
+    ...(p.grammarReview?{grammarReview:p.grammarReview.map(decision=>decision.kind==='rejected'
+      ?{...decision,tagId:resolveTag(decision.tagId)}:decision)}:{}),
     ...(p.grammaticalSpans?{grammaticalSpans:p.grammaticalSpans.map(span=>({
       ...span,tagIds:span.tagIds.map(resolveTag),
       ...(span.evidence?{evidence:span.evidence.map(item=>({...item,tagId:resolveTag(item.tagId)}))}:{}),

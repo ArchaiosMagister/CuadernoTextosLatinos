@@ -29,7 +29,7 @@ function fold(value: string): string {
 }
 
 function words(text: string): Word[] {
-  return [...text.matchAll(/[\p{L}\p{N}]+/gu)].map(match => ({
+  return [...text.matchAll(/[\p{L}\p{N}\p{M}]+/gu)].map(match => ({
     value: fold(match[0]),
     start: match.index,
     end: match.index + match[0].length,
