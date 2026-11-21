@@ -594,8 +594,8 @@ body[data-has-editor='true'] #preview .sheet{display:none;}
 /* La casilla de selección se ve sin desplegar el texto latino. */
 @media screen{
   #editor .cuaderno-home-text-heading{display:flex;align-items:center;gap:8px;min-width:0;}
-  #editor .cuaderno-home-text-heading::before{content:'▸';flex:none;}
-  #editor .cuaderno-home-text[open]>.cuaderno-home-text-heading::before{content:'▾';}
+  /* El indicador ▸/▾ se define una sola vez junto a las tarjetas del banco. */
+  #editor .cuaderno-home-text-heading::before{flex:none;}
   #editor .cuaderno-home-text-heading>span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}
   #editor .cuaderno-home-text-heading>.cuaderno-home-select{
     flex:0 0 auto;cursor:pointer;min-height:34px;display:inline-flex;align-items:center;
@@ -668,10 +668,17 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']){
     background:var(--cuaderno-ui-add-soft);color:var(--cuaderno-ui-add);
     border-color:var(--cuaderno-ui-add);
   }
+  #editor .edition-vocab-row .edition-vocab-save[data-save-state='saving']{
+    background:var(--cuaderno-ui-save-soft);color:var(--cuaderno-ui-save);
+    border-color:var(--cuaderno-ui-save);font-size:10px;cursor:progress;
+    opacity:1;
+  }
+  #editor .edition-vocab-row .edition-vocab-save[data-save-state='error']{
+    color:var(--cuaderno-ui-remove);border-color:var(--cuaderno-ui-remove);
+  }
   #editor .edition-menu-nav .btn[aria-current='page']{
     background:var(--cuaderno-ui-current);color:var(--cuaderno-ui-current-ink);
-    border-color:var(--cuaderno-ui-current-ink);font-weight:700;
-    box-shadow:inset 3px 0 0 var(--cuaderno-ui-current-ink);
+    /* El borde y la marca inferior activos se definen en el bloque final. */
   }
   /* Misma altura y esquinas en cada grupo, sin alterar la distribución. */
   #editor .cuaderno-home :is(button.hbtn,button.tbtn),
@@ -857,9 +864,29 @@ html[data-cuaderno-theme='oled']{
     padding-inline-start:7px;
   }
   body>header .cuaderno-header-save-state{
-    font-size:10px;color:var(--ink-3);
-    max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    display:inline-flex;align-items:center;justify-content:center;
+    box-sizing:border-box;flex:0 0 auto;min-height:26px;
+    font-size:10.5px;font-weight:700;line-height:1.25;
+    max-width:112px;padding:3px 7px;border-radius:6px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    border:1px solid var(--rule-2);color:var(--ink-2);
   }
+  body>header .cuaderno-header-save-state[data-state='pending']{
+    color:var(--cuaderno-ui-regen);border-color:var(--cuaderno-ui-regen);
+    background:var(--cuaderno-ui-regen-soft);
+  }
+  body>header .cuaderno-header-save-state[data-state='saving']{
+    color:var(--cuaderno-ui-save);border-color:var(--cuaderno-ui-save);
+    background:var(--cuaderno-ui-save-soft);
+  }
+  body>header .cuaderno-header-save-state[data-state='saved']{
+    color:var(--cuaderno-ui-add);border-color:var(--cuaderno-ui-add);
+    background:var(--cuaderno-ui-add-soft);
+  }
+  body>header .cuaderno-header-save-state[data-state='error']{
+    color:var(--cuaderno-ui-remove);border-color:var(--cuaderno-ui-remove);
+  }
+  body>header .cuaderno-header-save-state:empty{display:none;}
   body>header .cuaderno-header-exports .hbtn{
     min-height:32px;min-width:48px;padding:5px 9px;
     font-weight:700;letter-spacing:.01em;
@@ -909,14 +936,7 @@ html[data-cuaderno-theme='oled']{
     min-height:32px;font-weight:600;
     transition:background-color .1s,color .1s;
   }
-  #editor .edition-menu-nav .btn[aria-current='page']{
-    font-weight:750;
-    text-decoration:underline;text-decoration-thickness:1.5px;
-    text-underline-offset:4px;
-  }
-  #editor .edition-menu-nav .btn:focus-visible{
-    outline:2px solid var(--accent);outline-offset:-2px;
-  }
+  /* El subrayado inferior y el foco se unifican en los retoques finales. */
   /* Tres bloques breves, sin duplicar ni ocultar opciones académicas. */
   #editor .edition-menu-vocabulary{
     display:grid;gap:7px;
@@ -948,7 +968,9 @@ html[data-cuaderno-theme='oled']{
 }
 @media screen and (max-width:760px){
   body>header .brand{font-size:18px;margin-right:3px;}
-  body>header .cuaderno-header-save-state{display:none;}
+  body>header .cuaderno-header-save-state{
+    display:inline-flex;min-height:30px;max-width:96px;padding:3px 6px;
+  }
   body>header .cuaderno-header-nav .hbtn{min-height:36px;}
   body>header .cuaderno-theme-select{min-height:36px;font-size:16px;}
   #editor .cuaderno-add-actions .hbtn{min-height:38px;}
@@ -1748,4 +1770,26 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-lexi
   }
   #editor .cuaderno-bank-reset {height:44px;min-height:44px;}
   #editor .cuaderno-home-pwa-details>summary {padding:7px 0;min-height:34px;}
+}
+
+/* Consolidación final: tactilidad y foco de las vistas de pantalla.
+   No se modifican CSS de impresión, papel A4 ni menú original de Examinator2. */
+@media screen {
+  #editor .cuaderno-home :is(
+    .cuaderno-home-text>summary,
+    .cuaderno-home-category>summary,
+    .cuaderno-home-backups>summary,
+    .cuaderno-home-sync>summary
+  ):focus-visible {
+    outline:2px solid var(--accent);outline-offset:2px;border-radius:6px;
+  }
+}
+@media screen and (min-width:601px) and (max-width:1050px) {
+  /* iPad vertical: objetivos táctiles sin ensanchar la navegación de cinco menús. */
+  #editor .edition-menu-nav .btn {min-height:38px;}
+  #editor .cuaderno-home-card-actions button {min-height:40px;}
+  #editor .cuaderno-home-text-heading .cuaderno-home-select {min-height:40px;}
+  #editor .cuaderno-home-pwa-details>summary {
+    display:flex;align-items:center;min-height:40px;padding:4px 0;
+  }
 }
