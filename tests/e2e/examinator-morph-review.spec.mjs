@@ -15,6 +15,7 @@ async function createNotebook(page,latin){
 
 test('revisar un análisis ya verificado informa junto a la palabra y evita una falsa regeneración',async({page})=>{
   const morph=await createNotebook(page,'arate.');
+  await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
   const row=morph.locator('.edition-academic-morph-row').filter({hasText:'arate'});
   await expect(row).toContainText('V;IMP;ACT;PRS;2;PL');
   await row.getByRole('button',{name:'Revisar análisis de arate'}).click();
@@ -29,6 +30,7 @@ test('la forma ambigua exige selección explícita, sin elegir en silencio la pr
   const area=page.locator('.edition-menu-text textarea').first();
   await area.evaluate(node=>{node.focus();node.setSelectionRange(0,3);});
   await page.getByRole('button',{name:'Subrayar palabra seleccionada'}).click();
+  await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
   const row=morph.locator('.edition-academic-morph-row').filter({hasText:'dux'});
   await expect(row).toBeVisible();
   await row.getByRole('button',{name:'Revisar análisis de dux'}).click();
