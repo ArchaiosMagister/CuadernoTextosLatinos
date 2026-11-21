@@ -18,6 +18,7 @@ async function addLatin(page,latin){
 async function firstWordPoint(page){
   const latin=page.locator('.edition-preview .edition-latin').first();
   await expect(latin).toBeVisible();
+  await latin.scrollIntoViewIfNeeded();
   const point=await latin.evaluate(paragraph=>{
     const walk=document.createTreeWalker(paragraph,NodeFilter.SHOW_TEXT);
     let node=walk.nextNode(),match;
