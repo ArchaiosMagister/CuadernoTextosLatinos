@@ -515,7 +515,7 @@ jobs:
               "prueba/core/online-sources.js")
                 grep -q 'onlineSearchUrl' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/index.html")
-                grep -q 'Examinator · Cuaderno de textos latinos' /tmp/cuaderno-public ;;
+                grep -q '<title>Cuaderno de textos latinos</title>' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/styles.css")
                 grep -q '#lib { position: fixed;' /tmp/cuaderno-public ;;
               "prueba-cuaderno-examinator/examinator-cuadernos/js/library.js")
