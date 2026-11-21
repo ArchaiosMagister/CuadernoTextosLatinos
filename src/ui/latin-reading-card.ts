@@ -31,8 +31,11 @@ function hitAt(x:number,y:number,root:HTMLElement):Hit|null{
     caretRangeFromPoint?:(x:number,y:number)=>Range|null;
     caretPositionFromPoint?:(x:number,y:number)=>{offsetNode:Node;offset:number}|null;
   };
-  const native=doc.caretRangeFromPoint?.(x,y);
-  const pos=native?{offsetNode:native.startContainer,offset:native.startOffset}:doc.caretPositionFromPoint?.(x,y);
+  // Safari puede devolver un intervalo en el párrafo cuando la posición de
+  // texto sí está disponible. Preferimos la posición exacta, como en el lector.
+  const exact=doc.caretPositionFromPoint?.(x,y);
+  const native=exact?null:doc.caretRangeFromPoint?.(x,y);
+  const pos=exact??(native?{offsetNode:native.startContainer,offset:native.startOffset}:null);
   if(!pos)return null;
   const origin=pos.offsetNode.nodeType===Node.ELEMENT_NODE?
     pos.offsetNode as Element:pos.offsetNode.parentElement;
