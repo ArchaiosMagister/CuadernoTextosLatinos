@@ -57,12 +57,15 @@ export interface EditableTextV1 {
   markup: TextMarkV1[];
 }
 
+import type {MorphType} from './morph-categories.js';
 export interface MorphWordV1 {
   id: EntityId;
   markId: EntityId;
   surface: string;
   lemmaId: string | null;
   analysis: string | null;
+  /** Opcional para preservar cuadernos anteriores: categoría docente sin pistas en PDF. */
+  schoolCategory?: MorphType;
   provenance: EvidenceV1 | null;
   reviewState: 'verified' | 'needs-review' | 'manual';
   locked: boolean;
