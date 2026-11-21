@@ -99,6 +99,13 @@ test('PWA: un error temporal de registro permite reintentar desde el botón',asy
   await expect(home.locator('[data-pwa-status]')).toContainText('No se pudo preparar el modo sin conexión');
   await home.getByRole('button',{name:'Buscar actualizaciones'}).click();
   await expect.poll(()=>page.evaluate(()=>window.__pwaRegisterAttempts()),{timeout:30000}).toBe(2);
+  // El controllerchange puede sustituir el mensaje «Actualizada» por
+  // «Modo sin conexión preparado» después de un registro correcto. En vez
+  // de depender del orden de esos eventos, comprobar el registro real.
+  await expect.poll(()=>page.evaluate(async()=>
+    Boolean(await navigator.serviceWorker.getRegistration(
+      new URL('./',location.href).href))),{timeout:30000}).toBe(true);
   await expect(home.locator('[data-pwa-status]')).toContainText(
-    /actualizada|nueva versi[oó]n|descargando/i,{timeout:30000});
+    /actualizada|nueva versi[oó]n|descargando|modo sin conexi[oó]n preparado/i,
+    {timeout:30000});
 });
