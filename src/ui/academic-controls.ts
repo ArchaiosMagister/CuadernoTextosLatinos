@@ -605,7 +605,7 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
         detail:x.lemmaId+' · '+x.analysis+' · '+x.reference}));
       if(!rows.length)throw new Error(options.onAnalyzeMorphology?
         'Esta forma no añade un tipo nuevo, es invariable o carece de clasificación verificada.':
-        'No hay análisis elegibles para esta palabra.');
+        'No hay candidatos elegibles para esta palabra.');
       if(autoApply&&rows.length===1)await chooseCandidateDirect('token',t,rows,false);
       else showCandidate('token','Subrayar y analizar «'+view.surface+'»',t,rows,false,
         JSON.stringify(s.edition),s.revision);
