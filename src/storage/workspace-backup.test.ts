@@ -3,6 +3,7 @@ import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { createEdition, createPlacement, placementFromCorpus } from '../core/edition-factory.js';
 import { notebookTexts } from '../core/editor-operations.js';
+import { fingerprintForMark } from '../core/edition-validation.js';
 import { validateCorpus } from '../core/validation.js';
 import type { CorpusV1, LatinText } from '../core/model.js';
 import { editPlacementText } from '../core/edition-operations.js';
@@ -261,4 +262,35 @@ test('importar copia no reutiliza ID de fuente o etiqueta ocupado por el corpus 
   assert.equal(restored.corpus.tags.find(tag=>tag.id==='custom.same')?.label,localTag.label);
   assert.doesNotThrow(()=>validateCorpus(restored.corpus));
   assert.doesNotThrow(()=>validateCorpus(combineNotebookCorpora(restored.corpus,historical)));
+});
+
+
+test('backup portátil conserva etiquetas de rechazos gramaticales y las remapea en otro dispositivo',async()=>{
+  const source:LatinText={id:'doc.review',title:'César',latin:'Caesar Galliam vicit.',
+    source:{author:'César',work:'Bellum Gallicum',reference:'1.1'},tagIds:[],
+    createdAt:NOW,updatedAt:NOW};
+  const tag={id:'custom.review',label:'Construcción rechazada',kind:'custom' as const,parentId:null};
+  let item=0;
+  const place=placementFromCorpus(source,'place.review',NOW,()=>'item.'+(++item));
+  const latin=place.text.latin,begin=latin.indexOf('Caesar'),end=begin+6;
+  place.grammarReview=[{kind:'rejected',tagId:tag.id,
+    startUtf16:begin,endUtf16:end,exact:latin.slice(begin,end),
+    textFingerprint:fingerprintForMark(latin,begin,end),reviewRequired:false}];
+  const editionWithReview=createEdition({id:'ed.review',legacyNotebookId:null,title:'Decisiones docentes',
+    timestamp:NOW,placements:[place]});
+  const importedCorpus:CorpusV1={...emptyCorpus(),texts:[source],tags:[tag]};
+  const backup=await readNotebookBackup(await createNotebookBackup(editionWithReview,importedCorpus));
+  assert.ok(backup?.dependencies?.tags.some(item=>item.id===tag.id));
+  const local:CorpusV1={...emptyCorpus(),
+    tags:[{...tag,label:'Otra etiqueta con el mismo ID'}]};
+  const restored=importNotebookDependencies(backup!.edition,backup!.dependencies!,local,emptyCorpus());
+  const newTag=restored.edition.placements[0]!.grammarReview![0]!;
+  assert.equal(newTag.kind,'rejected');
+  if(newTag.kind==='rejected'){
+    assert.notEqual(newTag.tagId,tag.id);
+    assert.equal(restored.corpus.tags.find(item=>item.id===newTag.tagId)?.label,tag.label);
+  }
+  assert.equal(restored.corpus.tags.find(item=>item.id===tag.id)?.label,
+    'Otra etiqueta con el mismo ID');
+  assert.doesNotThrow(()=>validateCorpus(restored.corpus));
 });
