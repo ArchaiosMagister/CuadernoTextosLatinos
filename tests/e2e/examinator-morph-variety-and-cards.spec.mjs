@@ -97,3 +97,46 @@ test.describe('lectura táctil en iPad',()=>{
     await expect(card).toHaveCount(0);
   });
 });
+
+test('Collatinus propone automáticamente un análisis de cada subrayado y admite revisarlo más de una vez',async({page})=>{
+  await addLatin(page,'Gallia est omnis divisa in partes tres, quarum unam incolunt Belgae.');
+  await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
+  const morph=page.locator('.edition-question-panel[data-kind="morphology"]');
+  await expect(morph.locator('.edition-academic-morph-row')).toHaveCount(4,{timeout:30000});
+  const rowIndex=await morph.locator('.edition-academic-morph-row').evaluateAll(
+    rows=>rows.findIndex(row=>row.textContent.includes('lectura contextual propuesta')));
+  expect(rowIndex).toBeGreaterThanOrEqual(0);
+  // Mantener el mismo índice: tras confirmar la revisión cambia su etiqueta.
+  const row=morph.locator('.edition-academic-morph-row').nth(rowIndex);
+  await expect(row).toBeVisible();
+  const initial=await row.innerText();
+  expect(initial).not.toContain('Pendiente');
+  await row.getByRole('button',{name:/Revisar análisis de/}).click();
+  const review=morph.locator('.edition-morph-inline-review');
+  const choice=review.getByRole('combobox',{name:'Análisis morfológico'});
+  await expect(choice).not.toHaveValue('');
+  await review.getByRole('button',{name:'Confirmar lectura'}).click();
+  await expect(row).toContainText('análisis elegido por el docente');
+  await row.getByRole('button',{name:/Revisar análisis de/}).click();
+  await expect(review.getByRole('combobox',{name:'Análisis morfológico'})).not.toHaveValue('');
+  await review.getByRole('button',{name:'Cancelar'}).click();
+  await expect(page.locator('.edition-paper .edition-academic-morph-row')).toHaveCount(0);
+});
+
+test('Otra en evolución fonética recorre el banco y no alterna entre solo dos términos',async({page})=>{
+  await addLatin(page,'Gallia est omnis divisa in partes tres.');
+  await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
+  const choice=page.locator('.edition-question-panel[data-kind="choice"]');
+  const phonetics=choice.locator('.edition-option').filter({hasText:'Evolución fonética'});
+  const first=phonetics.locator('.edition-qword-row').first();
+  const input=first.getByRole('textbox',{name:'Palabra'});
+  await expect(input).not.toHaveValue('',{timeout:30000});
+  const distinct=new Set();
+  for(let i=0;i<5;i++){
+    const before=await input.inputValue();
+    distinct.add(before);
+    await first.getByRole('button',{name:'Proponer solo esta palabra'}).click();
+    await expect(input).not.toHaveValue(before,{timeout:30000});
+  }
+  expect(distinct.size).toBeGreaterThan(2);
+});
