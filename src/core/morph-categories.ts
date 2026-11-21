@@ -1,5 +1,6 @@
 /** Tipología escolar de las apariciones: no agrupar infinitivos/participios con verbos personales. */
 import type {CollatinusGrammarCandidate,CollatinusGrammarToken} from './collatinus-grammar.js';
+import type {EvidenceV1} from './edition-model.js';
 
 export const MORPH_TYPES=[
   'verbo-personal','pronombre','infinitivo','participio','sustantivo','adjetivo','numeral',
@@ -32,6 +33,7 @@ export function morphTypeFromAnalysis(analysis:string|null|undefined,pos='',indM
 export interface MorphChoice{
   surface:string;start:number;end:number;key:string;category:MorphType;
   lemmaId:string;analysis:string;source:'collatinus'|'verified';candidateId?:string;
+  evidence?:EvidenceV1;
 }
 export function morphChoiceFromToken(token:CollatinusGrammarToken,latin:string):MorphChoice|null{
   if(!Number.isSafeInteger(token.s)||!Number.isSafeInteger(token.e)||token.e<=token.s||
