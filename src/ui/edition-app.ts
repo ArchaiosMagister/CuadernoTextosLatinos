@@ -301,7 +301,7 @@ export function createEditionPane(options:{
       paint();
     },
     status:setMessage,repaint:paint,
-  },{autoApply,onAnalyzeMorphology:options.onAnalyzeMorphology});
+  },{autoApply,...(options.onAnalyzeMorphology?{onAnalyzeMorphology:options.onAnalyzeMorphology}:{})});
   document.addEventListener('selectionchange',()=>{
     const pages=element.querySelector<HTMLElement>('.edition-paper-pages');
     if(pages)academics.savePaperSelection(pages);
