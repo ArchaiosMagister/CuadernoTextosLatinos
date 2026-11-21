@@ -1574,7 +1574,7 @@ function renderHome():HTMLElement{
     el('p','small muted','Consulta, ordena y edita tus pasajes sin abrir un cuaderno.'));
   bankHeading.append(bankHeadingCopy,
     el('span','cuaderno-bank-total',corpus.texts.length+
-      (corpus.texts.length===1?' texto guardado':' textos guardados')));
+      (corpus.texts.length===1?' texto distinto':' textos distintos')));
   bank.append(bankHeading);
   const bankActions=el('div','cuaderno-home-actions cuaderno-bank-main-actions');
   bankActions.append(button('Pegar en el banco',()=>pasteText('bank'),'hbtn primary'),
@@ -1609,7 +1609,8 @@ function renderHome():HTMLElement{
   const viewSelect=el('select');
   viewSelect.setAttribute('aria-label','Vista del banco de textos');
   for(const [value,label] of [
-    ['list','Lista general'],['tags','Explorar por etiquetas'],
+    ['all','Lista y etiquetas'],['list','Solo lista general'],
+    ['tags','Solo categorías'],
   ] as const){
     const option=el('option','',label);option.value=value;viewSelect.append(option);
   }
@@ -1624,7 +1625,7 @@ function renderHome():HTMLElement{
     bankField('Ver',viewSelect,''));
   const resetBankFilters=button('Restablecer vista',()=>{
     search.value='';authorSelect.value='all';sortSelect.value='author-asc';
-    viewSelect.value='list';populate();
+    viewSelect.value='all';populate();
   },'tbtn cuaderno-bank-reset');
   bankToolbar.append(resetBankFilters);bank.append(bankToolbar);
   const bankResultCount=el('p','cuaderno-bank-result-count');
@@ -1702,7 +1703,7 @@ function renderHome():HTMLElement{
       titleGroup.append(el('strong','',text.title));
       titleGroup.append(el('span','cuaderno-home-text-source',
         source||'Autor y obra sin indicar'));
-      const excerpt=text.latin.replace(/\\s+/g,' ').trim();
+      const excerpt=text.latin.replace(/\s+/g,' ').trim();
       if(excerpt)titleGroup.append(el('span','cuaderno-home-text-snippet',
         excerpt.slice(0,115)+(excerpt.length>115?'…':'')));
       rowSummary.append(titleGroup);
@@ -1747,10 +1748,11 @@ function renderHome():HTMLElement{
     const isFiltered=Boolean(search.value.trim())||authorSelect.value!=='all';
     bankResultCount.textContent='Mostrando '+matching.length+' de '+corpus.texts.length+
       (corpus.texts.length===1?' texto':' textos')+' · '+(
-        viewSelect.value==='tags'?'clasificados por etiquetas':'lista ordenada');
+        viewSelect.value==='tags'?'clasificados por etiquetas':
+        viewSelect.value==='list'?'lista ordenada':'lista y etiquetas');
     selectedButton.textContent=isFiltered?'Seleccionar resultados ('+matching.length+')':
       'Seleccionar todo el banco ('+matching.length+')';
-    resetBankFilters.disabled=!isFiltered&&sortSelect.value==='author-asc'&&viewSelect.value==='list';
+    resetBankFilters.disabled=!isFiltered&&sortSelect.value==='author-asc'&&viewSelect.value==='all';
     updateSelection();
     if(!matching.length){
       listing.append(el('p','cuaderno-bank-empty',
@@ -1760,30 +1762,27 @@ function renderHome():HTMLElement{
     const addLazyRows=(group:HTMLDetailsElement,texts:typeof corpus.texts):void=>{
       const items=el('div','cuaderno-home-category-items');group.append(items);
       let visible=40;
-      const update=():void=>{
+      const update=(force=false):void=>{
         items.replaceChildren();
-        if(!group.open)return;
+        if(!group.open&&!force)return;
         appendTextRows(items,texts.slice(0,visible));
         if(visible<texts.length)items.append(button(
           'Mostrar más textos ('+(texts.length-visible)+' restantes)',()=>{
             visible+=40;update();
           },'hbtn cuaderno-bank-show-more'));
       };
-      group.addEventListener('toggle',update);
-      // WebKit puede diferir el evento toggle; la primera apertura también
-      // actualiza inmediatamente el contenido de la categoría pulsada.
+      group.addEventListener('toggle',()=>update());
+      // Pintar inmediatamente en WebKit al abrir, antes del toggle diferido.
       const summary=group.querySelector(':scope > summary');
-      summary?.addEventListener('click',()=>{
-        if(!group.open){group.open=true;update();group.open=false;}
-      });
+      summary?.addEventListener('click',()=>{if(!group.open)update(true);});
       if(group.open)update();
     };
-    if(viewSelect.value==='list'){
+    if(viewSelect.value!=='tags'){
       const all=el('details','cuaderno-home-category cuaderno-bank-all');
-      all.open=true;
-      all.append(el('summary','','Lista general ('+matching.length+')'));
+      all.open=Boolean(search.value.trim());
+      all.append(el('summary','','Todos los textos ('+matching.length+')'));
       addLazyRows(all,matching);listing.append(all);
-      return;
+      if(viewSelect.value==='list')return;
     }
     const makeCategory=(tag:typeof catalogue[number],depth:number):HTMLDetailsElement|null=>{
       const texts=matching.filter(t=>matchesGrammarFilters(idsFor(t.id),[tag.id],catalogue));
