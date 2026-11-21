@@ -15,7 +15,7 @@ function morphData(e:NotebookEditionV1,placementId:string){
 }
 export function selectMorphologyForPlacement(
   e:NotebookEditionV1,placementId:string,tokens:readonly CollatinusGrammarToken[],
-  replaceWordId:string|null=null,
+  replaceWordId:string|null=null,verifiedChoices:readonly MorphChoice[]=[],
 ):MorphChoice[]{
   const {placement,question}=morphData(e,placementId);
   const replace=question.words.find(w=>w.id===replaceWordId);
@@ -36,7 +36,9 @@ export function selectMorphologyForPlacement(
     }
   }
   const reserved=new Set(others.map(category).filter((x):x is MorphType=>x!==null));
-  const candidates=tokens.map(t=>morphChoiceFromToken(t,placement.text.latin)).filter((c):c is MorphChoice=>Boolean(c))
+  const verifiedPositions=new Set(verifiedChoices.map(c=>c.start));
+  const candidates=[...tokens.map(t=>morphChoiceFromToken(t,placement.text.latin))
+    .filter((c):c is MorphChoice=>Boolean(c)&&!verifiedPositions.has(c.start)),...verifiedChoices]
     .filter(c=>!covered.some(m=>c.start<m.endUtf16&&m.startUtf16<c.end));
   const cap=(replace?others.length+1:4)-(others.length-reserved.size);
   const options=replace?candidates.filter(c=>c.key!==key(replace.surface)):candidates;
@@ -77,9 +79,10 @@ export function applyMorphologyChoices(
       reviewRequired:false});
     newWords.push({id:wordId,markId,surface:choice.surface,
       lemmaId:choice.lemmaId,analysis:choice.analysis,schoolCategory:choice.category,
-      provenance:{provider:'Collatinus (propuesta contextual)',recordId:choice.candidateId??choice.lemmaId,
-        bankRevision:'motor-offline',decisionId:null},
-      reviewState:'needs-review',locked:false});
+      provenance:choice.source==='verified'&&choice.evidence?choice.evidence:
+        {provider:'Collatinus (propuesta contextual)',recordId:choice.candidateId??choice.lemmaId,
+          bankRevision:'motor-offline',decisionId:null},
+      reviewState:choice.source==='verified'&&choice.evidence?'verified':'needs-review',locked:false});
     categories.add(choice.category);usedText.add(choice.key);
   }
   const changed={...placement,text:{...placement.text,markup:newMarks.sort((a,b)=>a.startUtf16-b.startUtf16)},
