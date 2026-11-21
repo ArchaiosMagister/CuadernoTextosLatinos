@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { VerifiedAcademicBankV1, AcademicBankError, type AcademicBankRecordV1 } from './academic-bank.js';
-import { AcademicQuestionEngineV1, AcademicEngineError } from './academic-engine.js';
+import { AcademicQuestionEngineV1, AcademicEngineError, displayedAcademicSlotValue } from './academic-engine.js';
 import { createEdition, createPlacement } from './edition-factory.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
 import { WorkspaceRepository, WorkspaceConflictError } from '../storage/workspace-repository.js';
@@ -65,6 +65,64 @@ async function create(db:WorkspaceRepository):Promise<NotebookEditionV1> {
   const e=corpus();await db.commitEdition(e.id,0,{command:'create',targetId:e.id,timestamp:NOW},()=>e);return e;
 }
 
+test('los prefijos ya generados se muestran en minúscula incluso en cuadernos anteriores, pero no los manuales',()=>{
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'generated',value:'Antifaz'}),'antifaz');
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'generated',value:'Ínterdependencia'}),'ínterdependencia');
+  assert.equal(displayedAcademicSlotValue('prefix',{origin:'manual',value:'Antifaz'}),'Antifaz');
+  assert.equal(displayedAcademicSlotValue('phonetics',{origin:'generated',value:'Aurum'}),'Aurum');
+});
+test('los prefijos importados conservan su grafía, pero se proponen y generan en minúscula',async()=>{
+  const originals=[
+    record('prefix',200,{value:'Antifaz'}),
+    record('prefix',201,{value:'Interdependencia'}),
+  ];
+  const e=engine(originals),ed=corpus(),t=target(ed,'prefix');
+  const before=JSON.stringify(ed);
+  assert.equal(e.bank.findVerified('prefix.200')?.value,'Antifaz');
+  assert.equal(e.previewSlot(ed,t).candidates.find(c=>c.id==='prefix.200')?.value,'antifaz');
+  assert.equal(JSON.stringify(ed),before);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>ed);
+  const out=await e.commit(db,e.prepareSlot(ed,t,'prefix.200'),LATER);
+  assert.equal(choice(out.edition).options[2]!.slots[0]!.value,'antifaz');
+  assert.equal(choice(out.edition).options[2]!.slots[0]!.origin,'generated');
+  assert.deepEqual(choice(out.edition).options[2]!.slots[1],choice(ed).options[2]!.slots[1]);
+  assert.deepEqual(choice(out.edition).options[3],choice(ed).options[3]);
+  assert.deepEqual(out.edition.placements[1],ed.placements[1]);
+  assert.equal(e.bank.findVerified('prefix.200')?.value,'Antifaz');
+});
+test('regeneración del apartado: minúsculas sin cambiar términos manuales protegidos',async()=>{
+  const ed=corpus(),q=choice(ed);
+  const manual=slot('slot.prefix.1','Ámbito manual',true);
+  q.options[2]!.slots[0]=manual;
+  const clean=validateEdition(ed);
+  const e=engine([record('prefix',200,{value:'Antifaz'}),
+    record('prefix',201,{value:'Interdependencia'})]);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>clean);
+  const plan=e.prepareSubquestion(clean,{...targeted(clean,'prefix'),desiredCount:2,seed:1});
+  const out=await e.commit(db,plan,LATER);
+  assert.deepEqual(choice(out.edition).options[2]!.slots[0],manual);
+  assert.ok(['antifaz','interdependencia'].includes(choice(out.edition).options[2]!.slots[1]!.value));
+  assert.deepEqual(choice(out.edition).options[3],choice(clean).options[3]);
+});
+test('regeneración de pregunta completa: prefijos en minúscula y demás categorías idénticas al banco',async()=>{
+  const changed=entries.map(r=>r.kind==='prefix'?{...r,
+    value:r.value[0]!.toLocaleUpperCase('es')+r.value.slice(1)}:r);
+  const e=engine(changed),ed=corpus(),q=choice(ed);
+  const db=repo();await db.commitEdition(ed.id,0,{command:'create',targetId:ed.id,timestamp:NOW},()=>ed);
+  const plan=e.prepareChoiceQuestion(ed,{placementId:'place.1',questionId:q.id,
+    expectedRevision:1,seed:3,desiredCountByKind:{preverb:2,phonetics:2,prefix:2,latinism:2},
+    sourceFormsByKind:{preverb:['instruxit','successerunt']}});
+  const result=await e.commit(db,plan,LATER);
+  const slots=choice(result.edition).options[2]!.slots;
+  assert.equal(slots.length,2);
+  for(const s of slots){
+    assert.equal(s.value[0],s.value[0]!.toLocaleLowerCase('es'));
+    const row=e.bank.verified('prefix').find(x=>x.id===plan.assignments
+      .find(a=>a.optionId===choice(ed).options[2]!.id)?.items.find(i=>i.slotId===s.id)?.candidateId);
+    assert.equal(s.value,row!.value[0]!.toLocaleLowerCase('es')+row!.value.slice(1));
+  }
+  assert.deepEqual(result.edition.placements[1],ed.placements[1]);
+});
 test('el banco rechaza registros sin evidencia, revisión o curso válido',()=>{
   assert.throws(()=>new VerifiedAcademicBankV1(manifest,[record('phonetics',1,{evidence:{...evidence('1'),bankRevision:'otra'}})]),AcademicBankError);
   assert.throws(()=>new VerifiedAcademicBankV1(manifest,[record('phonetics',1,{courses:[]})]),/curso/);
@@ -380,4 +438,85 @@ test('una repetición falsa inyectada no supera la validación contra el banco',
   ]}]};
   await assert.rejects(e.commit(db,fake,LATER),/no está justificada/);
   assert.equal((await db.loadEdition(ed.id))!.revision,1);
+});
+
+
+test('fase 5: una palabra de origen manual queda protegida aunque el legado no marcara locked',async()=>{
+  const ed=corpus(),q=choice(ed),manual={...slot('slot.prefix.1','valor docente',true),locked:false};
+  q.options[2]!.slots[0]=manual;
+  const valid=validateEdition(ed),e=engine(),targetSlot=target(valid,'prefix');
+  assert.equal(e.previewSlot(valid,targetSlot).status,'locked');
+  assert.throws(()=>e.prepareSlot(valid,targetSlot),/bloqueada|protegida/);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:2,seed:0});
+  assert.equal(plan.assignments[0]!.items[0]!.candidateId,null);
+  const db=repo();
+  await db.commitEdition(valid.id,0,{command:'create',targetId:valid.id,timestamp:NOW},()=>valid);
+  const saved=await e.commit(db,plan,LATER);
+  assert.deepEqual(choice(saved.edition).options[2]!.slots[0],manual);
+  assert.deepEqual(saved.edition.placements[1],valid.placements[1]);
+  assert.doesNotThrow(()=>e.prepareSlot(valid,targetSlot,'prefix.3',0,true));
+});
+
+test('fase 5: una decisión morfológica manual desbloqueada exige consentimiento expreso',()=>{
+  const ed=withMorph(corpus());
+  const q=ed.placements[0]!.questions.find(x=>x.kind==='morphology')!;
+  if(q.kind!=='morphology')throw Error('Morfología ausente');
+  q.words[0]!.reviewState='manual';
+  q.words[0]!.locked=false;
+  const clean=validateEdition(ed),e=engine();
+  const targetMorph={placementId:'place.1',questionId:q.id,wordId:'morph.word',expectedRevision:1};
+  assert.equal(e.previewMorph(clean,targetMorph).status,'locked');
+  assert.throws(()=>e.prepareMorph(clean,targetMorph,'morphology.1'),/manual protegido/);
+  assert.doesNotThrow(()=>e.prepareMorph(clean,targetMorph,'morphology.1',true));
+});
+
+test('fase 5: la misma palabra entre categorías distintas cuenta como uso previo',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(x=>x.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('p.otro','prefix-0')];
+  const eligible=[
+    record('latinism',300,{value:'prefix-0'}),
+    record('latinism',301,{value:'término nuevo'}),
+  ];
+  const e=engine(eligible),valid=validateEdition(ed),t=target(valid,'latinism');
+  const candidate=e.previewSlot(valid,t);
+  assert.deepEqual(candidate.candidates.map(x=>x.value),['término nuevo']);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'latinism'),desiredCount:1,seed:0});
+  assert.equal(e.bank.findVerified(plan.assignments[0]!.items[0]!.candidateId!)!.value,'término nuevo');
+  const scarce=engine([eligible[0]!]).previewSlot(valid,t);
+  assert.deepEqual(scarce.candidates.map(x=>x.value),['prefix-0']);
+});
+
+
+test('las preguntas y los apartados desactivados no agotan los términos nuevos del cuaderno',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('active-used','prefix-0')];
+  other.options.find(o=>o.kind==='latinism')!.slots=[slot('inactive-use','prefix-1')];
+  other.options.find(o=>o.kind==='latinism')!.enabled=false;
+  const e=engine([record('prefix',0),record('prefix',1)]);
+  const valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const plan=e.prepareSubquestion(valid,{...targeted(valid,'prefix'),desiredCount:1,seed:0});
+  assert.equal(e.bank.findVerified(plan.assignments[0]!.items[0]!.candidateId!)!.value,'prefix-1');
+  other.options.find(o=>o.kind==='latinism')!.enabled=true;
+  other.enabled=false;
+  // La pregunta entera desactivada tampoco reserva ninguna de sus palabras.
+  const inactive=validateEdition(ed);
+  assert.deepEqual(e.previewSlot(inactive,target(inactive,'prefix')).candidates
+    .map(c=>c.value).sort(),['prefix-0','prefix-1']);
+});
+
+test('si hay otra palabra inédita, nunca se repite una ya usada; agotado el banco, se admite la reutilización',()=>{
+  const ed=corpus();
+  const other=ed.placements[1]!.questions.find(q=>q.kind==='choice');
+  if(!other||other.kind!=='choice')throw Error('Pregunta ausente');
+  other.options.find(o=>o.kind==='prefix')!.slots=[slot('used','prefix-0')];
+  const rows=[record('prefix',0),record('prefix',1)];
+  const e=engine(rows),valid=validateEdition(ed),t=target(valid,'prefix');
+  assert.deepEqual(e.previewSlot(valid,t).candidates.map(c=>c.value),['prefix-1']);
+  const exhausted=engine([rows[0]!]).previewSlot(valid,t);
+  assert.deepEqual(exhausted.candidates.map(c=>c.value),['prefix-0']);
 });

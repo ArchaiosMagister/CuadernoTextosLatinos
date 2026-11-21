@@ -3,6 +3,8 @@ export interface LibraryLine {
   c: string;
   t: string;
   k: string;
+  /** Hablante indicado por la edición TEI (como en Examinator2). */
+  s?: string;
 }
 export interface LibraryWork {
   urn: string;

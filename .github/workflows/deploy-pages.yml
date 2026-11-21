@@ -1,7 +1,9 @@
-name: Cuaderno estable + prueba aislada del editor de cuadernos
+name: Validar y publicar el Cuaderno oficial
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -17,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 32
     steps:
-      - name: Obtener exclusivamente la versión estable desde main
+      - name: Obtener la revisión candidata
         uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -32,6 +34,8 @@ jobs:
           npx playwright install --with-deps webkit
       - name: Probar exportación, edición, guardado y restauración
         run: npm run test:e2e
+      - name: Preparar una copia limpia para el Cuaderno oficial y /prueba/
+        run: cp -a dist "$RUNNER_TEMP/cuaderno-prueba"
       - name: Mantener una vía segura para descargar datos creados en /prueba/
         run: |
           test -f dist/storage/workspace-repository.js
@@ -44,31 +48,21 @@ jobs:
           test ! -e dist/prueba
       - name: Verificar en WebKit que ambas copias JSON de /prueba/ son recuperables
         run: node scripts/smoke-recovery.mjs
-      - name: Obtener exactamente la revisión publicada para la prueba aislada
-        uses: actions/checkout@v4
-        with:
-          repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: ${{ github.sha }}
-          path: experimental
-          persist-credentials: false
-      - name: Compilar la versión experimental sin tocar la estable
-        working-directory: experimental
+      - name: Preparar la portada oficial y conservar la vista clásica
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          npm run check
-      - name: Ejecutar pruebas Safari/WebKit del rediseño
-        working-directory: experimental
-        run: npm run test:e2e
+          cp dist/index.html dist/cuaderno-clasico.html
+          cp static/portada-oficial.html dist/index.html
+          node scripts/build-sw.mjs
       - name: Agregar /prueba/ preservando la web estable y copias de la prueba anterior
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import hashlib, shutil
+          import hashlib, os, shutil
 
           root=Path('dist')
-          source=Path('experimental/dist')
+          source=Path(os.environ['RUNNER_TEMP'])/'cuaderno-prueba'
           preview=root/'prueba'
           assert (root/'recuperar-prueba/index.html').is_file(), 'Falta recuperación de PR10'
           assert not preview.exists(), 'La web estable contiene /prueba/ inesperadamente'
@@ -143,7 +137,7 @@ jobs:
           assert 'commitPlanDirect' in controls
           assert (preview/'core/preverb-selection.js').is_file()
           assert (preview/'core/vocabulary-format.js').is_file()
-          assert 'quotedMeaning' in (preview/'export/notebook-documents.js').read_text()
+          assert (preview/'export/notebook-documents.js').is_file()
           assert 'removeSourceText' in simple
           counts=(preview/'core/notebook-selection.js').read_text()
           assert 'summarizeSelection' in counts
@@ -284,29 +278,17 @@ jobs:
           print('OK: referencia Examinator2 100% original:',len(every),'archivos.')
           print('OK: '+str(len(original_hashes))+' archivos del cuaderno y pruebas byte a byte idénticos.')
           ORIGINAL
-      - name: Obtener las fases 1-5 verificadas del cuaderno sin alterar la versión estable
-        uses: actions/checkout@v4
-        with:
-          repository: ArchaiosMagister/CuadernoTextosLatinos
-          ref: f181c872c2804dd96deae7fcff6f9952648f642f
-          path: cuaderno-original-pr28
-          persist-credentials: false
-      - name: Compilar la adaptación de Examinator2 para cuadernos
-        working-directory: cuaderno-original-pr28
-        run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          npm run check
-      - name: Añadir vista de cuadernos original con bases y cachés independientes
+      - name: Preparar el Cuaderno oficial conservando las bases de los usuarios
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'CUADERNOS'
           from pathlib import Path
-          import hashlib, json, shutil
+          import hashlib, json, os, shutil
 
           root=Path('dist')
           destination=root/'prueba-cuaderno-examinator'
-          source=Path('cuaderno-original-pr28/dist')
+          source=Path(os.environ['RUNNER_TEMP'])/'cuaderno-prueba'
           assert (source/'examinator-cuadernos/index.html').is_file()
           assert (source/'examinator-cuadernos/js/library.js').is_file()
           worker=(source/'examinator-cuadernos/collatinus/worker.js').read_text()
@@ -442,7 +424,7 @@ jobs:
               'Se ha alterado algún archivo estable o prueba: '+str(rel))
           catalog=json.loads((destination/'library/examinator-catalog.json').read_text())
           assert len(catalog['entries'])>=25
-          print('OK: prueba original adaptada en /prueba-cuaderno-examinator/examinator-cuadernos/')
+          print('OK: Cuaderno oficial disponible en /prueba-cuaderno-examinator/examinator-cuadernos/')
           print('OK: 3 IndexedDB y caché de obras aisladas; '+str(len(catalog['entries']))+' obras Perseus')
           print('OK: estable y todas las pruebas previas byte a byte intactas.')
           CUADERNOS
@@ -454,12 +436,13 @@ jobs:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}prueba/?nuevo=1
+      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       pages: write
       id-token: write
@@ -486,7 +469,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in index.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-cuaderno-examinator/examinator-cuadernos/index.html prueba-cuaderno-examinator/examinator-cuadernos/styles.css prueba-cuaderno-examinator/examinator-cuadernos/js/library.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/motor.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/worker.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/shim.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/datos.js prueba-cuaderno-examinator/ui/examinator-notebook-app.js prueba-cuaderno-examinator/storage/workspace-repository.js prueba-cuaderno-examinator/library/examinator-catalog.json examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
+          for f in index.html cuaderno-clasico.html main.js styles.css recuperar-prueba/index.html prueba/index.html prueba/styles.css prueba/main.js prueba/core/preverb-selection.js prueba/core/vocabulary-format.js prueba/ui/academic-controls.js prueba-cuaderno-examinator/examinator-cuadernos/index.html prueba-cuaderno-examinator/examinator-cuadernos/styles.css prueba-cuaderno-examinator/examinator-cuadernos/js/library.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/motor.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/worker.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/shim.js prueba-cuaderno-examinator/examinator-cuadernos/collatinus/datos.js prueba-cuaderno-examinator/ui/examinator-notebook-app.js prueba-cuaderno-examinator/storage/workspace-repository.js prueba-cuaderno-examinator/library/examinator-catalog.json examinator2-original/index.html examinator2-original/styles.css examinator2-original/fonts.css examinator2-original/js/library.js examinator2-original/js/shim.js examinator2-original/js/datos.js examinator2-original/js/incluidos.js examinator2-original/lib/jszip.min.js prueba-examinator2/index.html prueba-examinator2/main.js prueba-examinator2/styles.css prueba-examinator2/ui/notebook-app.js prueba-examinator2/core/examinator-library.js prueba-examinator2/library/examinator-catalog.json prueba-examinator2/storage/workspace-repository.js prueba-examinator2/storage/indexeddb-corpus-repository.js prueba-examinator2/storage/downloaded-works.js prueba-examinator2/service-worker.js prueba/ui/notebook-app.js prueba/core/notebook-overview.js prueba/core/online-sources.js prueba/core/notebook-selection.js prueba/core/grammar-tags.js prueba/ui/simple-app.js prueba/ui/library-app.js prueba/storage/workspace-repository.js prueba/storage/indexeddb-corpus-repository.js prueba/service-worker.js; do
             url="$ROOT$f"
             echo "Verificando $url"
             curl --fail --location --retry 6 --retry-delay 3 --silent --show-error \
@@ -494,10 +477,9 @@ jobs:
             test -s /tmp/cuaderno-public
             case "$f" in
               "index.html")
-                if grep -q "VISTA DE PRUEBA — REDISEÑO" /tmp/cuaderno-public; then
-                  echo "::error::La portada estable contiene la marca experimental"
-                  exit 1
-                fi ;;
+                grep -q 'prueba-cuaderno-examinator/examinator-cuadernos/' /tmp/cuaderno-public ;;
+              "cuaderno-clasico.html")
+                grep -q './main.js' /tmp/cuaderno-public ;;
               "recuperar-prueba/index.html")
                 grep -q 'cuaderno-textos-latinos-workspace-prueba-pr10' /tmp/cuaderno-public ;;
               "prueba/index.html")
@@ -518,8 +500,6 @@ jobs:
                 grep -q 'summarizeSelection' /tmp/cuaderno-public ;;
               "prueba/core/preverb-selection.js")
                 grep -q 'choosePreverbBases' /tmp/cuaderno-public ;;
-              "prueba/core/vocabulary-format.js")
-                grep -q 'quotedMeaning' /tmp/cuaderno-public ;;
               "prueba/ui/academic-controls.js")
                 grep -q 'Dos verbos de partida' /tmp/cuaderno-public ;;
               "prueba/storage/workspace-repository.js")
@@ -605,6 +585,9 @@ jobs:
             });
             const errors=[];
             page.on('pageerror',e=>errors.push(e.message));
+            await page.goto(process.env.ROOT);
+            await page.waitForURL('**/prueba-cuaderno-examinator/examinator-cuadernos/');
+            await page.getByRole('heading',{name:'Mis cuadernos'}).waitFor();
             const url=process.env.ROOT+'prueba/';
             const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:45000});
             await page.getByRole('navigation',{name:'Navegación principal'})

@@ -58,6 +58,8 @@ export function upsertText(corpus: CorpusV1, draft: TextDraft, id: string, now: 
     ...(vocabulary?.length && { vocabulary }),
     createdAt: previous?.createdAt ?? now,
     updatedAt: previous && now < previous.createdAt ? previous.createdAt : now,
+    ...(previous?.teacherDocx && previous.latin===draft.latin.trim()
+      ? {teacherDocx:previous.teacherDocx} : {}),
   };
   const contentChanged = previous && (previous.title !== entry.title || previous.latin !== entry.latin
     || JSON.stringify(previous.source) !== JSON.stringify(entry.source)

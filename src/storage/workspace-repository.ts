@@ -382,17 +382,19 @@ export class WorkspaceRepository {
    * La función de mutación es pura/síncrona; nunca espera candidatos dentro de IDB.
    */
   async commitEdition(id: string, expectedRevision: number, mutation: EditionMutationV1,
-    update: (previous: NotebookEditionV1 | null) => NotebookEditionV1): Promise<EditionSnapshotV1> {
+    update: (previous: NotebookEditionV1 | null) => NotebookEditionV1,
+    importDependencies?: (corpus: CorpusV1) => {edition: NotebookEditionV1; corpus: CorpusV1}): Promise<EditionSnapshotV1> {
     if (!validId(id)) throw new WorkspaceStorageError('ID de edición inválido.');
     checkExpected(expectedRevision);
     checkMutation(mutation);
     const eventId = 'evt.' + globalThis.crypto.randomUUID();
-    return this.transact(['editions','history','meta'], 'readwrite', (tx, finish, abort) => {
+    return this.transact(importDependencies?['editions','history','meta','corpus']:['editions','history','meta'], 'readwrite', (tx, finish, abort) => {
       const prior = tx.objectStore('editions').get(id);
       const epQuery = tx.objectStore('meta').get(EPOCH_KEY);
       const lastEvent = expectedRevision > 0
         ? tx.objectStore('history').get([id, expectedRevision]) : null;
-      let pending = lastEvent ? 3 : 2;
+      const dependencyQuery = importDependencies ? tx.objectStore('corpus').get('current') : null;
+      let pending = 2 + Number(lastEvent !== null) + Number(dependencyQuery !== null);
       const ready = () => {
         if (--pending) return;
         try {
@@ -410,7 +412,13 @@ export class WorkspaceRepository {
           if (last && JSON.stringify(validateEdition(last.after)) !== JSON.stringify(before)) {
             throw new WorkspaceHistoryError('La última revisión no coincide con su historial.');
           }
-          const after = validateEdition(update(before ? structuredClone(before) : null));
+          const priorCorpus = dependencyQuery?.result === undefined ? null : corpusRow(dependencyQuery.result);
+          const imported = importDependencies?.(priorCorpus?.corpus ?? emptyCorpus());
+          const after = validateEdition(imported?.edition ?? update(before ? structuredClone(before) : null));
+          if (imported) {
+            const updatedCorpus = validateCorpus(imported.corpus);
+            tx.objectStore('corpus').put({key:'current',revision:(priorCorpus?.revision ?? 0)+1,corpus:updatedCorpus});
+          }
           if (after.id !== id) throw new WorkspaceStorageError('Una mutación no puede cambiar el ID de edición.');
           if (before !== null && after.createdAt !== before.createdAt) {
             throw new WorkspaceStorageError('Una mutación no puede cambiar la fecha de creación.');
@@ -425,6 +433,7 @@ export class WorkspaceRepository {
       };
       prior.onsuccess = ready; epQuery.onsuccess = ready;
       if (lastEvent) lastEvent.onsuccess = ready;
+      if (dependencyQuery) dependencyQuery.onsuccess = ready;
     });
   }
 

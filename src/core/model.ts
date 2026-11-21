@@ -1,5 +1,6 @@
 /** Modelo persistido. No se introduce aún ninguna operación de edición. */
 import type { VocabularyEntryV1 } from './edition-model.js';
+import type {ParsedTeacherDocx} from './docx-import.js';
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
@@ -20,6 +21,9 @@ export interface LatinText {
   vocabulary?: VocabularyEntryV1[];
   createdAt: string;
   updatedAt: string;
+  /** Datos OOXML normalizados: permiten reutilizar marcas, vocabulario y léxico docente.
+   * Ausentes en las fuentes de texto simple y en todos los corpus anteriores. */
+  teacherDocx?: ParsedTeacherDocx;
 }
 
 /** Una etiqueta del catálogo y una personalizada son entidades distintas. */
