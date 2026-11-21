@@ -1,5 +1,6 @@
 import type { CorpusV1, LatinText, Notebook } from './model.js';
 import { validateCorpus } from './validation.js';
+import type { ParsedTeacherDocx } from './docx-import.js';
 
 export interface TextDraft {
   id?: string;
@@ -12,6 +13,19 @@ export interface TextDraft {
   reviewed?: boolean;
   vocabulary?: NonNullable<LatinText['vocabulary']>;
 }
+/**
+ * Una importación DOCX con el mismo pasaje y cita puede contener preguntas,
+ * subrayados o glosario distintos. No sustituir nunca esos datos sin aviso.
+ * La variante se almacena como fuente independiente; la anterior se conserva.
+ */
+export function requiresDistinctDocxSource(
+  existing: Pick<LatinText, 'teacherDocx'> | null | undefined,
+  incoming: ParsedTeacherDocx | undefined,
+): boolean {
+  return Boolean(existing?.teacherDocx && incoming
+    && JSON.stringify(existing.teacherDocx) !== JSON.stringify(incoming));
+}
+
 const nullText = (value: string): string | null => value.trim() || null;
 
 export function retainNotebookText(corpus: CorpusV1, text: LatinText): CorpusV1 {

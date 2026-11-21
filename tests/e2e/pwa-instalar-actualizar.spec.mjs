@@ -73,3 +73,24 @@ test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente e
   await expect(more.getByRole('button',{name:'Buscar actualizaciones'})).toBeVisible();
   await expect(more.locator('[data-pwa-install]')).toBeVisible();
 });
+
+test('PWA: un error temporal de registro permite reintentar desde el botón',async({page})=>{
+  await page.addInitScript(()=>{
+    const original=navigator.serviceWorker.register.bind(navigator.serviceWorker);
+    let attempts=0;
+    navigator.serviceWorker.register=(...args)=>{
+      attempts++;
+      if(attempts===1)return Promise.reject(new Error('Fallo temporal simulado'));
+      return original(...args);
+    };
+    window.__pwaRegisterAttempts=()=>attempts;
+  });
+  await page.goto('/examinator-cuadernos/');
+  const home=page.locator('.cuaderno-home-pwa');
+  await expect(home.getByRole('button',{name:'Buscar actualizaciones'})).toBeVisible();
+  await expect(home.locator('[data-pwa-status]')).toContainText('No se pudo preparar el modo sin conexión');
+  await home.getByRole('button',{name:'Buscar actualizaciones'}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__pwaRegisterAttempts()),{timeout:30000}).toBe(2);
+  await expect(home.locator('[data-pwa-status]')).toContainText(
+    /actualizada|nueva versi[oó]n|descargando/i,{timeout:30000});
+});

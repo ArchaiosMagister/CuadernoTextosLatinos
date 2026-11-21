@@ -92,6 +92,10 @@ export function startCuadernoPwa():Promise<void>{
         }
       });
     }catch(error){
+      // Fallos temporales de registro (sin conexión, cuota, etc.) deben poder
+      // reintentarse desde «Buscar actualizaciones» sin recargar ni perder datos.
+      registration=null;
+      registrationTask=null;
       console.warn('No se pudo registrar el modo sin conexión:',error);
       announce('No se pudo preparar el modo sin conexión. Comprueba la conexión.');
     }
@@ -191,6 +195,8 @@ export function createCuadernoPwaControls(save:SaveBeforeReload):HTMLElement{
   status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   buttons.append(check,installButton);
   panel.append(buttons,status);
+  // Renderizar varias veces la portada no debe retener controles desmontados.
+  for(const old of mounted)if(!old.isConnected)mounted.delete(old);
   mounted.add(panel);
   // En la portada puede crearse antes de insertarse en el documento.
   check.textContent='Buscar actualizaciones';
