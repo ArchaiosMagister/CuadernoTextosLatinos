@@ -16,7 +16,9 @@ let html=original.slice(0,start)
   +'<script src="./js/util.js"></script>\n'
   +'<script type="module" src="../ui/examinator-notebook-app.js"></script>\n'
   +original.slice(end);
-html=html.replace('<title>Examinator</title>','<title>Cuaderno de textos latinos</title>\n' +
+// La referencia de Examinator2 permanece intacta; solo se renombra la cabecera del Cuaderno.
+html=html.replace('<span class="brand">Examinator</span>','<span class="brand">Cuadernos Latinos</span>')
+  .replace('<title>Examinator</title>','<title>Cuaderno de textos latinos</title>\n' +
     '<meta name="theme-color" content="#173f4a">\n' +
     '<meta name="apple-mobile-web-app-capable" content="yes">\n' +
     '<meta name="apple-mobile-web-app-title" content="Cuaderno Latín">\n' +
