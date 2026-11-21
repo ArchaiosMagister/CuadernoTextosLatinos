@@ -14,7 +14,11 @@ function load(name){
   vm.runInContext(assets.get(name),context,{filename:name});
 }
 let receive, reply;
-context.importScripts=(...names)=>names.forEach(load);
+const importedScripts=[];
+context.importScripts=(...names)=>names.forEach(name=>{
+  importedScripts.push(name);
+  load(name);
+});
 context.addEventListener=(type, listener)=>{
   assert.equal(type,'message');
   receive=listener;
@@ -27,6 +31,8 @@ const latin='Venit. Cum amicis venit. Cum veniret, quod dicit auditur. Amatus es
 await receive({data:{id:1,method:'analyze',args:{text:latin}}});
 assert.equal(reply.id,1);
 assert.equal(reply.error,undefined);
+assert.deepEqual(importedScripts,['datos.js','shim.js','motor.js'],
+  'el worker morfológico no debe evaluar obras literarias de incluidos.js');
 const tokens=reply.result;
 assert.equal(JSON.stringify(tokens),JSON.stringify(await context.api.call('analyze',{text:latin})));
 const extended = '[omissum. quod] ' + latin.replace('Quid faciat nescio.', 'Quid dicat ignoramus.');
