@@ -47,6 +47,9 @@ test('PWA: manifiesto e iconos PNG instalables en la ruta real del cuaderno',asy
 test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente el SW',async({page})=>{
   await page.goto('/examinator-cuadernos/');
   const bank=page.locator('.cuaderno-home-pwa');
+  const options=bank.locator('details.cuaderno-home-pwa-details');
+  await expect(options).not.toHaveAttribute('open');
+  await options.locator('summary').click();
   await expect(bank.getByRole('button',{name:'Buscar actualizaciones'})).toBeVisible();
   const worker=await page.request.get('/examinator-cuadernos/service-worker.js');
   expect(worker.ok()).toBe(true);
@@ -60,6 +63,10 @@ test('PWA: el botón comprueba actualizaciones y no reemplaza automáticamente e
   await bank.getByRole('button',{name:'Buscar actualizaciones'}).click();
   await expect(bank.locator('[data-pwa-status]'))
     .toContainText(/actualizada|nueva versi[oó]n|descargando|sin conexi[oó]n|no se ha podido/i,{timeout:20000});
+  // El aviso sigue visible incluso al cerrar únicamente los botones.
+  await options.locator('summary').click();
+  await expect(bank.locator('[data-pwa-status]')).toBeVisible();
+  await options.locator('summary').click();
   // El botón de instalación manual permanece disponible en Safari/WebKit.
   const help=bank.locator('[data-pwa-install]');
   await expect(help).toBeVisible();
@@ -87,6 +94,7 @@ test('PWA: un error temporal de registro permite reintentar desde el botón',asy
   });
   await page.goto('/examinator-cuadernos/');
   const home=page.locator('.cuaderno-home-pwa');
+  await home.locator('details.cuaderno-home-pwa-details > summary').click();
   await expect(home.getByRole('button',{name:'Buscar actualizaciones'})).toBeVisible();
   await expect(home.locator('[data-pwa-status]')).toContainText('No se pudo preparar el modo sin conexión');
   await home.getByRole('button',{name:'Buscar actualizaciones'}).click();
