@@ -1,4 +1,5 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import {renderPwaIcons} from './build-pwa-icons.mjs';
 
 await mkdir('dist', { recursive: true });
 await copyFile('index.html', 'dist/index.html');
@@ -15,7 +16,15 @@ let html=original.slice(0,start)
   +'<script src="./js/util.js"></script>\n'
   +'<script type="module" src="../ui/examinator-notebook-app.js"></script>\n'
   +original.slice(end);
-html=html.replace('<title>Examinator</title>','<title>Examinator · Cuaderno de textos latinos</title>')
+html=html.replace('<title>Examinator</title>','<title>Cuaderno de textos latinos</title>\n' +
+    '<meta name="theme-color" content="#173f4a">\n' +
+    '<meta name="apple-mobile-web-app-capable" content="yes">\n' +
+    '<meta name="apple-mobile-web-app-title" content="Cuaderno Latín">\n' +
+    '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n' +
+    '<link rel="manifest" href="./manifest.webmanifest">\n' +
+    '<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" sizes="180x180">\n' +
+    '<link rel="icon" type="image/png" href="./icons/icon-192.png" sizes="192x192">\n' +
+    '<link rel="icon" type="image/svg+xml" href="./icons/icon.svg">')
   .replace('<link rel="icon" href="icon.png">','<link rel="icon" href="../examinator2-original/icon.png">')
   .replace('<link rel="stylesheet" href="styles.css">',
     '<link rel="stylesheet" href="../styles.css">\n'
@@ -30,6 +39,10 @@ html=html.replace('<title>Examinator</title>','<title>Examinator · Cuaderno de 
   .replace('>Listas</button>','>Textos</button>');
 await mkdir('dist/examinator-cuadernos/js',{recursive:true});
 await writeFile('dist/examinator-cuadernos/index.html',html);
+await mkdir('dist/examinator-cuadernos/icons',{recursive:true});
+await copyFile('static/pwa/manifest.webmanifest','dist/examinator-cuadernos/manifest.webmanifest');
+await copyFile('static/pwa/icon.svg','dist/examinator-cuadernos/icons/icon.svg');
+await renderPwaIcons('dist/examinator-cuadernos/icons');
 await copyFile('reference/examinator2/styles.css','dist/examinator-cuadernos/styles.css');
 await copyFile('reference/examinator2/js/util.js','dist/examinator-cuadernos/js/util.js');
 await copyFile('reference/examinator2/js/library.js','dist/examinator-cuadernos/js/library.js');
