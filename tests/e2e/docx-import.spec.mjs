@@ -292,3 +292,67 @@ test('Banco propio: omite DOCX inválidos y guarda los archivos posteriores',asy
   });
   expect(texts).toEqual([expect.stringContaining('Finito igitur'),expect.stringContaining('Denique igitur')]);
 });
+
+
+test('Banco: ocho Word históricos, siete textos válidos y un marcador rechazado',async({page})=>{
+  await page.goto('/examinator-cuadernos/');
+  const bank=page.locator('.cuaderno-home-bank');
+  const chooser=page.waitForEvent('filechooser');
+  await bank.getByRole('button',{name:'Importar Word al banco'}).click();
+
+  // Reproducción estructural de los ocho Word aportados, sin publicar los
+  // documentos personales originales como archivos del repositorio.
+  const examples=[
+    ['antiguo examen 1a ev.docx','Eutropio, Breviarium VII 2','Fugatus Antonius amisso exercitu confugit ad Lepidum.'],
+    ['antiguo examen b 1a ev.docx','Julio César, De bello Gallico V 22','Cassivellaunus hoc proelio nuntiato legatos ad Caesarem mittit.'],
+    ['cesar.docx','Julio César, De bello civili I 18','Caesar eas cohortes cum exercitu suo coniunxit.'],
+    ['eutrop.docx','Eutropio, Breviarium III','Anno quarto postquam ad Italiam Hannibal venit Marcellus consul pugnavit.'],
+    ['eutropio2.docx','Eutropio, Breviarium VI 23 (bis)','Duces autem Romani erant Cornelius Scipio et Cornelius Faustus.'],
+    ['nepote.docx','Cornelio Nepote, Milcíades VII','Texto'],
+    ['nepote adaptado.docx','Adaptado de Cornelio Nepote, Milcíades III','In his fuit tum Miltiades. Hic hortatus est pontis custodes.'],
+    ['nepote otro.docx','Cornelio Nepote, Milcíades III','Eisdem temporibus Persarum rex Darius Scythis bellum inferre decrevit.'],
+  ];
+  const xml=(source,latin,i)=>
+    '<?xml version="1.0"?>'+
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+
+    [
+      p(['Texto de repaso Latín II']),p(['Nombre y apellidos: Fecha:']),
+      p(['Pasaje '+i]),p([source]),p([latin]),p(['Vocabulario']),p(['A']),
+      p(['Traducción del texto. (4p.)']),
+      p(['Análisis sintáctico del texto. (1p.)']),
+      p(['Análisis morfológico de las palabras subrayadas. (1p.)']),
+      p(['Elige dos de estas tres preguntas (2p.):']),
+      p(['Modificación preverbial a partir de A (3) y de B (2).']),
+      p(['Evolución fonética de A, B, C y D.']),
+      p(['Señala el prefijo y el significado que aporta a estas palabras: A, B, C, D.']),
+    ].join('')+'</w:body></w:document>';
+  await (await chooser).setFiles(examples.map(([name,source,latin],i)=>({
+    name,mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    buffer:sampleDocx(xml(source,latin,i)),
+  })));
+  const modal=page.locator('.modal').last();
+  await expect(modal.locator('.word-review-item')).toHaveCount(7);
+  await expect(modal.locator('.word-import-errors')).toContainText('nepote.docx');
+  await expect(modal.locator('.word-import-errors')).toContainText('marcador «Texto»');
+  await expect(modal).toContainText('pasaje adaptado');
+  await modal.getByRole('button',{name:'Guardar 7 textos en el banco'}).click();
+  const report=page.locator('.modal').filter({hasText:'Resultado de la importación Word'});
+  await expect(report).toContainText('7 archivos guardados · 1 omitido');
+  await report.getByRole('button',{name:'Cerrar',exact:true}).click();
+  await expect(bank).toContainText('7 textos distintos');
+  const texts=await page.evaluate(async()=>{
+    const {IndexedDbCorpusRepository}=await import('/storage/indexeddb-corpus-repository.js');
+    return (await new IndexedDbCorpusRepository().load()).corpus.texts.map(x=>({
+      author:x.source.author,work:x.source.work,reference:x.source.reference,
+      latin:x.latin,adapted:x.teacherDocx?.warnings.some(s=>s.includes('pasaje adaptado')),
+    }));
+  });
+  expect(texts).toHaveLength(7);
+  expect(texts).not.toContainEqual(expect.objectContaining({latin:'Texto'}));
+  expect(texts).toContainEqual(expect.objectContaining({
+    author:'Cornelio Nepote',work:'Milcíades',reference:'III',adapted:true,
+  }));
+  expect(texts).toContainEqual(expect.objectContaining({
+    author:'Eutropio',work:'Breviarium',reference:'VI 23 (bis)',
+  }));
+});
