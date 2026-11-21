@@ -103,7 +103,7 @@ export function attachLatinReadingCards(
           Number(b===token.sel?.morpho&&cand.lid===token.sel?.lid)-
           Number(a===token.sel?.morpho&&cand.lid===token.sel?.lid));
         const list=el('ul','edition-lexical-analyses');
-        for(const [index,morph] of orderedMorphs.slice(0,6).entries()){
+        for(const morph of orderedMorphs.slice(0,6)){
           const preferred=cand.lid===token.sel?.lid&&morph===token.sel?.morpho;
           const item=el('li',preferred?'edition-lexical-preferred':'',morph||'Análisis no disponible');
           if(preferred){
