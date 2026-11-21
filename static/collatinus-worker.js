@@ -7,7 +7,10 @@ let ready;
 async function engine() {
   if (!ready) {
     self.window = self;
-    importScripts('datos.js', 'incluidos.js', 'shim.js', 'motor.js');
+    // incluidos.js contiene obras de lectura, no modelos léxicos.
+    // Conservar su archivo y su caché offline para la biblioteca, pero no
+    // evaluar sus ~2 MB al iniciar el analizador morfológico.
+    importScripts('datos.js', 'shim.js', 'motor.js');
     ready = self.api.call('warm').catch(error => {
       ready = undefined;
       throw error;
