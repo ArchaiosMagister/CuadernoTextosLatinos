@@ -35,9 +35,18 @@ async function firstWordPoint(page){
     if(rect.width<=0||rect.height<=0)throw Error('La palabra no está maquetada en pantalla.');
     return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
   });
-  const target=await page.evaluate(({x,y})=>
-    Boolean(document.elementFromPoint(x,y)?.closest('.edition-latin')),point);
-  expect(target).toBe(true);
+  const probe=await page.evaluate(({x,y})=>{
+    const elem=document.elementFromPoint(x,y),paragraph=document.querySelector('.edition-preview .edition-latin');
+    return {point:{x,y},hit:elem?.outerHTML.slice(0,280)??null,
+      hitLatin:Boolean(elem?.closest('.edition-latin')),
+      paragraphRect:paragraph?.getBoundingClientRect().toJSON()??null,
+      paragraphText:paragraph?.textContent?.slice(0,100)??null,
+      modalCount:document.querySelectorAll('.modal-bg').length,
+      viewport:[window.innerWidth,window.innerHeight],
+      paper:paragraph?.closest('.edition-paper')?.getBoundingClientRect().toJSON()??null};
+  },point);
+  console.log('LEXICAL_HIT_PROBE',JSON.stringify(probe));
+  expect(probe.hitLatin,JSON.stringify(probe)).toBe(true);
   return point;
 }
 
