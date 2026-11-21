@@ -33,17 +33,26 @@ for (const filename of paths) {
   hash.update(await readFile('dist/' + filename.slice(2)));
 }
 const version = hash.digest('hex').slice(0, 16);
-function source(files, cacheName, cachePrefix, optionalFiles = []) {
+function source(files, cacheName, cachePrefix, optionalFiles = [], manualUpdates = false) {
   return [
   'const CACHE_NAME = ' + cacheName + ';',
   'const FILES = ' + JSON.stringify(files) + ';',
+  'const MANUAL_UPDATES = ' + JSON.stringify(manualUpdates) + ';',
   `
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
     await cache.addAll(FILES);
-${optionalFiles.length ? '    await Promise.allSettled(' + JSON.stringify(optionalFiles) + '.map(file => cache.add(file)));\n' : ''}    await self.skipWaiting();
+${optionalFiles.length ? '    await Promise.allSettled(' + JSON.stringify(optionalFiles) + '.map(file => cache.add(file)));\n' : ''}    if (!MANUAL_UPDATES) await self.skipWaiting();
   })());
+});
+// El usuario decide cuándo aplicar la nueva versión: un worker en espera
+// no sustituye la aplicación abierta ni pierde formularios sin confirmar.
+self.addEventListener('message', (event) => {
+  if (MANUAL_UPDATES && event.data && event.data.type === 'APPLY_UPDATE')
+    event.waitUntil(self.skipWaiting());
+  if (event.data && event.data.type === 'GET_VERSION' && event.ports && event.ports[0])
+    event.ports[0].postMessage({version: CACHE_NAME});
 });
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
@@ -85,5 +94,5 @@ const referenceFonts = await readFile('reference/examinator2/fonts.css', 'utf8')
 const optionalFiles = ['fonts.css', 'icon.png', ...[...referenceFonts.matchAll(/url\((fonts\/[^)]+)\)/gu)].map(match => match[1])]
   .map(file => '../../examinator2-original/' + file);
 await writeFile('dist/examinator-cuadernos/service-worker.js',
-  source(examinatorFiles, examinatorPrefix + ' + ' + JSON.stringify(version), examinatorPrefix, optionalFiles));
+  source(examinatorFiles, examinatorPrefix + ' + ' + JSON.stringify(version), examinatorPrefix, optionalFiles, true));
 console.log('SW offline: ' + paths.length + ' archivos en caché, ' + paths.filter(p=>p.startsWith('./library/works/')).length + ' obras.');
