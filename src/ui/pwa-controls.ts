@@ -77,13 +77,18 @@ export function startCuadernoPwa():Promise<void>{
         updateViaCache:'none',
       });
       monitor(registration);
+      let previouslyControlled=Boolean(navigator.serviceWorker.controller);
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        const wasUpdate=previouslyControlled;
+        previouslyControlled=true;
         if(reloadRequested){
           reloadRequested=false;
           window.location.reload();
         }else{
           updateWaiting=false;
-          announce('Se ha instalado una versión nueva. Guarda los cambios y recarga cuando quieras.');
+          announce(wasUpdate
+            ?'Se ha instalado una versión nueva. Guarda los cambios y recarga cuando quieras.'
+            :'Modo sin conexión preparado. Puedes comprobar actualizaciones cuando quieras.');
         }
       });
     }catch(error){
