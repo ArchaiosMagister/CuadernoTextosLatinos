@@ -309,10 +309,22 @@ export function createEditionPane(options:{
     if(pages)academics.savePaperSelection(pages);
   });
 
+  // Esta clasificación solo afecta a la presentación. No convierte avisos
+  // académicos ni correcciones de vocabulario en un «cuaderno guardado».
+  function visualSaveState(value:string,isError:boolean):'pending'|'saving'|'saved'|'error'|'notice'{
+    if(isError)return 'error';
+    if(value.startsWith('Cambios pendientes de guardar'))return 'pending';
+    if(value.startsWith('Guardando…'))return 'saving';
+    if(/^Guardado · revisión \d+$/u.test(value))return 'saved';
+    return 'notice';
+  }
   function setMessage(value:string,isError=false):void {
     message=value;error=isError;
     const el=element.querySelector<HTMLElement>('.edition-save-state');
-    if(el){el.textContent=value;el.dataset.error=String(isError);}
+    if(el){
+      el.textContent=value;el.dataset.error=String(isError);
+      el.dataset.saveState=visualSaveState(value,isError);
+    }
   }
   function selection():TextPlacementV1|null{
     return draft?.placements.find(p=>p.id===session?.activePlacementId)??draft?.placements[0]??null;
@@ -1496,10 +1508,20 @@ export function createEditionPane(options:{
           saved.meaning===(v.meaning??'')&&saved.note===(v.note??'')&&
           saved.glossesSeparated===Boolean(v.glossesSeparated));
         let saveButton:HTMLButtonElement|null=null;
-        const changed=()=>{
-          if(saveButton){saveButton.textContent='Guardar';
-            saveButton.classList.remove('is-saved');}
+        const preferredSaveState=(state:'pending'|'saving'|'saved'|'error'):void=>{
+          if(!saveButton)return;
+          saveButton.dataset.saveState=state;
+          saveButton.classList.toggle('is-saved',state==='saved');
+          saveButton.disabled=state==='saving';
+          saveButton.textContent=state==='saved'?'✓ Guardado':
+            state==='saving'?'Guardando…':state==='error'?'Reintentar':'Guardar';
+          saveButton.setAttribute('aria-label',
+            (state==='saved'?'Corrección guardada de ':
+              state==='saving'?'Guardando corrección de ':
+              state==='error'?'Reintentar guardar corrección de ':
+              'Guardar corrección de ')+v.headword);
         };
+        const changed=()=>preferredSaveState('pending');
         for(const [key,label,css] of [
           ['headword','Enunciado','edition-vocab-headword'],
           ['meaning','Traducción','edition-vocab-meaning'],
@@ -1525,11 +1547,13 @@ export function createEditionPane(options:{
           row.append(input);
         }
         saveButton=action(isSaved?'✓ Guardado':'Guardar',async()=>{
-          if(!await flush())return;
+          preferredSaveState('saving');
+          if(!await flush()){preferredSaveState('pending');return;}
           const current=draft?.placements.find(x=>x.id===p.id)
             ?.vocabulary.find(x=>x.id===v.id);
-          if(!current)return;
+          if(!current){preferredSaveState('pending');return;}
           if(!current.headword.trim()||!current.meaning?.trim()){
+            preferredSaveState('pending');
             setMessage('Escribe un enunciado y una traducción antes de guardar.',true);
             return;
           }
@@ -1540,12 +1564,14 @@ export function createEditionPane(options:{
               note:current.note??'',glossesSeparated:current.glossesSeparated===true,
             });
             localStorage.setItem(PREFERRED_VOCABULARY_KEY,JSON.stringify(next));
-            saveButton!.textContent='✓ Guardado';
-            saveButton!.classList.add('is-saved');
+            preferredSaveState('saved');
             setMessage('Corrección guardada para futuros cuadernos en este dispositivo.');
-          }catch(err){setMessage('No se pudo guardar el vocabulario preferente: '+String(err),true);}
+          }catch(err){
+            preferredSaveState('error');
+            setMessage('No se pudo guardar el vocabulario preferente: '+String(err),true);
+          }
         },'btn btn-outline edition-vocab-save'+(isSaved?' is-saved':''));
-        saveButton.setAttribute('aria-label','Guardar corrección de '+v.headword);
+        preferredSaveState(isSaved?'saved':'pending');
         row.append(saveButton);
         const remove=action('×',()=>{
           if(!window.confirm('¿Quitar esta entrada? No se modificará el texto latino.'))return;
@@ -1981,7 +2007,9 @@ export function createEditionPane(options:{
     element.replaceChildren();
     const header=node('div','edition-toolbar');
     const title=node('h2','','Editor de cuadernos');
-    const status=node('span','edition-save-state',message);status.dataset.error=String(error);
+    const status=node('span','edition-save-state',message);
+    status.dataset.error=String(error);
+    status.dataset.saveState=visualSaveState(message,error);
     header.append(title,status);
     const tools=node('div','edition-toolbar-actions');
     const choose=node('select','field-control');choose.setAttribute('aria-label','Elegir cuaderno editorial');
