@@ -337,7 +337,24 @@ export function createAcademicControls(repository:WorkspaceRepository,bind:Bindi
       const p=state.edition.placements.find(p=>p.id===placementId);
       if(!p)throw new Error('Texto latino no encontrado.');
       const rows=await options.onAnalyzeMorphology!(p.text.latin);
-      const selected=selectMorphologyForPlacement(state.edition,placementId,rows,replaceWordId);
+      // Preferir siempre una ficha ya verificada. Una forma ambigua del banco
+      // verificado (p. ej., dux NOM/VOC) NO se elige sin intervención docente.
+      const verified=[] as import('../core/morph-categories.js').MorphChoice[];
+      const ambiguousStarts=new Set<number>();
+      for(const match of p.text.latin.matchAll(/[\\p{L}\\p{M}]+/gu)){
+        const records=service().report.bank.verified('morphology',match[0]);
+        if(records.length>1){ambiguousStarts.add(match.index!);continue;}
+        const record=records[0];
+        if(!record?.lemmaId||!record.analysis)continue;
+        const category=morphTypeFromAnalysis(record.analysis);
+        if(!category)continue;
+        verified.push({surface:match[0],start:match.index!,end:match.index!+match[0].length,
+          key:match[0].normalize('NFC').toLocaleLowerCase('es'),
+          category,lemmaId:record.lemmaId,analysis:record.analysis,source:'verified',
+          candidateId:record.id,evidence:record.evidence});
+      }
+      const selected=selectMorphologyForPlacement(state.edition,placementId,
+        rows.filter(t=>!ambiguousStarts.has(t.s)),replaceWordId,verified);
       if(!selected.length){
         bind.status(replaceWordId?'No quedan alternativas de la misma categoría para sustituir esta palabra.':
           'No se han encontrado más tipos distintos de palabra con análisis contextual. No se han repetido categorías.');
