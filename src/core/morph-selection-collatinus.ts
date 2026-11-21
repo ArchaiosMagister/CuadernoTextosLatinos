@@ -38,8 +38,9 @@ export function selectMorphologyForPlacement(
   const reserved=new Set(others.map(category).filter((x):x is MorphType=>x!==null));
   const candidates=tokens.map(t=>morphChoiceFromToken(t,placement.text.latin)).filter((c):c is MorphChoice=>Boolean(c))
     .filter(c=>!covered.some(m=>c.start<m.endUtf16&&m.startUtf16<c.end));
-  const cap=replace?others.length+1:4;
-  return selectDiverseMorphology(candidates,usedForms,reserved,counts,cap);
+  const cap=(replace?others.length+1:4)-(others.length-reserved.size);
+  const options=replace?candidates.filter(c=>c.key!==key(replace.surface)):candidates;
+  return selectDiverseMorphology(options,usedForms,reserved,counts,cap);
 }
 export function applyMorphologyChoices(
   edition:NotebookEditionV1,placementId:string,choices:readonly MorphChoice[],at:string,
