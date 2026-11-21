@@ -40,7 +40,25 @@ test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de
     const rect=range.getBoundingClientRect();
     return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
   });
+  const probe=await page.evaluate(({x,y})=>{
+    const element=document.elementFromPoint(x,y);
+    const paragraph=element?.closest('.edition-latin');
+    const region=document.querySelector('.edition-paper-pages');
+    const selection=window.getSelection();
+    const clickTarget=element?.outerHTML.slice(0,250)??'ninguno';
+    return {point:{x,y},target:clickTarget,inParagraph:Boolean(paragraph),
+      inRegion:Boolean(paragraph&&region?.contains(paragraph)),
+      selection:selection?.toString().slice(0,80),
+      paragraph:paragraph?.textContent.slice(0,75),role:region?.getAttribute('role')};
+  },point);
+  console.log('LECTOR_HIT_DESKTOP',JSON.stringify(probe));
+  page.on('pageerror',error=>console.log('LECTOR_PAGE_ERROR',String(error.stack??error)));
   await page.mouse.click(point.x,point.y);
+  console.log('LECTOR_AFTER_CLICK',JSON.stringify(await page.evaluate(()=>({
+    cardCount:document.querySelectorAll('.edition-lexical-card').length,
+    target:document.activeElement?.tagName,
+    selection:window.getSelection()?.toString().slice(0,80),
+  }))));
   const card=page.getByRole('dialog',{name:/Lematización de/});
   await expect(card).toBeVisible();
   await expect(card.locator('.edition-lexical-card-body')).not.toContainText('Consultando Collatinus',{timeout:20000});
@@ -64,7 +82,18 @@ test.describe('lectura táctil en iPad',()=>{
       const rect=range.getBoundingClientRect();
       return {x:rect.x+rect.width/2,y:rect.y+rect.height/2};
     });
+    console.log('LECTOR_HIT_IPAD',JSON.stringify(await page.evaluate(({x,y})=>{
+      const element=document.elementFromPoint(x,y);
+      const paragraph=element?.closest('.edition-latin');
+      return {point:{x,y},target:element?.outerHTML.slice(0,200),
+        inParagraph:Boolean(paragraph),selection:window.getSelection()?.toString().slice(0,60)};
+    },point)));
+    page.on('pageerror',error=>console.log('LECTOR_PAGE_ERROR_IPAD',String(error.stack??error)));
     await page.touchscreen.tap(point.x,point.y);
+    console.log('LECTOR_AFTER_TOUCH',JSON.stringify(await page.evaluate(()=>({
+      cards:document.querySelectorAll('.edition-lexical-card').length,
+      selection:window.getSelection()?.toString().slice(0,80),
+    }))));
     const card=page.getByRole('dialog',{name:/Lematización de/});
     await expect(card).toBeVisible();
     await card.getByRole('button',{name:'Cerrar ficha'}).click();
