@@ -31,6 +31,13 @@ test('la forma ambigua exige selección explícita, sin elegir en silencio la pr
   const area=page.locator('.edition-menu-text textarea').first();
   await area.evaluate(node=>{node.focus();node.setSelectionRange(0,3);});
   await page.getByRole('button',{name:'Subrayar palabra seleccionada'}).click();
+  // Una forma con NOM/VOC nunca debe elegir automáticamente la primera lectura.
+  const initial=page.locator('.edition-academic-review').first();
+  await expect(initial).toBeVisible();
+  const initialChoice=initial.getByRole('combobox',{name:'Candidatura verificada'});
+  await expect(initialChoice).toHaveValue('');
+  await initialChoice.selectOption({index:1});
+  await initial.getByRole('button',{name:'Confirmar propuesta'}).click();
   await page.locator('.edition-menu-nav').getByRole('button',{name:'Preguntas'}).click();
   const row=morph.locator('.edition-academic-morph-row').filter({hasText:'dux'});
   await expect(row).toBeVisible();

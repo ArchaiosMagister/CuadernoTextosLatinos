@@ -62,6 +62,7 @@ const composer=createEditionPane({
   // del banco. No interpretar esa condición como datos dañados del usuario.
   tagLabel:id=>corpus?allGrammarTags(corpus).find(tag=>tag.id===id)?.label??id:id,
   onAnalyzeVocabulary:(latin,quantity)=>collatinusVocabulary(latin,quantity),
+  onAnalyzeMorphology:latin=>analyzeLatin(latin),
 });
 const works=new Map<string,LibraryWork>();
 const ownCache=new Set<string>();

@@ -4,6 +4,7 @@ import {
   type QuestionWordSlotV1, type TextPlacementV1, type VocabularyEntryV1,
 } from './edition-model.js';
 import { fingerprintForMark, validateEdition } from './edition-validation.js';
+import {morphTypeFromAnalysis} from './morph-categories.js';
 
 /** Operaciones puras: no escriben IndexedDB, no actualizan HTML ni consumen bancos. */
 export class EditionOperationError extends Error {
@@ -223,7 +224,13 @@ export function regenerateMorph(e:NotebookEditionV1,placementId:string,questionI
     const mark=p.text.markup.find(m=>m.id===existing.markId)!;
     if(mark.reviewRequired)fail('La marca necesita revisión antes de regenerar');
     return {...p,questions:p.questions.map(item=>item.id!==questionId?item:{...q,
-      words:q.words.map(w=>w.id!==morphWordId?w:{...w,...candidate,locked:false})})};
+      words:q.words.map(w=>{
+        if(w.id!==morphWordId)return w;
+        const {schoolCategory:previousCategory,...rest}=w;
+        void previousCategory;
+        const nextCategory=morphTypeFromAnalysis(candidate.analysis);
+        return {...rest,...candidate,...(nextCategory?{schoolCategory:nextCategory}:{}),locked:false};
+      })})};
   },at);
 }
 
