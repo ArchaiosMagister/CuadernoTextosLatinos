@@ -685,8 +685,8 @@ jobs:
             if(adaptedResponse?.status()!==200)
               throw Error('No se ha publicado la adaptación a cuadernos.');
             await adapted.locator('#editor .card h3').waitFor({state:'visible',timeout:120000});
-            if(await adapted.locator('header .brand').textContent()!=='Examinator')
-              throw Error('La cabecera ya no es la original.');
+            if((await adapted.locator('header .brand').textContent())?.trim()!=='Cuadernos Latinos')
+              throw Error('La cabecera del Cuaderno debe mostrar «Cuadernos Latinos».');
             adapted.once('dialog',d=>d.accept('Cuaderno prueba fidelidad'));
             await adapted.locator('#btnNew').click();
             await adapted.locator('#btnLib').click();
