@@ -53,6 +53,7 @@ test('tarjeta de lectura al tocar la palabra: Collatinus y alternativas fuera de
   await addLatin(page,'Gallia est omnis divisa in partes tres.');
   const latin=page.locator('.edition-preview .edition-latin').first();
   await expect(latin).toBeVisible();
+  await latin.scrollIntoViewIfNeeded();
   // Seleccionar un token visible, no un nodo de texto vacío ni un margen A4.
   const point=await firstLatinWordPoint(latin);
   await page.mouse.click(point.x,point.y);
@@ -72,6 +73,7 @@ test.describe('lectura táctil en iPad',()=>{
     await addLatin(page,'Gallia est omnis divisa in partes tres.');
     const latin=page.locator('.edition-preview .edition-latin').first();
     await expect(latin).toBeVisible();
+  await latin.scrollIntoViewIfNeeded();
     const point=await firstLatinWordPoint(latin);
     await page.touchscreen.tap(point.x,point.y);
     const card=page.getByRole('dialog',{name:/Lematización de/});
