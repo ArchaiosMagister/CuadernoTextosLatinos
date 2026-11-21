@@ -1615,3 +1615,42 @@ html:is([data-cuaderno-theme='dark'],[data-cuaderno-theme='oled']) .edition-lexi
     margin-left:20px;min-height:36px;
   }
 }
+
+
+/* PWA instalable: controles de estado, sin tocar la hoja ni las exportaciones. */
+@media screen{
+  body>header .brand{display:inline-flex;align-items:center;gap:6px;}
+  body>header .cuaderno-pwa-brand-icon{
+    display:inline-block;flex:0 0 auto;width:27px;height:27px;border-radius:6px;
+  }
+  #editor .cuaderno-home-pwa{
+    display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;
+    padding:9px 12px;border:1px solid var(--rule-2);
+    border-radius:9px;background:var(--panel);
+  }
+  #editor .cuaderno-home-pwa>strong{
+    font:700 12.5px/1.3 var(--ui-font);color:var(--ink);
+  }
+  .cuaderno-pwa-controls{display:grid;gap:5px;min-width:0;}
+  .cuaderno-pwa-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .cuaderno-pwa-actions>.hbtn{min-height:32px;font-size:12px;white-space:normal;}
+  .cuaderno-pwa-actions>.hbtn[hidden]{display:none!important;}
+  .cuaderno-pwa-actions>.cuaderno-pwa-update-ready{
+    background:var(--accent-soft);color:var(--accent);border-color:var(--accent);
+    font-weight:700;
+  }
+  .cuaderno-pwa-status{
+    display:block;max-width:540px;color:var(--ink-2);
+    font-size:11.5px;line-height:1.4;
+  }
+  .cuaderno-pwa-status[hidden]{display:none!important;}
+  body>.cuaderno-header-more{width:min(335px,calc(100vw - 20px));}
+  body>.cuaderno-header-more .cuaderno-pwa-controls{
+    margin-top:7px;padding-top:7px;border-top:1px solid var(--rule-2);
+  }
+  body>.cuaderno-header-more .cuaderno-pwa-actions{display:grid;grid-template-columns:1fr;}
+  body>.cuaderno-header-more .cuaderno-pwa-status{font-size:11px;}
+}
+@media print{
+  .cuaderno-home-pwa,.cuaderno-pwa-controls,.cuaderno-pwa-brand-icon{display:none!important;}
+}
