@@ -1122,7 +1122,8 @@ function reviewWordImport(documents:{file:string;data:ParsedTeacherDocx}[],failu
       await reload();render();
       if(toBank&&failures.length){
         const report=el('div');
-        report.append(el('p','',savedToBank+' archivos guardados · '+failures.length+' omitidos.'));
+        report.append(el('p','',savedToBank+(savedToBank===1?' archivo guardado · ':' archivos guardados · ')+
+          failures.length+(failures.length===1?' omitido.':' omitidos.')));
         report.append(el('h3','','Archivos para revisión manual'),failuresList);
         M.modal('Resultado de la importación Word',report,[{label:'Cerrar',primary:true}]);
       }else{
