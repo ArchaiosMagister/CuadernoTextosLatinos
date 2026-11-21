@@ -2057,11 +2057,21 @@ function wireHeaderLayout():void{
   save.append(saveButton,status);
   const spacer=header.querySelector('.spacer');
   if(spacer)spacer.before(save);else header.append(save);
-  // El estado procede del editor académico real; no se inventa «guardado».
+  // Mostrar siempre el estado en formato breve, incluso en iPad/iPhone:
+  // el título accesible conserva el mensaje exacto del motor editorial.
   const updateStatus=()=>{
-    const text=composer.element.querySelector<HTMLElement>('.edition-save-state')?.textContent?.trim()??'';
-    status.textContent=active()?text:'';
-    status.title=text;
+    const source=composer.element.querySelector<HTMLElement>('.edition-save-state');
+    const text=source?.textContent?.trim()??'';
+    const state=source?.dataset.saveState??'notice';
+    const visible=active();
+    const labels:Record<string,string>={
+      pending:'Pendiente',saving:'Guardando…',saved:'Guardado',error:'Error',
+    };
+    status.dataset.state=visible?state:'notice';
+    status.textContent=visible?(labels[state]??(text?'Aviso':'')):'';
+    status.title=visible?text:'';
+    if(visible&&text)status.setAttribute('aria-label',text);
+    else status.removeAttribute('aria-label');
   };
   new MutationObserver(updateStatus).observe(composer.element,{
     subtree:true,childList:true,characterData:true,
