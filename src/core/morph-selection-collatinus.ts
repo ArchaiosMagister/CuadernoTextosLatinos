@@ -38,7 +38,7 @@ export function selectMorphologyForPlacement(
   const reserved=new Set(others.map(category).filter((x):x is MorphType=>x!==null));
   const verifiedPositions=new Set(verifiedChoices.map(c=>c.start));
   const candidates=[...tokens.map(t=>morphChoiceFromToken(t,placement.text.latin))
-    .filter((c):c is MorphChoice=>Boolean(c)&&!verifiedPositions.has(c.start)),...verifiedChoices]
+    .filter((c):c is MorphChoice=>c!==null&&!verifiedPositions.has(c.start)),...verifiedChoices]
     .filter(c=>!covered.some(m=>c.start<m.endUtf16&&m.startUtf16<c.end));
   const cap=(replace?others.length+1:4)-(others.length-reserved.size);
   const options=replace?candidates.filter(c=>c.key!==key(replace.surface)):candidates;
