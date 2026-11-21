@@ -18,7 +18,7 @@ import {WorkspaceRepository,WorkspaceConflictError,type EditionSnapshotV1} from 
 import {openSupabaseSyncModal} from './supabase-sync-modal.js';
 import {combineNotebookCorpora,createNotebookBackup,createWorkspaceBackup,importNotebookDependencies,prepareWorkspaceRestore,readNotebookBackup,restoreWorkspaceBackup,WORKSPACE_BACKUP_MAX_CHARACTERS} from '../storage/workspace-backup.js';
 import {DownloadedWorksRepository} from '../storage/downloaded-works.js';
-import {deleteText,upsertText,type TextDraft} from '../core/editor-operations.js';
+import {deleteText,upsertText,requiresDistinctDocxSource,type TextDraft} from '../core/editor-operations.js';
 import {auditLibraryDuplicates,findPossibleDuplicates,type LibraryDuplicatePair} from '../core/text-duplicates.js';
 import {nextNotebookTextTitle} from '../core/notebook-titles.js';
 import {readTeacherDocx,type ParsedTeacherDocx} from '../core/docx-import.js';
@@ -144,7 +144,8 @@ function button(text:string,onClick:()=>void|Promise<void>,cls='tbtn'):HTMLButto
   if(/^\+?\s*(?:Añadir|Agregar)\b|^Pegar (?:en el banco|texto propio)\b/.test(text))b.classList.add('cuaderno-ui-add');
   if(/^(?:Eliminar|Borrar|Retirar|Quitar(?! filtros\b))\b/.test(text))b.classList.add('cuaderno-ui-remove');
   if(/^Guardar\b/.test(text))b.classList.add('cuaderno-ui-save');
-  b.addEventListener('click',()=>{void Promise.resolve(onClick()).catch(error=>M.toast(String(error),5500));});
+  // Una excepción síncrona del controlador también debe mostrar un aviso.
+  b.addEventListener('click',()=>{void Promise.resolve().then(onClick).catch(error=>M.toast(String(error),5500));});
   return b;
 }
 function active():boolean{return Boolean(currentId&&composer.activeEdition()?.id===currentId);}
@@ -762,19 +763,24 @@ async function saveBankText(input:TextDraft,documentData?:ParsedTeacherDocx,revi
     &&t.source.author===(clean.author.trim()||null)
     &&t.source.work===(clean.work.trim()||null)
     &&t.source.reference===(clean.reference.trim()||null));
-  if(!reviewedBatch&&!confirmPossibleDuplicates(saved.corpus,clean,match?.id))
-    throw Error('Guardado cancelado: no se ha modificado el banco.');
-  const id=match?.id??'doc.'+crypto.randomUUID(),at=new Date().toISOString();
-  const updated=upsertText(saved.corpus,{...clean,id},id,at);
   const normalized=documentData?{...documentData,title:clean.title,latin:clean.latin,
     author:clean.author.trim()||null,work:clean.work.trim()||null,
     reference:clean.reference.trim()||null}:undefined;
+  // Dos Word con el mismo pasaje pueden tener subrayados y preguntas distintos.
+  // No sobrescribir silenciosamente el DOCX anterior al reutilizar una ficha.
+  const distinctDocx=requiresDistinctDocxSource(match,normalized);
+  if(!reviewedBatch&&!confirmPossibleDuplicates(saved.corpus,clean,distinctDocx?undefined:match?.id))
+    throw Error('Guardado cancelado: no se ha modificado el banco.');
+  const id=distinctDocx?'doc.'+crypto.randomUUID():match?.id??'doc.'+crypto.randomUUID();
+  const at=new Date().toISOString();
+  const updated=upsertText(saved.corpus,{...clean,id},id,at);
   const next=normalized?validateCorpus({...updated,texts:updated.texts.map(t=>t.id===id
     ?{...t,teacherDocx:normalized}:t)}):updated;
   await repo.save(next,saved.revision);
   if(reviewedBatch)return;
   await reload();render();
-  M.toast(match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
+  M.toast(distinctDocx?'Se ha guardado otra versión del Word; se conservan los subrayados de la anterior.':
+    match?'Fuente existente actualizada en el banco.':'Texto guardado en el banco propio.');
 }
 /** Los cuadernos editoriales conservan sus apariciones; los cuadernos
  * históricos, que todavía dependen del banco, se protegen del borrado. */
